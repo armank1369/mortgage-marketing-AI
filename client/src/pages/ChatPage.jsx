@@ -166,16 +166,16 @@ export default function ChatPage() {
     }
   }
 
-  const handleSend = () => {
-    if (!input.trim() || isTyping) return
+  const handleSend = (text) => {
+    const msg = (text ?? input).trim()
+    if (!msg || isTyping) return
     const personaObj = activeChat.persona || preferences.persona
     if (personaObj && !activeChat.persona) {
       setChats((prev) =>
         prev.map((c) => (c.id === activeChatId ? { ...c, persona: personaObj } : c))
       )
     }
-    updateActiveChatMessages((msgs) => [...msgs, { id: crypto.randomUUID(), role: 'user', text: input }])
-    const msg = input
+    updateActiveChatMessages((msgs) => [...msgs, { id: crypto.randomUUID(), role: 'user', text: msg }])
     setInput('')
     sendMessage(msg)
   }
@@ -497,8 +497,9 @@ export default function ChatPage() {
               {QUICK_PROMPTS.map((prompt) => (
                 <button
                   key={prompt}
-                  onClick={() => setInput(prompt)}
-                  className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors"
+                  onClick={() => handleSend(prompt)}
+                  disabled={isTyping}
+                  className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {prompt}
                 </button>
@@ -515,7 +516,7 @@ export default function ChatPage() {
                 className="flex-1 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50 placeholder:text-slate-400"
               />
               <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={!input.trim() || isTyping}
                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm shadow-blue-200 inline-flex items-center gap-2"
               >
