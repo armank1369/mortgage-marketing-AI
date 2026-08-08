@@ -8,6 +8,7 @@ import PostsResponse from '../components/PostsResponse'
 import Section from '../components/Section'
 import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
+import { NMLS_NUMBER } from '../constants'
 
 const QUICK_PROMPTS = [
   'Give me a post idea',
@@ -52,7 +53,7 @@ const TONE_SCALES = [
 ]
 
 export default function ChatPage() {
-  const { preferences, setPreferences } = usePreferences()
+  const { preferences } = usePreferences()
   const [activeNav, setActiveNav] = useState('chat')
   const storedChats = useRef(loadChatsFromStorage()).current
   const [chats, setChats] = useState(() => {
@@ -71,12 +72,10 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [chatToDelete, setChatToDelete] = useState(null)
-  const [showNmlsModal, setShowNmlsModal] = useState(false)
-  const [nmlsDraft, setNmlsDraft] = useState('')
   const [showPersonaModal, setShowPersonaModal] = useState(false)
   const endRef = useRef(null)
 
-  const nmls = preferences.nmls || ''
+  const nmls = NMLS_NUMBER
 
   const activeChat = chats.find((c) => c.id === activeChatId) || chats[0]
   const messages = activeChat?.messages || []
@@ -213,7 +212,7 @@ export default function ChatPage() {
       if (updated[index].type === 'campaign') return updated
       const original = updated[index].text
       const lines = original.split('\n').filter(Boolean)
-      const shortened = lines.slice(0, 2).join('\n') + `\n\n— Joseph Kim | NMLS #${preferences.nmls}`
+      const shortened = lines.slice(0, 2).join('\n') + `\n\n— Joseph Kim | NMLS #${nmls}`
       updated[index] = { role: 'assistant', type: 'text', text: shortened, prompt: updated[index].prompt }
       return updated
     })
@@ -245,16 +244,6 @@ export default function ChatPage() {
       setActiveChatId(next ? next.id : 1)
     }
     setChatToDelete(null)
-  }
-
-  const openNmlsModal = () => {
-    setNmlsDraft(nmls)
-    setShowNmlsModal(true)
-  }
-
-  const saveNmls = () => {
-    setPreferences((prev) => ({ ...prev, nmls: nmlsDraft.trim() }))
-    setShowNmlsModal(false)
   }
 
   if (showSetup) {
@@ -347,7 +336,7 @@ export default function ChatPage() {
         </nav>
 
         <div className="p-4 border-t border-slate-800 text-xs text-slate-500">
-          {preferences.name} | NMLS #{preferences.nmls}
+          {preferences.name} | NMLS #{nmls}
         </div>
       </aside>
 
@@ -374,15 +363,8 @@ export default function ChatPage() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">
-                NMLS #{nmls || '000000'}
+                NMLS #{nmls}
               </span>
-              <button
-                type="button"
-                onClick={openNmlsModal}
-                className="text-xs text-slate-400 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 px-2.5 py-1 rounded-full font-medium transition-colors"
-              >
-                Edit NMLS
-              </button>
               <button
                 type="button"
                 onClick={() => setShowClearConfirm(true)}
@@ -587,43 +569,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Edit NMLS modal */}
-      {showNmlsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-sm font-semibold text-slate-900">Edit NMLS Number</h3>
-            <p className="text-xs text-slate-500 mt-1 mb-3">
-              Your license number will be appended to every caption.
-            </p>
-            <input
-              type="text"
-              value={nmlsDraft}
-              onChange={(e) => setNmlsDraft(e.target.value.replace(/\D/g, ''))}
-              placeholder="e.g. 123456"
-              inputMode="numeric"
-              autoFocus
-              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 placeholder:text-slate-400"
-            />
-            <div className="flex gap-2 mt-5">
-              <button
-                type="button"
-                onClick={() => setShowNmlsModal(false)}
-                className="flex-1 text-slate-500 hover:text-slate-700 text-xs font-medium py-2 rounded-lg transition-colors border border-slate-300"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveNmls}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Brand summary modal */}
       {showPersonaModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -709,7 +654,7 @@ export default function ChatPage() {
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">NMLS Number</h4>
-                <p className="mt-2 text-sm text-slate-700">NMLS #{nmls || '000000'}</p>
+                <p className="mt-2 text-sm text-slate-700">NMLS #{nmls}</p>
               </div>
             </div>
           </div>

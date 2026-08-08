@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { usePreferences } from '../context/PreferencesContext'
 import DualRangeSlider from '../components/DualRangeSlider'
+import { NMLS_NUMBER } from '../constants'
 
 const INITIAL_PERSONAS = [
   {
@@ -95,7 +96,6 @@ export default function PreferenceSetup({ onComplete }) {
   const [income, setIncome] = useState(saved.income || INCOME_OPTIONS[0])
   const [education, setEducation] = useState(saved.education || EDUCATION_OPTIONS[0])
   const [painPoints, setPainPoints] = useState(saved.painPoints || '')
-  const [nmls, setNmls] = useState(saved.nmls || '')
 
   const [editingPersonaId, setEditingPersonaId] = useState(null)
   const [draftName, setDraftName] = useState('')
@@ -143,7 +143,7 @@ export default function PreferenceSetup({ onComplete }) {
     if (!persona) return
     setPreferences({
       name: 'Joseph',
-      nmls: nmls.trim(),
+      nmls: NMLS_NUMBER,
       persona,
       coreValues: coreValues.trim(),
       tone,
@@ -415,21 +415,6 @@ export default function PreferenceSetup({ onComplete }) {
               className={fieldClass}
             />
           </div>
-        </Section>
-
-        <Section number="04" title="NMLS Number">
-          <label className="block text-sm font-semibold text-slate-900">NMLS Number</label>
-          <p className="text-xs text-slate-500 mt-1 mb-3">
-            Your license number will be automatically appended to every caption.
-          </p>
-          <input
-            type="text"
-            value={nmls}
-            onChange={(e) => setNmls(e.target.value.replace(/\D/g, ''))}
-            placeholder="e.g. 123456"
-            inputMode="numeric"
-            className={fieldClass}
-          />
         </Section>
 
         <button
