@@ -259,7 +259,7 @@ export default function ChatPage() {
             <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
               JM
             </div>
-            <h1 className="text-sm font-bold text-white">Joseph's Tool</h1>
+            <h1 className="text-sm font-bold text-white">MoJoJo SMM AI</h1>
           </div>
           <div className={`mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${personaColor}`}>
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
