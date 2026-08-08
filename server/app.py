@@ -17,6 +17,21 @@ anthropic_client = anthropic.Anthropic()
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
 
+
+def build_system(stable_text, *variable_parts):
+    # Every call's system prompt is dominated by ~5,000 tokens of brand/compliance/format
+    # instructions that are identical across requests for a given (persona, request type) —
+    # only truly per-request content (like recent_idea_context) varies. Marking the stable
+    # part with cache_control lets Anthropic reuse it instead of reprocessing it as fresh
+    # input tokens on every single call. The variable parts are appended as separate,
+    # uncached blocks after the cache breakpoint.
+    blocks = [{'type': 'text', 'text': stable_text, 'cache_control': {'type': 'ephemeral'}}]
+    for part in variable_parts:
+        if part:
+            blocks.append({'type': 'text', 'text': part})
+    return blocks
+
+
 BASE_PROMPT = (
     'You are a social media marketing assistant for Joseph Kim, a mortgage broker at Lucent Brokerage in California. '
     "Joseph's brand is built around competence, trust, and clarity — not hype. He is a trusted advisor, not a salesperson, and not flashy. "
@@ -1080,7 +1095,7 @@ def social_image():
     try:
         result = anthropic_client.messages.create(
             model=ANTHROPIC_MODEL,
-            system=system_prompt,
+            system=build_system(system_prompt),
             messages=[{'role': 'user', 'content': source_text}],
             max_tokens=1200,
             thinking={'type': 'disabled'},
@@ -1128,14 +1143,11 @@ def chat():
             # which can't ask a question — so the ask-or-proceed decision runs as a separate,
             # small, schema-free call first. Only when it doesn't return questions do we go
             # on to the full (expensive) structured campaign generation below.
-            check_system_prompt = shared_system_prompt + '\n\n' + CAMPAIGN_CLARIFICATION_PROMPT
-            if recent_idea_context:
-                check_system_prompt += '\n\n' + recent_idea_context
-            check_system_prompt = check_system_prompt.replace('{nmls}', nmls)
+            check_system_prompt = (shared_system_prompt + '\n\n' + CAMPAIGN_CLARIFICATION_PROMPT).replace('{nmls}', nmls)
 
             check_result = anthropic_client.messages.create(
                 model=ANTHROPIC_MODEL,
-                system=check_system_prompt,
+                system=build_system(check_system_prompt, recent_idea_context),
                 messages=[{'role': 'user', 'content': message}],
                 max_tokens=1500,
                 thinking={'type': 'disabled'},
@@ -1156,13 +1168,11 @@ def chat():
             system_prompt += '\n\n' + CAMPAIGN_FORMAT_PROMPT
         else:
             system_prompt += '\n\n' + NON_CAMPAIGN_FORMAT_PROMPT
-        if recent_idea_context:
-            system_prompt += '\n\n' + recent_idea_context
         system_prompt = system_prompt.replace('{nmls}', nmls)
 
         request_kwargs = {
             'model': ANTHROPIC_MODEL,
-            'system': system_prompt,
+            'system': build_system(system_prompt, recent_idea_context),
             'messages': [{'role': 'user', 'content': message}],
             # Sonnet 5 runs adaptive thinking by default when `thinking` is omitted, and
             # max_tokens is a hard cap on thinking + response text combined — an unlucky
