@@ -10,6 +10,17 @@ import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
 import { NMLS_NUMBER } from '../constants'
 
+// crypto.randomUUID() only exists in a secure context (HTTPS, or the special-cased
+// "localhost") — it throws on plain http://<lan-ip>, which is exactly how this app gets
+// opened from a phone during local dev testing, crashing the whole page on the first
+// message. This falls back to a good-enough unique id everywhere else.
+function makeId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 const QUICK_PROMPTS = [
   'Give me a post idea',
   'What should I post this week?',
@@ -54,6 +65,14 @@ function CloseIcon() {
   )
 }
 
+function MenuIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  )
+}
+
 const PERSONA_DESCRIPTIONS = {
   'self-employed':
     'Age 35-60, self-employed or entrepreneur with complex finances and significant tax write-offs. Traditional banks have turned them away. Non-QM borrower with good to excellent credit and 2 or more years of business ownership. Core message: Find a solution without cutting corners.',
@@ -81,7 +100,7 @@ const CONTENT_TYPE_LABELS = {
 function createChatSession(persona = null) {
   const now = persona ? new Date().toISOString() : null
   return {
-    id: crypto.randomUUID(),
+    id: makeId(),
     persona,
     personaId: persona?.id || persona?.apiKey || null,
     title: persona?.name || 'New Chat',
@@ -122,7 +141,10 @@ function buildChatSummary(message) {
 function getResponseContentTypes(data) {
   if (data.type === 'campaign') {
     const types = ['campaign']
-    if (data.campaign?.video_briefs?.length) types.push('video')
+    // Video scripts are generated on-demand per calendar entry (see the "Generate video
+    // script" button) rather than upfront, so this reflects whatever's been generated so far
+    // rather than a fixed video_briefs list.
+    if (data.campaign?.content_calendar?.some((entry) => entry.video)) types.push('video')
     return types
   }
 
@@ -169,10 +191,12 @@ export default function ChatPage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [chatToDelete, setChatToDelete] = useState(null)
   const [showPersonaModal, setShowPersonaModal] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [editingChatId, setEditingChatId] = useState(null)
   const [draftChatTitle, setDraftChatTitle] = useState('')
   const [draftChatSummary, setDraftChatSummary] = useState('')
   const endRef = useRef(null)
+  const abortControllerRef = useRef(null)
 
   const nmls = NMLS_NUMBER
 
@@ -260,15 +284,21 @@ export default function ChatPage() {
 
   const sendMessage = async (message) => {
     setIsTyping(true)
+    const controller = new AbortController()
+    abortControllerRef.current = controller
     try {
-      const { data } = await axios.post('/api/chat', { message, persona, nmls_number: nmls })
+      const { data } = await axios.post(
+        '/api/chat',
+        { message, persona, nmls_number: nmls },
+        { signal: controller.signal }
+      )
       const createdAt = new Date().toISOString()
       const contentTypes = getResponseContentTypes(data)
       let assistantMessage
 
       if (data.type === 'campaign') {
         assistantMessage = {
-          id: crypto.randomUUID(),
+          id: makeId(),
           role: 'assistant',
           type: 'campaign',
           campaign: data.campaign,
@@ -277,7 +307,7 @@ export default function ChatPage() {
         }
       } else if (data.type === 'clarification') {
         assistantMessage = {
-          id: crypto.randomUUID(),
+          id: makeId(),
           role: 'assistant',
           type: 'clarification',
           clarification: data.clarification,
@@ -286,7 +316,7 @@ export default function ChatPage() {
         }
       } else if (data.type === 'posts') {
         assistantMessage = {
-          id: crypto.randomUUID(),
+          id: makeId(),
           role: 'assistant',
           type: 'posts',
           posts: data.posts,
@@ -295,7 +325,7 @@ export default function ChatPage() {
         }
       } else {
         assistantMessage = {
-          id: crypto.randomUUID(),
+          id: makeId(),
           role: 'assistant',
           type: 'text',
           text: data.response,
@@ -310,11 +340,15 @@ export default function ChatPage() {
           contentTypes: mergeContentTypes(chat.contentTypes, contentTypes),
         })
       )
-    } catch {
+    } catch (err) {
+      // Cancelled by clearChat (or a superseded request) — the chat that would have
+      // received this response may no longer exist in its old form, so there's nothing
+      // to report back for it.
+      if (axios.isCancel(err)) return
       updateActiveChatMessages((msgs) => [
         ...msgs,
         {
-          id: crypto.randomUUID(),
+          id: makeId(),
           role: 'assistant',
           type: 'text',
           text: 'Sorry, I could not generate a response. Please check that the server is running and try again.',
@@ -323,7 +357,12 @@ export default function ChatPage() {
         },
       ])
     } finally {
-      setIsTyping(false)
+      // Only clear isTyping/abortControllerRef if a newer request hasn't already
+      // taken over — otherwise a slow-to-settle cancelled request could clobber it.
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+        setIsTyping(false)
+      }
     }
   }
 
@@ -351,7 +390,7 @@ export default function ChatPage() {
               messages: [
                 ...chat.messages,
                 {
-                  id: crypto.randomUUID(),
+                  id: makeId(),
                   role: 'user',
                   type: 'text',
                   text: msg,
@@ -379,6 +418,19 @@ export default function ChatPage() {
     setIsTyping(true)
     updateActiveChatMessages((msgs) => msgs.filter((_, i) => i !== index))
     sendMessage(msg.prompt)
+  }
+
+  const setCalendarEntryVideo = (msgIndex, entryIndex, video) => {
+    updateActiveChatMessages((msgs) => {
+      const updated = [...msgs]
+      const msg = updated[msgIndex]
+      if (!msg || msg.type !== 'campaign') return msgs
+      const content_calendar = msg.campaign.content_calendar.map((entry, i) =>
+        i === entryIndex ? { ...entry, video } : entry
+      )
+      updated[msgIndex] = { ...msg, campaign: { ...msg.campaign, content_calendar } }
+      return updated
+    })
   }
 
   const submitClarificationAnswers = (index, answersText) => {
@@ -443,6 +495,10 @@ export default function ChatPage() {
   }
 
   const clearChat = () => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setIsTyping(false)
+
     const now = new Date().toISOString()
     setChats((prev) =>
       prev.map((chat) =>
@@ -483,15 +539,42 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex bg-slate-50">
-      {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div className="p-5 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
-              JM
+    // h-dvh (not h-screen/100vh) so the layout tracks Safari's actual visible viewport on
+    // iPhone — 100vh is fixed to the toolbar-collapsed height, which cuts off or requires
+    // scrolling to reach the message input while the address bar is still showing.
+    <div className="h-dvh flex bg-slate-50 overflow-hidden">
+      {/* Backdrop — mobile only, closes the drawer on tap-outside */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar — dark off-canvas drawer on mobile, Ken's light static column on desktop
+          (team decision: keep the mobile drawer dark, keep the light theme for desktop). */}
+      <aside
+        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 md:bg-white md:border-r md:border-slate-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-5 border-b border-slate-800 md:border-slate-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                JM
+              </div>
+              <h1 className="text-sm font-bold text-white md:text-slate-900">MoJoJo SMM AI</h1>
             </div>
-            <h1 className="text-sm font-bold text-slate-900">MoJoJo SMM AI</h1>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close menu"
+              className="md:hidden p-1 text-slate-400 hover:text-white transition-colors"
+            >
+              <CloseIcon />
+            </button>
           </div>
           <div className={`mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${personaColor}`}>
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -499,15 +582,18 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveNav(item.id)}
+              onClick={() => {
+                setActiveNav(item.id)
+                setSidebarOpen(false)
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeNav === item.id
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-blue-500/15 md:bg-blue-50 text-blue-300 md:text-blue-600'
+                  : 'text-slate-400 md:text-slate-500 hover:text-slate-200 md:hover:text-slate-900 hover:bg-slate-800 md:hover:bg-slate-100'
               }`}
             >
               <span className="text-base">{item.icon}</span>
@@ -516,8 +602,11 @@ export default function ChatPage() {
           ))}
           <button
             type="button"
-            onClick={() => setShowSetup(true)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium transition-colors text-slate-500 hover:text-slate-900 hover:bg-slate-100 border-t border-slate-100"
+            onClick={() => {
+              setShowSetup(true)
+              setSidebarOpen(false)
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium transition-colors text-slate-400 md:text-slate-500 hover:text-slate-200 md:hover:text-slate-900 hover:bg-slate-800 md:hover:bg-slate-100 border-t border-slate-800 md:border-slate-100"
           >
             <span className="text-base">➕</span>
             New Chat
@@ -540,11 +629,12 @@ export default function ChatPage() {
                     onClick={() => {
                       setActiveChatId(chat.id)
                       setActiveNav('chat')
+                      setSidebarOpen(false)
                     }}
                     className={`group relative w-full flex flex-col items-start px-3 py-2.5 rounded-lg text-left cursor-pointer transition-colors ${
                       isActive
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                        ? 'bg-slate-700 md:bg-slate-100 text-white md:text-slate-900'
+                        : 'text-slate-400 md:text-slate-500 hover:bg-slate-800 md:hover:bg-slate-50 hover:text-slate-200 md:hover:text-slate-700'
                     }`}
                   >
                     {isEditing ? (
@@ -568,7 +658,7 @@ export default function ChatPage() {
                       <span className="w-full pr-14 text-sm font-semibold truncate">{displayLabel}</span>
                     )}
                     {timestamp && (
-                      <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'}`}>
                         {timestamp}
                       </span>
                     )}
@@ -579,14 +669,14 @@ export default function ChatPage() {
                           <span
                             key={type}
                             className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                              isActive ? 'bg-white text-slate-600' : 'bg-slate-100 text-slate-500'
+                              isActive ? 'bg-white/10 md:bg-white text-slate-200 md:text-slate-600' : 'bg-slate-800 md:bg-slate-100 text-slate-400 md:text-slate-500'
                             }`}
                           >
                             {contentTypeLabel(type)}
                           </span>
                         ))}
                         {hiddenTypeCount > 0 && (
-                          <span className={`text-[9px] ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>
+                          <span className={`text-[9px] ${isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'}`}>
                             +{hiddenTypeCount}
                           </span>
                         )}
@@ -608,7 +698,7 @@ export default function ChatPage() {
                       chat.summary && (
                         <p
                           className={`mt-1.5 text-[10px] leading-4 line-clamp-2 ${
-                            isActive ? 'text-slate-500' : 'text-slate-400'
+                            isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'
                           }`}
                           title={chat.summary}
                         >
@@ -629,8 +719,8 @@ export default function ChatPage() {
                         isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       } ${
                         isActive
-                          ? 'text-slate-500 hover:text-blue-600 hover:bg-slate-200'
-                          : 'text-slate-400 hover:text-blue-600 hover:bg-slate-200'
+                          ? 'text-slate-300 md:text-slate-500 hover:text-blue-300 md:hover:text-blue-600 hover:bg-white/10 md:hover:bg-slate-200'
+                          : 'text-slate-400 hover:text-blue-400 md:hover:text-blue-600 hover:bg-slate-700 md:hover:bg-slate-200'
                       }`}
                     >
                       <EditIcon done={isEditing} />
@@ -643,7 +733,7 @@ export default function ChatPage() {
                         setChatToDelete(chat)
                       }}
                       aria-label={`Delete ${displayLabel}`}
-                      className="absolute top-2 right-2 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 hover:bg-slate-200"
+                      className="absolute top-2 right-2 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-400 md:hover:text-red-500 hover:bg-slate-700 md:hover:bg-slate-200"
                     >
                       <TrashIcon />
                     </button>
@@ -653,20 +743,33 @@ export default function ChatPage() {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-100 text-xs text-slate-400">
+        <div className="p-4 border-t border-slate-800 md:border-slate-100 text-xs text-slate-500 md:text-slate-400">
           {preferences.name} | NMLS #{nmls}
         </div>
       </aside>
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile top bar — hamburger to open the drawer, hidden on desktop where the sidebar is always visible */}
+        <div className="md:hidden flex items-center gap-3 bg-slate-900 px-4 py-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+            className="text-slate-300 hover:text-white transition-colors p-1"
+          >
+            <MenuIcon />
+          </button>
+          <span className="text-sm font-bold text-white">MoJoJo SMM AI</span>
+        </div>
+
         {activeNav === 'calendar' ? (
           <CalendarPage />
         ) : (
         <>
         {/* Chat header */}
-        <header className="bg-white border-b border-slate-200 px-6 py-3 shrink-0">
-          <div className="flex items-center justify-between">
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shrink-0">
+          <div className="flex items-center justify-between flex-wrap gap-x-2 gap-y-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500" />
               <div>
@@ -681,7 +784,7 @@ export default function ChatPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">
+              <span className="hidden sm:inline text-xs text-slate-400">
                 NMLS #{nmls}
               </span>
               <button
@@ -694,7 +797,7 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => setShowPersonaModal(true)}
-                className="text-xs text-slate-400 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 px-2.5 py-1 rounded-full font-medium transition-colors"
+                className="text-xs text-slate-400 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 px-2.5 py-1 rounded-full font-medium transition-colors max-w-[160px] sm:max-w-none truncate"
               >
                 Persona: {personaLabel}
               </button>
@@ -703,7 +806,7 @@ export default function ChatPage() {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
           {messages.length === 0 && !isTyping && (
             <div className="h-full flex flex-col items-center justify-center text-center">
               <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center text-2xl mb-4">
@@ -718,7 +821,12 @@ export default function ChatPage() {
             <div key={msg.id ?? i}>
               {msg.role === 'assistant' && msg.type === 'campaign' ? (
                 <div className="flex justify-start">
-                  <CampaignResponse data={msg.campaign} nmls={nmls} persona={persona} />
+                  <CampaignResponse
+                    data={msg.campaign}
+                    nmls={nmls}
+                    persona={persona}
+                    onVideoGenerated={(entryIndex, video) => setCalendarEntryVideo(i, entryIndex, video)}
+                  />
                 </div>
               ) : msg.role === 'assistant' && msg.type === 'clarification' ? (
                 <div className="flex justify-start">
@@ -744,7 +852,7 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <div className="flex justify-end">
-                  <div className="max-w-[70%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap leading-relaxed text-sm bg-blue-600 text-white shadow-sm shadow-blue-200">
+                  <div className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap leading-relaxed text-sm bg-blue-600 text-white shadow-sm shadow-blue-200">
                     {msg.text}
                   </div>
                 </div>
@@ -792,7 +900,7 @@ export default function ChatPage() {
         </div>
 
         {/* Quick prompts + input */}
-        <div className="bg-white border-t border-slate-200 px-6 py-4 shrink-0">
+        <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-4 shrink-0">
           <div className="max-w-4xl mx-auto">
             <div className="flex flex-wrap gap-2 mb-3">
               {QUICK_PROMPTS.map((prompt) => (
@@ -949,7 +1057,7 @@ export default function ChatPage() {
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Target Audience</h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Age range</p>
                     <p className="mt-1 text-sm text-slate-700">

@@ -4,6 +4,8 @@ import sqlite3
 import os
 import re
 import json
+from collections import Counter
+from datetime import date
 import anthropic
 from dotenv import load_dotenv
 
@@ -207,6 +209,8 @@ CAMPAIGN_FORMAT_PROMPT = (
     '  },\n'
     '  "platform_breakdown": [\n'
     '    {"platform": "<LinkedIn|Instagram|Facebook|TikTok>", "frequency": "<e.g. 3x / week>", '
+    '"total_posts": <int, this platform\'s frequency multiplied by the number of weeks in the requested duration '
+    '— e.g. "3x / week" over a 2-week calendar is 6, NOT 3>, '
     '"times": "<best posting time window>", "audience": "<who this platform reaches for this brand>", '
     '"tone": "<tone descriptors for this platform>"}\n'
     '  ],\n'
@@ -215,31 +219,6 @@ CAMPAIGN_FORMAT_PROMPT = (
     '"category": "<matches one of the content_strategy pillar names>", "time": "<e.g. 8:00 AM>", '
     '"caption": "<the full, ready-to-post caption text, following the brand voice, compliance, and platform rules above>", '
     '"hashtags": ["#Example", "#Example"]}\n'
-    '  ],\n'
-    '  "video_briefs": [\n'
-    '    {\n'
-    '      "title": "<video-ready content title/hook>",\n'
-    '      "pillar": "<matches one of the content_strategy pillar names>",\n'
-    '      "script": {\n'
-    '        "intro": {"time": "<e.g. 0-3 sec>", "text": "<opening hook line, spoken or on-screen>"},\n'
-    '        "body": {"time": "<e.g. 4-15 sec>", "text": "<the core explanation or value delivered>"},\n'
-    '        "cta": {"time": "<e.g. 16-20 sec>", "text": "<closing call-to-action line>"}\n'
-    '      },\n'
-    '      "creative_direction": {\n'
-    '        "setting": "<where/how it is filmed>",\n'
-    '        "camera": "<framing and shot guidance>",\n'
-    '        "lighting": "<lighting guidance>",\n'
-    '        "energy": "<on-camera delivery energy>",\n'
-    '        "background": "<background setup>",\n'
-    '        "clothing": "<wardrobe guidance>"\n'
-    '      },\n'
-    '      "quick_details": {\n'
-    '        "duration": "<e.g. 20 seconds>",\n'
-    '        "tone": "<e.g. Analytical, balanced advisor>",\n'
-    '        "call_to_action": "<one-line summary of the ask, e.g. Comment your preference for personalized advice>",\n'
-    '        "platforms": ["<LinkedIn|Instagram Reels|TikTok>"]\n'
-    '      }\n'
-    '    }\n'
     '  ]\n'
     '}\n\n'
     'Rules for filling this out:\n'
@@ -249,8 +228,17 @@ CAMPAIGN_FORMAT_PROMPT = (
     'consistent with the per-platform quick reference above and Joseph\'s professional/authoritative brand voice.\n'
     '- content_calendar should span 14 days by default, or the exact duration the user specifies (e.g. "1 week" = 7 '
     'days, "1 month" = 30 days). Only include calendar entries for days that actually have a scheduled post — do not '
-    'create empty entries for off days — and the number of entries per platform should roughly match that '
-    'platform\'s stated frequency.\n'
+    'create empty entries for off days.\n'
+    '- Today is {today}. content_calendar must start from the next sensible posting day on or after today and use '
+    'the real calendar date for every entry (never reuse a stale or example date) — "day" and "date" must agree '
+    '(e.g. if today is a Saturday and the first post goes out the following Monday, that entry reads day: "Mon", '
+    'date: the actual date of that Monday).\n'
+    '- CRITICAL — content_calendar\'s entry count per platform must exactly equal that platform\'s "total_posts" '
+    'from platform_breakdown, never just its per-week "frequency" number. Since platform_breakdown comes before '
+    'content_calendar in this JSON, total_posts is already a fixed, committed number by the time you write '
+    'calendar entries — treat it as a hard target, not an estimate: write exactly that many entries for that '
+    'platform, distributed evenly across every week of the requested duration (e.g. total_posts 8 over 2 weeks is '
+    '4 in week 1 and 4 in week 2, not 8 crammed into one week or 4 total for the whole calendar).\n'
     '- Every caption must still fully comply with the compliance rules above (mandatory footer, no fair housing '
     'violations, no fabricated facts, qualified language) exactly as it would for a single-post request.\n'
     '- Do not include a Joseph-specific rate, APR, discount, promotion, or pricing incentive, and do not use a '
@@ -259,16 +247,50 @@ CAMPAIGN_FORMAT_PROMPT = (
     '- No two entries in content_calendar may share the same core idea, hook, or content concept (e.g. do not generate '
     '"a whiteboard video explaining X" more than once, even reworded) — every entry must offer a genuinely distinct '
     'angle or topic from every other entry in this calendar.\n'
-    '- Generate 2-4 video_briefs: fully scripted, ready-to-film short-form videos (roughly 20-45 seconds each), each '
-    'brainstormed from the strongest content_calendar/pillar concepts — pick ideas that work as an on-camera talking-head '
-    'or demonstration video, not just any caption topic. Each brief\'s idea must be genuinely distinct from every other '
-    'brief and from every content_calendar entry — no reused hooks or concepts, per the no-duplicate rule above.\n'
-    '- Each script follows intro (hook) -> body (value delivered) -> cta (the ask) with realistic timestamp ranges that '
-    'sum to roughly the stated duration.\n'
+    '- Do not generate video scripts here — a fully scripted video brief is only ever built one post at a time, on '
+    'demand, when the user explicitly asks to expand a specific post into a video (a separate request handled by '
+    'VIDEO_BRIEF_FORMAT_PROMPT). Generating a script for every post up front would burn tokens on ideas nobody asked '
+    'to film.'
+)
+
+# Drives the "Generate video script" button on an individual content_calendar card — a
+# separate, on-demand call so the (expensive, mostly-unwanted) script only gets generated for
+# the specific post a user actually wants to expand, not for all ~14 calendar entries up front.
+VIDEO_BRIEF_FORMAT_PROMPT = (
+    'OUTPUT FORMAT — SINGLE VIDEO SCRIPT REQUEST. The user has picked one specific post idea from an existing '
+    'content calendar (given below as platform/category/caption) and wants it expanded into a fully scripted, '
+    'ready-to-film short-form video (roughly 20-45 seconds) — not a new idea, a filmable version of that exact '
+    'post. Respond with ONLY a single valid JSON object, no prose or markdown fences before or after it, matching '
+    'exactly this shape:\n\n'
+    '{\n'
+    '  "script": {\n'
+    '    "intro": {"time": "<e.g. 0-3 sec>", "text": "<opening hook line, spoken or on-screen>"},\n'
+    '    "body": {"time": "<e.g. 4-15 sec>", "text": "<the core explanation or value delivered>"},\n'
+    '    "cta": {"time": "<e.g. 16-20 sec>", "text": "<closing call-to-action line>"}\n'
+    '  },\n'
+    '  "creative_direction": {\n'
+    '    "setting": "<where/how it is filmed>",\n'
+    '    "camera": "<framing and shot guidance>",\n'
+    '    "lighting": "<lighting guidance>",\n'
+    '    "energy": "<on-camera delivery energy>",\n'
+    '    "background": "<background setup>",\n'
+    '    "clothing": "<wardrobe guidance>"\n'
+    '  },\n'
+    '  "quick_details": {\n'
+    '    "duration": "<e.g. 20 seconds>",\n'
+    '    "tone": "<e.g. Analytical, balanced advisor>",\n'
+    '    "call_to_action": "<one-line summary of the ask, e.g. Comment your preference for personalized advice>"\n'
+    '  }\n'
+    '}\n\n'
+    'Rules:\n'
+    '- The script must be built from the same core idea/angle as the caption provided — a filmable version of that '
+    'specific post, never a different topic.\n'
+    '- Each script follows intro (hook) -> body (value delivered) -> cta (the ask) with realistic timestamp ranges '
+    'that sum to roughly the stated duration.\n'
     '- creative_direction must be concrete, filmable guidance (not generic advice) for setting, camera framing, '
-    'lighting, on-camera energy/delivery, background, and clothing, consistent with Joseph\'s professional, trustworthy '
-    'brand voice.\n'
-    '- Per the mandatory footer rule above, a video script is not text you can just append the footer to — end every '
+    'lighting, on-camera energy/delivery, background, and clothing, consistent with Joseph\'s professional, '
+    'trustworthy brand voice.\n'
+    '- Per the mandatory footer rule above, a video script is not text you can just append the footer to — end the '
     'script\'s cta.text with the footer as an on-screen end-card cue: "[END CARD: Joseph Kim | NMLS #{nmls} | DRE #'
     + DRE_NUMBER + ' | Equal Housing Opportunity]", never spoken aloud as dialogue.'
 )
@@ -412,23 +434,43 @@ SOCIAL_IMAGE_PROMPT = (
 # that context first unless the request already supplies it or is itself a follow-up answer.
 CAMPAIGN_CLARIFICATION_PROMPT = (
     'BEFORE BUILDING THIS CAMPAIGN — CHECK FOR REAL INPUT FIRST. A content strategy and calendar built entirely '
-    'from assumptions is weak — the goal, angle, and evidence should come from Joseph\'s actual current situation, '
-    'not guesses. Before anything else, check whether the user\'s message already gives you real answers for at '
-    'least: (a) the specific goal or occasion for this push (e.g. general lead gen vs. promoting a new program vs. '
-    'a seasonal push — not just the brand\'s standing marketing goal), (b) whether there is real evidence to '
-    'ground the content — recent client wins, testimonials, or case studies — or whether placeholders/hypotheticals '
-    'should be used instead, and (c) whether there is a topic, platform priority, or timeframe already in mind beyond '
-    'the platform defaults. Do not ask for, suggest, or offer a specific rate, rate discount, or promotion to feature.\n\n'
-    'If the message already answers these — including because it contains a line starting with "Original '
-    'request:" followed by an "Answers:" section, meaning the user already answered a previous round of these '
-    'exact questions — respond with the single word PROCEED and nothing else, so the full campaign can be built. '
-    'Never ask about something already answered in the message or in an "Answers:" section.\n\n'
+    'from assumptions is weak — the goal, angle, evidence, and platform mix should come from Joseph\'s actual '
+    'current situation, not guesses.\n\n'
+    'MANDATORY ON EVERY CAMPAIGN REQUEST, NO EXCEPTIONS — always check these two, independent of everything else '
+    'below and of each other:\n'
+    '1. PLATFORMS: has the user explicitly named which social platform(s) (e.g. LinkedIn, Instagram, Facebook, '
+    'TikTok) this calendar should target? A request for "a 2-week content calendar" or "a content plan" with no '
+    'platforms named does NOT count as answered, no matter how detailed the rest of the request is — always ask a '
+    'platform-selection question in that case, even if every other question here is already answered. Only skip '
+    'it when the message — or a prior "Answers:" section — already explicitly names the platform(s) to use.\n'
+    '2. POSTING CADENCE: has the user explicitly stated how often to post — an overall frequency (e.g. "3x a '
+    'week"), a specific cadence per platform, or an explicit instruction to just follow the platform best-practice '
+    'defaults? A request that says nothing about frequency does NOT count as answered, even if it names a '
+    'duration like "2 weeks" or "30 days" — a timeframe is not a cadence. Always ask a posting-cadence question in '
+    'that case, even if every other question here is already answered. Only skip it when the message — or a prior '
+    '"Answers:" section — already states a cadence, including an explicit choice to use default/recommended '
+    'cadence. When you do ask it, frame the options relative to the per-platform best-practice recommendation '
+    'from the platform reference above, not as raw numbers to choose between: something like "Normal cadence '
+    '(follow platform recommendations)", "Faster cadence (post more often)", "Slower cadence (post less often)" — '
+    'with allow_custom true so the user can still name an exact frequency if they want one.\n\n'
+    'Beyond platforms and cadence, also check whether the message already gives real answers for: (a) the '
+    'specific goal or occasion for this push (e.g. general lead gen vs. promoting a new program vs. a seasonal '
+    'push — not just the brand\'s standing marketing goal), (b) whether there is real evidence to ground the '
+    'content — recent client wins, testimonials, or case studies — or whether placeholders/hypotheticals should be '
+    'used instead, and (c) whether there is a specific topic or timeframe already in mind beyond the platform '
+    'defaults. Do not ask for, suggest, or offer a specific rate, rate discount, or promotion to feature.\n\n'
+    'If the message already answers the platform question, the cadence question, AND (a), (b), and (c) — '
+    'including because it contains a line starting with "Original request:" followed by an "Answers:" section, '
+    'meaning the user already answered a previous round of these exact questions — respond with the single word '
+    'PROCEED and nothing else, so the full campaign can be built. Never ask about something already answered in '
+    'the message or in an "Answers:" section.\n\n'
     'Otherwise, respond with ONLY a single valid JSON object, no prose or markdown fences before or after it: '
     '{"questions": [{"question": "<question text>", "options": ["<short option>", "<short option>"], '
-    '"allow_custom": <true|false>}]}. Ask at most 4 questions, each with 2-6 concrete checkbox options — the user '
-    'may select more than one per question. Set "allow_custom" true for questions like real testimonials, case-study '
-    'details, dates, or program names where a fixed option can\'t capture the real answer. Never include a specific '
-    'rate, discount, promotion, or pricing-offer option.'
+    '"allow_custom": <true|false>}]}. Ask at most 5 questions, each with 2-6 concrete checkbox options — the user '
+    'may select more than one per question. When the platform and/or cadence questions apply, they must be '
+    'included and listed first, platform before cadence. Set "allow_custom" true for questions like real '
+    'testimonials, case-study details, dates, or program names where a fixed option can\'t capture the real '
+    'answer. Never include a specific rate, discount, promotion, or pricing-offer option.'
 )
 
 # Structured-output schema mirroring CAMPAIGN_FORMAT_PROMPT — guarantees valid JSON
@@ -466,11 +508,12 @@ CAMPAIGN_JSON_SCHEMA = {
                 'properties': {
                     'platform': {'type': 'string'},
                     'frequency': {'type': 'string'},
+                    'total_posts': {'type': 'integer'},
                     'times': {'type': 'string'},
                     'audience': {'type': 'string'},
                     'tone': {'type': 'string'},
                 },
-                'required': ['platform', 'frequency', 'times', 'audience', 'tone'],
+                'required': ['platform', 'frequency', 'total_posts', 'times', 'audience', 'tone'],
                 'additionalProperties': False,
             },
         },
@@ -491,69 +534,67 @@ CAMPAIGN_JSON_SCHEMA = {
                 'additionalProperties': False,
             },
         },
-        'video_briefs': {
-            'type': 'array',
-            'items': {
-                'type': 'object',
-                'properties': {
-                    'title': {'type': 'string'},
-                    'pillar': {'type': 'string'},
-                    'script': {
-                        'type': 'object',
-                        'properties': {
-                            'intro': {
-                                'type': 'object',
-                                'properties': {'time': {'type': 'string'}, 'text': {'type': 'string'}},
-                                'required': ['time', 'text'],
-                                'additionalProperties': False,
-                            },
-                            'body': {
-                                'type': 'object',
-                                'properties': {'time': {'type': 'string'}, 'text': {'type': 'string'}},
-                                'required': ['time', 'text'],
-                                'additionalProperties': False,
-                            },
-                            'cta': {
-                                'type': 'object',
-                                'properties': {'time': {'type': 'string'}, 'text': {'type': 'string'}},
-                                'required': ['time', 'text'],
-                                'additionalProperties': False,
-                            },
-                        },
-                        'required': ['intro', 'body', 'cta'],
-                        'additionalProperties': False,
-                    },
-                    'creative_direction': {
-                        'type': 'object',
-                        'properties': {
-                            'setting': {'type': 'string'},
-                            'camera': {'type': 'string'},
-                            'lighting': {'type': 'string'},
-                            'energy': {'type': 'string'},
-                            'background': {'type': 'string'},
-                            'clothing': {'type': 'string'},
-                        },
-                        'required': ['setting', 'camera', 'lighting', 'energy', 'background', 'clothing'],
-                        'additionalProperties': False,
-                    },
-                    'quick_details': {
-                        'type': 'object',
-                        'properties': {
-                            'duration': {'type': 'string'},
-                            'tone': {'type': 'string'},
-                            'call_to_action': {'type': 'string'},
-                            'platforms': {'type': 'array', 'items': {'type': 'string'}},
-                        },
-                        'required': ['duration', 'tone', 'call_to_action', 'platforms'],
-                        'additionalProperties': False,
-                    },
+    },
+    'required': ['content_strategy', 'platform_breakdown', 'content_calendar'],
+    'additionalProperties': False,
+}
+
+# Structured-output schema for the standalone "Generate video script" call — same
+# script/creative_direction/quick_details shape that used to be nested (nullable) inside each
+# content_calendar entry, now generated on demand for exactly one post at a time.
+VIDEO_BRIEF_JSON_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'script': {
+            'type': 'object',
+            'properties': {
+                'intro': {
+                    'type': 'object',
+                    'properties': {'time': {'type': 'string'}, 'text': {'type': 'string'}},
+                    'required': ['time', 'text'],
+                    'additionalProperties': False,
                 },
-                'required': ['title', 'pillar', 'script', 'creative_direction', 'quick_details'],
-                'additionalProperties': False,
+                'body': {
+                    'type': 'object',
+                    'properties': {'time': {'type': 'string'}, 'text': {'type': 'string'}},
+                    'required': ['time', 'text'],
+                    'additionalProperties': False,
+                },
+                'cta': {
+                    'type': 'object',
+                    'properties': {'time': {'type': 'string'}, 'text': {'type': 'string'}},
+                    'required': ['time', 'text'],
+                    'additionalProperties': False,
+                },
             },
+            'required': ['intro', 'body', 'cta'],
+            'additionalProperties': False,
+        },
+        'creative_direction': {
+            'type': 'object',
+            'properties': {
+                'setting': {'type': 'string'},
+                'camera': {'type': 'string'},
+                'lighting': {'type': 'string'},
+                'energy': {'type': 'string'},
+                'background': {'type': 'string'},
+                'clothing': {'type': 'string'},
+            },
+            'required': ['setting', 'camera', 'lighting', 'energy', 'background', 'clothing'],
+            'additionalProperties': False,
+        },
+        'quick_details': {
+            'type': 'object',
+            'properties': {
+                'duration': {'type': 'string'},
+                'tone': {'type': 'string'},
+                'call_to_action': {'type': 'string'},
+            },
+            'required': ['duration', 'tone', 'call_to_action'],
+            'additionalProperties': False,
         },
     },
-    'required': ['content_strategy', 'platform_breakdown', 'content_calendar', 'video_briefs'],
+    'required': ['script', 'creative_direction', 'quick_details'],
     'additionalProperties': False,
 }
 
@@ -993,18 +1034,19 @@ def _extract_idea_lines(response_text):
         # A clarifying-questions payload, not generated content — nothing to dedupe against.
         return []
 
-    if isinstance(data, dict) and ('content_calendar' in data or 'video_briefs' in data or 'posts' in data):
+    if isinstance(data, dict) and ('content_calendar' in data or 'posts' in data):
         lines = []
         for entry in data.get('content_calendar', []):
             idea = _pick_idea_line(entry.get('caption') or '')
             if idea:
                 lines.append(idea)
+            video = entry.get('video')
+            if video:
+                hook = _clean_idea_text((video.get('script') or {}).get('intro', {}).get('text') or '')
+                if hook:
+                    lines.append(hook)
         for post in data.get('posts', []):
             title = _clean_idea_text(post.get('title') or '')
-            if title:
-                lines.append(title)
-        for brief in data.get('video_briefs', []):
-            title = _clean_idea_text(brief.get('title') or '')
             if title:
                 lines.append(title)
         return lines
@@ -1121,6 +1163,24 @@ def get_history():
     return jsonify({'history': [dict(row) for row in rows]})
 
 
+def _campaign_post_count_shortfalls(campaign):
+    # The model states its own per-platform target (total_posts = frequency × requested
+    # duration, see CAMPAIGN_JSON_SCHEMA) before writing content_calendar, but doesn't always
+    # hit that target when actually writing the entries — this flags any platform that came
+    # up short so the caller can request exactly one corrective retry.
+    counts = Counter(e.get('platform') for e in campaign.get('content_calendar', []))
+    shortfalls = []
+    for p in campaign.get('platform_breakdown', []):
+        platform = p.get('platform')
+        target = p.get('total_posts')
+        if not isinstance(target, int):
+            continue
+        actual = counts.get(platform, 0)
+        if actual < target:
+            shortfalls.append((platform, actual, target))
+    return shortfalls
+
+
 def enforce_campaign_compliance(campaign, nmls):
     flags = set()
     for entry in campaign.get('content_calendar', []):
@@ -1128,10 +1188,6 @@ def enforce_campaign_compliance(campaign, nmls):
         fixed_caption, entry_flags = enforce_compliance(caption, nmls)
         entry['caption'] = fixed_caption
         flags.update(entry_flags)
-    for i, brief in enumerate(campaign.get('video_briefs', [])):
-        fixed_brief, brief_flags = enforce_video_brief_compliance(brief, nmls)
-        campaign['video_briefs'][i] = fixed_brief
-        flags.update(brief_flags)
     return campaign, sorted(flags)
 
 
@@ -1196,6 +1252,53 @@ def social_image():
         return jsonify({'error': f'Anthropic API request failed: {e.message}'}), e.status_code
 
 
+@app.route('/api/video-brief', methods=['POST'])
+def video_brief():
+    data = request.get_json()
+    caption = (data.get('caption') or '').strip()
+    if not caption:
+        return jsonify({'error': 'caption is required'}), 400
+
+    platform = data.get('platform', '')
+    category = data.get('category', '')
+    persona = data.get('persona', '')
+    nmls = data.get('nmls_number') or '000000'
+
+    persona_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS['self-employed'])
+    system_prompt = (
+        BASE_PROMPT + '\n\n' + COMPLIANCE_PROMPT + '\n\n' + PLATFORM_PROMPT + '\n\n'
+        + NO_MARKDOWN_PROMPT + '\n\n' + persona_prompt + '\n\n' + VIDEO_BRIEF_FORMAT_PROMPT
+    ).replace('{nmls}', nmls)
+
+    source_text = f'Platform: {platform}\nCategory/pillar: {category}\nCaption:\n{caption}'
+
+    try:
+        result = anthropic_client.messages.create(
+            model=ANTHROPIC_MODEL,
+            system=build_system(system_prompt),
+            messages=[{'role': 'user', 'content': source_text}],
+            max_tokens=2000,
+            thinking={'type': 'disabled'},
+            output_config={'format': {'type': 'json_schema', 'schema': VIDEO_BRIEF_JSON_SCHEMA}},
+        )
+        raw_response = next((b.text for b in result.content if b.type == 'text'), '')
+        try:
+            video = json.loads(raw_response)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Could not generate a video script from this post. Try again.'}), 502
+        video = strip_markdown_deep(video)
+        video, flags = enforce_video_brief_compliance(video, nmls)
+        return jsonify({'video': video, 'compliance_flags': flags})
+    except anthropic.AuthenticationError:
+        return jsonify({'error': 'Invalid Anthropic API key. Check ANTHROPIC_API_KEY in .env.'}), 401
+    except anthropic.RateLimitError:
+        return jsonify({'error': 'Anthropic rate limit exceeded. Please wait and try again.'}), 429
+    except anthropic.APIConnectionError:
+        return jsonify({'error': 'Could not connect to the Anthropic API.'}), 503
+    except anthropic.APIStatusError as e:
+        return jsonify({'error': f'Anthropic API request failed: {e.message}'}), e.status_code
+
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.get_json()
@@ -1247,6 +1350,7 @@ def chat():
         system_prompt = shared_system_prompt
         if is_campaign:
             system_prompt += '\n\n' + CAMPAIGN_FORMAT_PROMPT
+            system_prompt = system_prompt.replace('{today}', date.today().strftime('%A, %B %d, %Y'))
         else:
             system_prompt += '\n\n' + NON_CAMPAIGN_FORMAT_PROMPT
         system_prompt = system_prompt.replace('{nmls}', nmls)
@@ -1255,18 +1359,17 @@ def chat():
             'model': ANTHROPIC_MODEL,
             'system': build_system(system_prompt, recent_idea_context),
             'messages': [{'role': 'user', 'content': message}],
-            # Sonnet 5 runs adaptive thinking by default when `thinking` is omitted, and
-            # max_tokens is a hard cap on thinking + response text combined — an unlucky
-            # adaptive-thinking run can burn the entire budget and leave nothing for the
-            # actual output (stop_reason: max_tokens, empty text). This task is formulaic
-            # template-filling constrained by the prompt/schema, not open reasoning, so
-            # thinking is disabled rather than gambling on max_tokens headroom.
-            'thinking': {'type': 'disabled'},
         }
+        # Sonnet 5 runs adaptive thinking by default when `thinking` is omitted, and
+        # max_tokens is a hard cap on thinking + response text combined — an unlucky
+        # adaptive-thinking run can burn the entire budget and leave nothing for the actual
+        # output (stop_reason: max_tokens, empty text). Verified directly on the campaign
+        # path: enabling adaptive thinking to fix a post-count arithmetic issue (see
+        # `total_posts` in CAMPAIGN_JSON_SCHEMA below) did exactly this — a 2-week/3-platform
+        # request came back completely empty. Both paths are formulaic template-filling
+        # constrained by the prompt/schema, not open reasoning, so thinking stays off.
+        request_kwargs['thinking'] = {'type': 'disabled'}
         if is_campaign:
-            # A full multi-day calendar plus video briefs needs headroom; structured outputs
-            # guarantee the response is valid JSON matching CAMPAIGN_JSON_SCHEMA rather than
-            # relying on prompt compliance alone.
             request_kwargs['max_tokens'] = 10000
             request_kwargs['output_config'] = {
                 'format': {'type': 'json_schema', 'schema': CAMPAIGN_JSON_SCHEMA}
@@ -1281,6 +1384,31 @@ def chat():
             try:
                 campaign = json.loads(raw_response)
                 campaign = strip_markdown_deep(campaign)
+
+                shortfalls = _campaign_post_count_shortfalls(campaign)
+                if shortfalls:
+                    # One bounded retry, not a loop: spell out exactly which platforms came
+                    # up short against their own stated total_posts and by how much. If the
+                    # retry still doesn't fully fix it, we keep its result anyway rather than
+                    # retrying indefinitely — verified this single retry meaningfully closes
+                    # the gap in practice.
+                    shortfall_note = (
+                        'YOUR PREVIOUS ATTEMPT UNDER-DELIVERED ON POST COUNT — FIX THIS: ' + '; '.join(
+                            f'{platform} needed {target} entries but you only wrote {actual}'
+                            for platform, actual, target in shortfalls
+                        ) + '. Recount every platform in content_calendar against its platform_breakdown '
+                        'total_posts value and make sure every platform has exactly that many entries, '
+                        'distributed evenly across every week of the requested duration, before responding.'
+                    )
+                    retry_kwargs = dict(request_kwargs)
+                    retry_kwargs['system'] = build_system(system_prompt, recent_idea_context, shortfall_note)
+                    retry_result = anthropic_client.messages.create(**retry_kwargs)
+                    retry_raw = next((b.text for b in retry_result.content if b.type == 'text'), '')
+                    try:
+                        campaign = strip_markdown_deep(json.loads(retry_raw))
+                    except json.JSONDecodeError:
+                        pass  # keep the original (short) campaign rather than failing outright
+
                 campaign, compliance_flags = enforce_campaign_compliance(campaign, nmls)
                 with get_db() as db:
                     db.execute(

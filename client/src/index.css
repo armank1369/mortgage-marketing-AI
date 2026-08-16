@@ -6,3 +6,15 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* iOS Safari auto-zooms the page on focusing any form control smaller than 16px, which on a
+   phone reads as a jarring, unwanted zoom every time a user taps a field — this repo's inputs
+   are mostly text-xs/text-sm (12-14px) for desktop density, so this restores 16px specifically
+   on small screens without changing the desktop design. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
