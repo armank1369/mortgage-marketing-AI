@@ -277,7 +277,7 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     'RESPONSE FORMAT — SINGLE REQUESTS (not a full campaign). Choose exactly one of these three response shapes:\n\n'
 
     '1) CLARIFYING QUESTIONS: Generating a post requires three things at minimum: (a) a topic or angle, (b) the '
-    'platform(s), and (c) a content format (text-only, single image, carousel, or short video/Reel). These three '
+    'platform(s), and (c) a content format (text-only, single image, multi image carousel, or short video/Reel). These three '
     'are mandatory, not details to guess past — if the user\'s message leaves ANY of them unspecified or unclear, '
     'you MUST ask before generating, even for a short, broad request like "give me a post idea" or "write me a '
     'caption" that names none of the three. Do not silently pick a default topic, platform, or format for a '
@@ -292,7 +292,7 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     'as clickable answer options and prose questions break that entirely. If you have decided a request needs '
     'clarifying questions, committing to this exact JSON is mandatory, not optional. Ask at most 4 questions, each '
     'with 2-6 concrete, relevant checkbox options — the user may select more than one per question (check all that '
-    'apply), and always include a format question (options: "Text-only post", "Single image", "Carousel", "Short '
+    'apply), and always include a format question (options: "Text-only post", "Single image", "Multi Image Carousel", "Short '
     'video / Reel") whenever format isn\'t already clear. Set "allow_custom" true only for questions where a '
     'specific fact (a rate, a name, a date, a promo detail) might be needed and no fixed option could cover it.\n\n'
 

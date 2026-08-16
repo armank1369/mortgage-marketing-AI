@@ -99,7 +99,7 @@ export function CreativeDirectionGrid({ direction }) {
 const FORMAT_BADGES = {
   'text-only': { icon: '📝', label: 'Text' },
   'single-image': { icon: '🖼️', label: 'Image' },
-  carousel: { icon: '🖼️', label: 'Carousel' },
+  carousel: { icon: '🖼️', label: 'Multi Image Carousel' },
   video: { icon: '🎥', label: 'Video' },
 }
 
