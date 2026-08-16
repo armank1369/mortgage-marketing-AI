@@ -141,10 +141,14 @@ function buildChatSummary(message) {
 function getResponseContentTypes(data) {
   if (data.type === 'campaign') {
     const types = ['campaign']
+    const calendar = data.campaign?.content_calendar || []
+    const formats = calendar.map((entry) => entry.format).filter(Boolean)
+    types.push(...new Set(formats))
     // Video scripts are generated on-demand per calendar entry (see the "Generate video
-    // script" button) rather than upfront, so this reflects whatever's been generated so far
-    // rather than a fixed video_briefs list.
-    if (data.campaign?.content_calendar?.some((entry) => entry.video)) types.push('video')
+    // script" button) rather than upfront, so this only adds 'video' from entries that
+    // actually have a generated script yet — the "video" format above already covers entries
+    // that are merely slotted for one.
+    if (calendar.some((entry) => entry.video) && !types.includes('video')) types.push('video')
     return types
   }
 

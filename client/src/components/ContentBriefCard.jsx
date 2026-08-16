@@ -96,18 +96,27 @@ export function CreativeDirectionGrid({ direction }) {
 // platform-colored top bar) wrapping a Script / Creative Direction / Quick Details breakdown
 // and a Copy/status footer. Used by both the four-pillar Video Content Briefs section and
 // the general post-idea response, so every generated deliverable reads as one visual system.
-const FORMAT_BADGES = {
+export const FORMAT_BADGES = {
   'text-only': { icon: '📝', label: 'Text' },
   'single-image': { icon: '🖼️', label: 'Image' },
   carousel: { icon: '🖼️', label: 'Multi Image Carousel' },
   video: { icon: '🎥', label: 'Video' },
 }
 
-export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, children }) {
+export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, children }) {
   const [copied, setCopied] = useState(false)
+  const [saved, setSaved] = useState(false)
   const gradient = platformGradient(platform)
   const badge = platform ? platformBadge(platform) : null
   const formatBadge = format ? FORMAT_BADGES[format] : null
+  const hasDirection = !!(direction && Object.values(direction).some(Boolean))
+  const hasQuickDetails = !!(
+    details?.duration ||
+    details?.tone ||
+    details?.call_to_action ||
+    (Array.isArray(hashtags) && hashtags.length > 0) ||
+    (Array.isArray(details?.platforms) && details.platforms.length > 0)
+  )
 
   const handleCopy = async () => {
     try {
@@ -117,6 +126,11 @@ export default function ContentBriefCard({ title, platform, format, script, dire
     } catch {
       // clipboard unavailable — ignore
     }
+  }
+
+  const handleSaveToCalendar = () => {
+    onSaveToCalendar()
+    setSaved(true)
   }
 
   return (
@@ -164,65 +178,81 @@ export default function ContentBriefCard({ title, platform, format, script, dire
         </div>
       )}
 
-      <div className="px-4 py-4 border-t border-slate-100">
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
-        <CreativeDirectionGrid direction={direction} />
-      </div>
+      {hasDirection && (
+        <div className="px-4 py-4 border-t border-slate-100">
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
+          <CreativeDirectionGrid direction={direction} />
+        </div>
+      )}
 
-      <div className="px-4 py-4 border-t border-slate-100 bg-slate-50/60">
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Quick Details</div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {details?.duration && (
-            <div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Duration</div>
-              <div className="text-sm font-semibold text-slate-800">{details.duration}</div>
-            </div>
+      {hasQuickDetails && (
+        <div className="px-4 py-4 border-t border-slate-100 bg-slate-50/60">
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Quick Details</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {details?.duration && (
+              <div>
+                <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Duration</div>
+                <div className="text-sm font-semibold text-slate-800">{details.duration}</div>
+              </div>
+            )}
+            {details?.tone && (
+              <div>
+                <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Tone</div>
+                <div className="text-sm font-semibold text-slate-800">{details.tone}</div>
+              </div>
+            )}
+            {details?.call_to_action && (
+              <div className="col-span-2 sm:col-span-1">
+                <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Call-to-Action</div>
+                <div className="text-sm font-semibold text-slate-800">{details.call_to_action}</div>
+              </div>
+            )}
+          </div>
+          {Array.isArray(hashtags) && hashtags.length > 0 && (
+            <p className="text-xs text-blue-600 mt-3 break-words">{hashtags.join(' ')}</p>
           )}
-          {details?.tone && (
-            <div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Tone</div>
-              <div className="text-sm font-semibold text-slate-800">{details.tone}</div>
-            </div>
-          )}
-          {details?.call_to_action && (
-            <div className="col-span-2 sm:col-span-1">
-              <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Call-to-Action</div>
-              <div className="text-sm font-semibold text-slate-800">{details.call_to_action}</div>
+          {Array.isArray(details?.platforms) && details.platforms.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {details.platforms.map((p, j) => {
+                const b = platformBadge(p)
+                return (
+                  <span
+                    key={j}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${b.className}`}
+                  >
+                    <span>{b.label}</span>
+                    {p}
+                  </span>
+                )
+              })}
             </div>
           )}
         </div>
-        {Array.isArray(hashtags) && hashtags.length > 0 && (
-          <p className="text-xs text-blue-600 mt-3 break-words">{hashtags.join(' ')}</p>
-        )}
-        {Array.isArray(details?.platforms) && details.platforms.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {details.platforms.map((p, j) => {
-              const b = platformBadge(p)
-              return (
-                <span
-                  key={j}
-                  className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${b.className}`}
-                >
-                  <span>{b.label}</span>
-                  {p}
-                </span>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      )}
 
       {children}
 
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100">
         <span className="text-[11px] text-slate-400">Draft ready</span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
-        >
-          {copied ? '✓ Copied' : '📋 Copy'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onSaveToCalendar && (
+            <button
+              type="button"
+              onClick={handleSaveToCalendar}
+              disabled={saved}
+              className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
+            >
+              {saved ? '✓ Saved to Calendar' : '📅 Save to Calendar'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
+          >
+            {copied ? '✓ Copied' : '📋 Copy'}
+          </button>
+        </div>
       </div>
     </div>
   )

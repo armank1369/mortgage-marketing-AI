@@ -2,8 +2,114 @@ import { useState } from 'react'
 import axios from 'axios'
 import Section from './Section'
 import platformBadge from './platformBadge'
-import { ScriptLine, CreativeDirectionGrid } from './ContentBriefCard'
+import { ScriptLine, SlideCarousel, CreativeDirectionGrid, FORMAT_BADGES } from './ContentBriefCard'
 import SocialImageGenerator from './socialImage/SocialImageGenerator'
+import { useCalendar } from '../context/CalendarContext'
+
+// Re-derives each entry's actual save-to-calendar date from the calendar's own day-of-week
+// sequence (Mon/Tue/...) rather than trusting the AI-generated "date" string for scheduling —
+// that string is display-only. Walks the array; whenever the weekday index decreases relative
+// to the previous entry (e.g. Fri -> Mon), that marks a new week. Week 0 anchors to the Monday
+// of the current real week; if that would land before today, the whole plan shifts forward by
+// whole weeks (keeping relative spacing intact). Generalizes to any calendar length purely by
+// counting week-wraps in the day sequence, no hardcoded week count.
+const WEEKDAY_INDEX = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }
+
+function distributeCalendarDates(calendar) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const mondayOfThisWeek = new Date(today)
+  mondayOfThisWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7))
+
+  let weekStart = mondayOfThisWeek
+  let prevIndex = -1
+  const dates = calendar.map((entry) => {
+    const dowIndex = WEEKDAY_INDEX[entry.day] ?? 0
+    if (prevIndex !== -1 && dowIndex < prevIndex) {
+      weekStart = new Date(weekStart)
+      weekStart.setDate(weekStart.getDate() + 7)
+    }
+    prevIndex = dowIndex
+    const date = new Date(weekStart)
+    date.setDate(weekStart.getDate() + dowIndex)
+    return date
+  })
+
+  if (dates.length > 0 && dates[0] < today) {
+    const daysBehind = Math.ceil((today - dates[0]) / 86400000)
+    const weeksToShift = Math.ceil(daysBehind / 7)
+    return dates.map((d) => {
+      const shifted = new Date(d)
+      shifted.setDate(shifted.getDate() + weeksToShift * 7)
+      return shifted
+    })
+  }
+
+  return dates
+}
+
+// Builds the same `details` shape ContentBriefCard/the calendar detail modal expect, from
+// whatever this specific entry actually has: a generated video script, carousel slides, or
+// just a plain caption — matches how PostsResponse builds `details` for a single post.
+function calendarEntryDetails(entry) {
+  if (entry.video) {
+    const script = entry.video.script || {}
+    return {
+      script: [
+        { label: 'Intro', time: script.intro?.time, text: script.intro?.text },
+        { label: 'Body', time: script.body?.time, text: script.body?.text },
+        { label: 'CTA', time: script.cta?.time, text: script.cta?.text },
+      ],
+      direction: entry.video.creative_direction,
+      quickDetails: entry.video.quick_details,
+      hashtags: entry.hashtags,
+    }
+  }
+  if (Array.isArray(entry.slides) && entry.slides.length > 0) {
+    return {
+      script: [
+        { label: 'Slides', slides: entry.slides },
+        { label: 'Caption', text: entry.caption },
+      ],
+      hashtags: entry.hashtags,
+    }
+  }
+  return {
+    script: [{ label: 'Post Copy', text: entry.caption }],
+    hashtags: entry.hashtags,
+  }
+}
+
+function SaveCalendarButton({ calendar }) {
+  const { addEntries } = useCalendar()
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = () => {
+    const dates = distributeCalendarDates(calendar)
+    addEntries(
+      calendar.map((entry, i) => ({
+        topic: entry.category || entry.caption,
+        platform: entry.platform,
+        format: entry.format,
+        time: entry.time,
+        date: dates[i],
+        details: calendarEntryDetails(entry),
+      }))
+    )
+    setSaved(true)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleSave}
+      disabled={saved}
+      className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
+    >
+      {saved ? '✓ Saved to Calendar' : '📅 Save to Calendar'}
+    </button>
+  )
+}
 
 const PILLAR_STYLES = [
   { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800', chip: 'bg-amber-100 text-amber-700' },
@@ -169,6 +275,12 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
                 {entry.category}
               </span>
             )}
+            {entry.format && FORMAT_BADGES[entry.format] && !video && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full bg-slate-100 text-slate-500">
+                <span>{FORMAT_BADGES[entry.format].icon}</span>
+                {FORMAT_BADGES[entry.format].label}
+              </span>
+            )}
             {video && (
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-600">
                 <span>🎥</span>
@@ -186,7 +298,16 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
         {Array.isArray(entry.hashtags) && entry.hashtags.length > 0 && (
           <p className="text-xs text-blue-600 mt-2 break-words">{entry.hashtags.join(' ')}</p>
         )}
-        {!video && (
+        {entry.format === 'carousel' && Array.isArray(entry.slides) && entry.slides.length > 0 && (
+          <div className="mt-3">
+            <SlideCarousel label="Slides" slides={entry.slides} />
+          </div>
+        )}
+        {/* Older cached campaigns generated before the "format" field existed have no way to
+            know a slot was meant for video, so the button stays available for them too —
+            only entries explicitly marked as another format (carousel/single-image/text-only)
+            hide it. */}
+        {!video && (!entry.format || entry.format === 'video') && (
           <div className="mt-3">
             <button
               type="button"
@@ -310,6 +431,9 @@ export default function CampaignResponse({ data, nmls, persona, onVideoGenerated
         title="Content Calendar"
         subtitle={`${content_calendar?.length || 0} scheduled posts${scriptedCount ? ` · ${scriptedCount} with a video script` : ''}`}
         defaultOpen={false}
+        headerAction={
+          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} /> : null
+        }
       >
         <ContentCalendarBody
           calendar={content_calendar}

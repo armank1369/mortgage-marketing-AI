@@ -1,6 +1,7 @@
 const PREFERENCES_KEY = 'lucent_preferences'
 const CHATS_KEY = 'lucent_chats'
 const CHAT_STORAGE_VERSION = 2
+const CALENDAR_KEY = 'lucent_calendar_entries'
 
 function createStorageId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -32,7 +33,12 @@ function deriveContentTypes(messages) {
 
     if (message.type === 'campaign') {
       types.add('campaign')
-      if (message.campaign?.video_briefs?.length) types.add('video')
+      const calendar = message.campaign?.content_calendar || []
+      calendar.forEach((entry) => entry.format && types.add(entry.format))
+      // Video scripts are generated on-demand per calendar entry, not upfront, so this only
+      // adds 'video' for entries with an actually-generated script — the format loop above
+      // already covers entries merely slotted for one.
+      if (calendar.some((entry) => entry.video)) types.add('video')
       return
     }
 
@@ -178,6 +184,29 @@ export function loadChatsFromStorage() {
       chats,
       activeChatId,
     }
+  } catch {
+    return null
+  }
+}
+
+// Calendar entries store `date` as a Date object in memory, so it has to be serialized to
+// an ISO string on the way into localStorage and revived back into a Date on the way out.
+export function saveCalendarEntriesToStorage(entries) {
+  try {
+    const payload = entries.map((entry) => ({ ...entry, date: entry.date.toISOString() }))
+    localStorage.setItem(CALENDAR_KEY, JSON.stringify(payload))
+  } catch {
+    // silent
+  }
+}
+
+export function loadCalendarEntriesFromStorage() {
+  try {
+    const raw = localStorage.getItem(CALENDAR_KEY)
+    if (!raw) return null
+    const stored = JSON.parse(raw)
+    if (!Array.isArray(stored)) return null
+    return stored.map((entry) => ({ ...entry, date: new Date(entry.date) }))
   } catch {
     return null
   }

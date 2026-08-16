@@ -216,8 +216,12 @@ CAMPAIGN_FORMAT_PROMPT = (
     '  ],\n'
     '  "content_calendar": [\n'
     '    {"day": "<Mon|Tue|Wed|Thu|Fri|Sat|Sun>", "date": "<e.g. Aug 4>", "platform": "<LinkedIn|Instagram|Facebook|TikTok>", '
+    '"format": "<text-only|single-image|carousel|video>", '
     '"category": "<matches one of the content_strategy pillar names>", "time": "<e.g. 8:00 AM>", '
     '"caption": "<the full, ready-to-post caption text, following the brand voice, compliance, and platform rules above>", '
+    '"slides": <if format is "carousel", an ARRAY of 3-5 slide strings — one self-contained idea per slide, cover '
+    'slide first and closing/CTA slide last, same convention as a single carousel post\'s script.body; otherwise an '
+    'empty array []>, '
     '"hashtags": ["#Example", "#Example"]}\n'
     '  ]\n'
     '}\n\n'
@@ -239,6 +243,20 @@ CAMPAIGN_FORMAT_PROMPT = (
     'calendar entries — treat it as a hard target, not an estimate: write exactly that many entries for that '
     'platform, distributed evenly across every week of the requested duration (e.g. total_posts 8 over 2 weeks is '
     '4 in week 1 and 4 in week 2, not 8 crammed into one week or 4 total for the whole calendar).\n'
+    '- Vary "format" across the calendar to match the per-platform reference above instead of defaulting every '
+    'entry to text-only: LinkedIn should be mostly text-only with some single-image/video mixed in; Instagram '
+    'should lean carousel (education/depth) and video (reach) with single-image as the minority; Facebook mixes '
+    'single-image and text-only; TikTok is always video. Roughly a third to half of a full 14-day calendar should '
+    'be non-text (single-image, carousel, or video) — an all-text-only calendar is a sign you have not applied '
+    'this rule.\n'
+    '- Every content_calendar entry with format "carousel" must populate "slides" with 3-5 slide strings — one '
+    'self-contained idea per slide, short enough to read at a glance (roughly 1-3 sentences), cover slide first '
+    'and closing/CTA slide last, same convention as a single carousel post\'s script.body. "caption" is still '
+    'required for every entry (the text posted alongside the carousel) and should not just repeat the slides '
+    'verbatim. Non-carousel entries must set "slides" to an empty array.\n'
+    '- A "video"-format entry is just a scheduling slot, same as any other entry — its "caption" is still normal '
+    'ready-to-post caption text. Do not generate a script for it here; that only happens on demand later (see '
+    'the no-upfront-scripts rule below).\n'
     '- Every caption must still fully comply with the compliance rules above (mandatory footer, no fair housing '
     'violations, no fabricated facts, qualified language) exactly as it would for a single-post request.\n'
     '- Do not include a Joseph-specific rate, APR, discount, promotion, or pricing incentive, and do not use a '
@@ -525,12 +543,14 @@ CAMPAIGN_JSON_SCHEMA = {
                     'day': {'type': 'string'},
                     'date': {'type': 'string'},
                     'platform': {'type': 'string'},
+                    'format': {'type': 'string'},
                     'category': {'type': 'string'},
                     'time': {'type': 'string'},
                     'caption': {'type': 'string'},
+                    'slides': {'type': 'array', 'items': {'type': 'string'}},
                     'hashtags': {'type': 'array', 'items': {'type': 'string'}},
                 },
-                'required': ['day', 'date', 'platform', 'category', 'time', 'caption', 'hashtags'],
+                'required': ['day', 'date', 'platform', 'format', 'category', 'time', 'caption', 'slides', 'hashtags'],
                 'additionalProperties': False,
             },
         },
