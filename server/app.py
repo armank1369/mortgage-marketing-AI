@@ -5,6 +5,7 @@ import os
 import re
 import json
 import anthropic
+from datetime import date
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -207,9 +208,14 @@ CAMPAIGN_FORMAT_PROMPT = (
     '"tone": "<tone descriptors for this platform>"}\n'
     '  ],\n'
     '  "content_calendar": [\n'
-    '    {"day": "<Mon|Tue|Wed|Thu|Fri|Sat|Sun>", "date": "<e.g. Aug 4>", "platform": "<LinkedIn|Instagram|Facebook|TikTok>", '
+    '    {"day": "<Mon|Tue|Wed|Thu|Fri|Sat|Sun>", "date": "<the actual upcoming calendar date for that day, e.g. Aug 19>", "platform": "<LinkedIn|Instagram|Facebook|TikTok>", '
+    '"format": "<text-only|single-image|carousel|video>", '
+    '"video_brief_title": "<if format is \\"video\\", the exact title of the matching entry in video_briefs below; otherwise an empty string>", '
     '"category": "<matches one of the content_strategy pillar names>", "time": "<e.g. 8:00 AM>", '
     '"caption": "<the full, ready-to-post caption text, following the brand voice, compliance, and platform rules above>", '
+    '"slides": <if format is "carousel", an ARRAY of 3-5 slide strings — one self-contained idea per slide, '
+    'cover slide first and closing/CTA slide last, same convention as the single-post carousel format; '
+    'otherwise an empty array []>, '
     '"hashtags": ["#Example", "#Example"]}\n'
     '  ],\n'
     '  "video_briefs": [\n'
@@ -243,10 +249,33 @@ CAMPAIGN_FORMAT_PROMPT = (
     'marketing goal (see funnel-stage guidance above).\n'
     '- platform_breakdown should only include platforms actually used in content_calendar, with frequency/times/tone '
     'consistent with the per-platform quick reference above and Joseph\'s professional/authoritative brand voice.\n'
+    '- Today is {today}. content_calendar must start from the next sensible posting day on or after today and use '
+    'the real calendar date for every entry (never reuse a stale or example date) — "day" and "date" must agree '
+    '(e.g. if today is a Saturday and the first post goes out the following Monday, that entry reads day: "Mon", '
+    'date: the actual date of that Monday). Spread entries across distinct calendar days per the platform '
+    'frequencies below — do not stack more than one entry from the same platform on the same date.\n'
     '- content_calendar should span 14 days by default, or the exact duration the user specifies (e.g. "1 week" = 7 '
     'days, "1 month" = 30 days). Only include calendar entries for days that actually have a scheduled post — do not '
     'create empty entries for off days — and the number of entries per platform should roughly match that '
     'platform\'s stated frequency.\n'
+    '- Distribute posting days/times strategically for engagement and conversion rather than clustering: favor '
+    'LinkedIn on Tue/Wed/Thu mornings (B2B professional audience), Instagram/Facebook on Mon/Wed/Fri late-morning '
+    'or early-evening, and TikTok on Tue/Thu/Fri evenings; sequence pillar categories so awareness-stage posts lead '
+    'and desire/action-stage posts (testimonials, direct CTAs) land later in the window as trust has been built.\n'
+    '- Vary "format" across the calendar to match the per-platform reference above instead of defaulting every '
+    'entry to text-only: LinkedIn should be mostly text-only with some single-image/video mixed in; Instagram '
+    'should lean carousel (education/depth) and video (reach) with single-image as the minority; Facebook mixes '
+    'single-image and text-only; TikTok is always video. Roughly a third to half of a full 14-day calendar should '
+    'be non-text (single-image, carousel, or video) — an all-text-only calendar is a sign you have not applied this '
+    'rule. Every content_calendar entry with format "video" must correspond to one of the video_briefs below (same '
+    'day/platform/topic), with "video_brief_title" set to that video_brief\'s exact title string so the two can be '
+    'joined — the calendar is the schedule, the brief is the script. Non-video entries must set "video_brief_title" '
+    'to an empty string.\n'
+    '- Every content_calendar entry with format "carousel" must populate "slides" with 3-5 slide strings — one '
+    'self-contained idea per slide, short enough to read at a glance (roughly 1-3 sentences), cover slide first '
+    'and closing/CTA slide last, same convention as a single carousel post\'s script.body. "caption" is still '
+    'required for every entry (the text posted alongside the carousel) and should not just repeat the slides '
+    'verbatim. Non-carousel entries must set "slides" to an empty array.\n'
     '- Every caption must still fully comply with the compliance rules above (mandatory footer, no fair housing '
     'violations, no fabricated facts, qualified language) exactly as it would for a single-post request.\n'
     '- Do not invent specific rates, fees, or statistics not supplied by the user; use bracketed placeholders like '
@@ -254,10 +283,13 @@ CAMPAIGN_FORMAT_PROMPT = (
     '- No two entries in content_calendar may share the same core idea, hook, or content concept (e.g. do not generate '
     '"a whiteboard video explaining X" more than once, even reworded) — every entry must offer a genuinely distinct '
     'angle or topic from every other entry in this calendar.\n'
-    '- Generate 2-4 video_briefs: fully scripted, ready-to-film short-form videos (roughly 20-45 seconds each), each '
-    'brainstormed from the strongest content_calendar/pillar concepts — pick ideas that work as an on-camera talking-head '
-    'or demonstration video, not just any caption topic. Each brief\'s idea must be genuinely distinct from every other '
-    'brief and from every content_calendar entry — no reused hooks or concepts, per the no-duplicate rule above.\n'
+    '- Generate one fully scripted video_brief (roughly 20-45 seconds each) for every content_calendar entry whose '
+    '"format" is "video", matching that entry\'s day/platform/topic — the calendar entry is the schedule slot, the '
+    'brief is its script, so these are meant to overlap, not duplicate-avoid each other. If content_calendar has no '
+    'video-format entries, generate 2-3 standalone video_briefs instead, brainstormed from the strongest pillar '
+    'concepts. Either way, pick ideas that work as an on-camera talking-head or demonstration video, not just any '
+    'caption topic, and every video_brief must still be genuinely distinct from every other video_brief and from '
+    'every non-video content_calendar entry — no reused hooks or concepts, per the no-duplicate rule above.\n'
     '- Each script follows intro (hook) -> body (value delivered) -> cta (the ask) with realistic timestamp ranges that '
     'sum to roughly the stated duration.\n'
     '- creative_direction must be concrete, filmable guidance (not generic advice) for setting, camera framing, '
@@ -472,12 +504,15 @@ CAMPAIGN_JSON_SCHEMA = {
                     'day': {'type': 'string'},
                     'date': {'type': 'string'},
                     'platform': {'type': 'string'},
+                    'format': {'type': 'string'},
+                    'video_brief_title': {'type': 'string'},
                     'category': {'type': 'string'},
                     'time': {'type': 'string'},
                     'caption': {'type': 'string'},
+                    'slides': {'type': 'array', 'items': {'type': 'string'}},
                     'hashtags': {'type': 'array', 'items': {'type': 'string'}},
                 },
-                'required': ['day', 'date', 'platform', 'category', 'time', 'caption', 'hashtags'],
+                'required': ['day', 'date', 'platform', 'format', 'video_brief_title', 'category', 'time', 'caption', 'slides', 'hashtags'],
                 'additionalProperties': False,
             },
         },
@@ -1169,6 +1204,7 @@ def chat():
         else:
             system_prompt += '\n\n' + NON_CAMPAIGN_FORMAT_PROMPT
         system_prompt = system_prompt.replace('{nmls}', nmls)
+        system_prompt = system_prompt.replace('{today}', date.today().strftime('%A, %B %d, %Y'))
 
         request_kwargs = {
             'model': ANTHROPIC_MODEL,

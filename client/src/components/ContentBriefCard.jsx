@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import platformBadge, { platformGradient } from './platformBadge'
 
+function BookmarkIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+
 export function ScriptLine({ label, time, text }) {
   if (!text) return null
   return (
@@ -96,18 +104,26 @@ export function CreativeDirectionGrid({ direction }) {
 // platform-colored top bar) wrapping a Script / Creative Direction / Quick Details breakdown
 // and a Copy/status footer. Used by both the four-pillar Video Content Briefs section and
 // the general post-idea response, so every generated deliverable reads as one visual system.
-const FORMAT_BADGES = {
+export const FORMAT_BADGES = {
   'text-only': { icon: '📝', label: 'Text' },
   'single-image': { icon: '🖼️', label: 'Image' },
   carousel: { icon: '🖼️', label: 'Carousel' },
   video: { icon: '🎥', label: 'Video' },
 }
 
-export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, children }) {
+export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, children }) {
   const [copied, setCopied] = useState(false)
+  const [saved, setSaved] = useState(false)
   const gradient = platformGradient(platform)
   const badge = platform ? platformBadge(platform) : null
   const formatBadge = format ? FORMAT_BADGES[format] : null
+  // Both sections below are optional — a lighter-weight caller (e.g. a calendar entry with
+  // just a caption, no shot-by-shot direction) can omit them entirely rather than rendering
+  // an empty header over nothing.
+  const hasDirection = direction && Object.values(direction).some(Boolean)
+  const hasHashtags = Array.isArray(hashtags) && hashtags.length > 0
+  const hasPlatformTags = Array.isArray(details?.platforms) && details.platforms.length > 0
+  const hasQuickDetails = Boolean(details?.duration || details?.tone || details?.call_to_action) || hasHashtags || hasPlatformTags
 
   const handleCopy = async () => {
     try {
@@ -117,6 +133,11 @@ export default function ContentBriefCard({ title, platform, format, script, dire
     } catch {
       // clipboard unavailable — ignore
     }
+  }
+
+  const handleSaveToCalendar = () => {
+    onSaveToCalendar()
+    setSaved(true)
   }
 
   return (
@@ -164,11 +185,14 @@ export default function ContentBriefCard({ title, platform, format, script, dire
         </div>
       )}
 
-      <div className="px-4 py-4 border-t border-slate-100">
-        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
-        <CreativeDirectionGrid direction={direction} />
-      </div>
+      {hasDirection && (
+        <div className="px-4 py-4 border-t border-slate-100">
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
+          <CreativeDirectionGrid direction={direction} />
+        </div>
+      )}
 
+      {hasQuickDetails && (
       <div className="px-4 py-4 border-t border-slate-100 bg-slate-50/60">
         <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Quick Details</div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -211,18 +235,32 @@ export default function ContentBriefCard({ title, platform, format, script, dire
           </div>
         )}
       </div>
+      )}
 
       {children}
 
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100">
         <span className="text-[11px] text-slate-400">Draft ready</span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
-        >
-          {copied ? '✓ Copied' : '📋 Copy'}
-        </button>
+        <div className="flex items-center gap-2">
+          {onSaveToCalendar && (
+            <button
+              type="button"
+              onClick={handleSaveToCalendar}
+              disabled={saved}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-default rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <BookmarkIcon />
+              {saved ? 'Saved to Calendar' : 'Save to Calendar'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
+          >
+            {copied ? '✓ Copied' : '📋 Copy'}
+          </button>
+        </div>
       </div>
     </div>
   )

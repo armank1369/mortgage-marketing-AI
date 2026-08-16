@@ -1,4 +1,5 @@
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext'
+import { CalendarProvider } from './context/CalendarContext'
 import PreferenceSetup from './pages/PreferenceSetup'
 import ChatPage from './pages/ChatPage'
 
@@ -15,7 +16,9 @@ function AppContent() {
 export default function App() {
   return (
     <PreferencesProvider>
-      <AppContent />
+      <CalendarProvider>
+        <AppContent />
+      </CalendarProvider>
     </PreferencesProvider>
   )
 }
