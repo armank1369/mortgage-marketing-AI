@@ -925,7 +925,7 @@ export default function ChatPage() {
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Brand Voice</h4>
                 <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-                  {preferences.coreValues || 'Not configured.'}
+                  {activePersona?.coreValues || 'Not configured.'}
                 </p>
               </div>
 
@@ -933,7 +933,7 @@ export default function ChatPage() {
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Tone of Voice</h4>
                 <div className="space-y-4">
                   {TONE_SCALES.map((scale) => {
-                    const value = preferences.tone?.[scale.key]
+                    const value = activePersona?.tone?.[scale.key]
                     return (
                       <div key={scale.key}>
                         <div className="flex justify-between text-[11px] text-slate-500">
@@ -962,20 +962,20 @@ export default function ChatPage() {
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Age range</p>
                     <p className="mt-1 text-sm text-slate-700">
-                      {preferences.ageRange ? `Age range: ${preferences.ageRange[0]}-${preferences.ageRange[1]}` : 'Not configured.'}
+                      {activePersona?.ageRange ? `Age range: ${activePersona.ageRange[0]}-${activePersona.ageRange[1]}` : 'Not configured.'}
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Income</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.income || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.income || 'Not configured.'}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Education</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.education || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.education || 'Not configured.'}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Pain points</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.painPoints || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.painPoints || 'Not configured.'}</p>
                   </div>
                 </div>
               </div>

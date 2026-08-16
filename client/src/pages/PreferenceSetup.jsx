@@ -3,17 +3,6 @@ import { usePreferences } from '../context/PreferencesContext'
 import DualRangeSlider from '../components/DualRangeSlider'
 import { NMLS_NUMBER } from '../constants'
 
-const INITIAL_PERSONAS = [
-  {
-    id: 'business-owner',
-    name: 'The Business Owner',
-    initials: 'BO',
-    description:
-      'Age 35-60, self-employed or entrepreneur. Complex finances, frustrated with traditional banks. Needs Non-QM loan options.',
-    apiKey: 'self-employed',
-  },
-]
-
 const INCOME_OPTIONS = ['Under $100k', '$100k-$200k', '$200k-$300k', '$300k-$500k', '$500k+']
 
 const EDUCATION_OPTIONS = ['High school', 'Some college', "Bachelor's degree", 'Graduate degree']
@@ -31,6 +20,29 @@ const DEFAULT_TONE = {
   serious: 3,
   matterOfFact: 3,
 }
+
+// Brand voice (core values, tone, target audience) belongs to each persona individually, so
+// every persona carries its own copy — new personas start from these defaults.
+const DEFAULT_BRAND_VOICE = {
+  coreValues: '',
+  tone: DEFAULT_TONE,
+  ageRange: [25, 45],
+  income: INCOME_OPTIONS[0],
+  education: EDUCATION_OPTIONS[0],
+  painPoints: '',
+}
+
+const INITIAL_PERSONAS = [
+  {
+    id: 'business-owner',
+    name: 'The Business Owner',
+    initials: 'BO',
+    description:
+      'Age 35-60, self-employed or entrepreneur. Complex finances, frustrated with traditional banks. Needs Non-QM loan options.',
+    apiKey: 'self-employed',
+    ...DEFAULT_BRAND_VOICE,
+  },
+]
 
 const fieldClass =
   'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-700 focus:border-sky-700 bg-slate-50/50 placeholder:text-slate-400'
@@ -50,6 +62,14 @@ function PlusIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 12h14M12 5v14" />
+    </svg>
+  )
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
     </svg>
   )
 }
@@ -78,10 +98,11 @@ export default function PreferenceSetup({ onComplete }) {
 
   const initialPersonas = useMemo(() => {
     if (!savedPersona) return INITIAL_PERSONAS
+    const merged = { ...DEFAULT_BRAND_VOICE, ...savedPersona }
     const index = INITIAL_PERSONAS.findIndex((p) => p.apiKey === savedPersona.apiKey)
-    if (index === -1) return [savedPersona, ...INITIAL_PERSONAS]
+    if (index === -1) return [merged, ...INITIAL_PERSONAS]
     const copy = [...INITIAL_PERSONAS]
-    copy[index] = savedPersona
+    copy[index] = merged
     return copy
   }, [savedPersona])
 
@@ -90,12 +111,16 @@ export default function PreferenceSetup({ onComplete }) {
     savedPersona?.id || INITIAL_PERSONAS[0].id
   )
 
-  const [coreValues, setCoreValues] = useState(saved.coreValues || '')
-  const [tone, setTone] = useState(saved.tone || DEFAULT_TONE)
-  const [ageRange, setAgeRange] = useState(saved.ageRange || [25, 45])
-  const [income, setIncome] = useState(saved.income || INCOME_OPTIONS[0])
-  const [education, setEducation] = useState(saved.education || EDUCATION_OPTIONS[0])
-  const [painPoints, setPainPoints] = useState(saved.painPoints || '')
+  // Two-step flow: pick (or create) a persona on its own page, then land on a second page to
+  // edit and save that specific persona's brand voice — never both at once.
+  const [step, setStep] = useState('persona')
+
+  const [coreValues, setCoreValues] = useState('')
+  const [tone, setTone] = useState(DEFAULT_TONE)
+  const [ageRange, setAgeRange] = useState([25, 45])
+  const [income, setIncome] = useState(INCOME_OPTIONS[0])
+  const [education, setEducation] = useState(EDUCATION_OPTIONS[0])
+  const [painPoints, setPainPoints] = useState('')
 
   const [editingPersonaId, setEditingPersonaId] = useState(null)
   const [draftName, setDraftName] = useState('')
@@ -122,6 +147,18 @@ export default function PreferenceSetup({ onComplete }) {
     setEditingPersonaId(null)
   }
 
+  // Loads a persona's own brand voice into the step-2 form and switches to it.
+  const openBrandVoice = (persona) => {
+    setSelectedPersonaId(persona.id)
+    setCoreValues(persona.coreValues || '')
+    setTone(persona.tone || DEFAULT_TONE)
+    setAgeRange(persona.ageRange || [25, 45])
+    setIncome(persona.income || INCOME_OPTIONS[0])
+    setEducation(persona.education || EDUCATION_OPTIONS[0])
+    setPainPoints(persona.painPoints || '')
+    setStep('brandVoice')
+  }
+
   const saveNewPersona = () => {
     const name = newName.trim()
     if (!name) return
@@ -130,30 +167,33 @@ export default function PreferenceSetup({ onComplete }) {
       name,
       description: newDescription.trim() || 'Custom persona',
       apiKey: 'custom',
+      ...DEFAULT_BRAND_VOICE,
     }
     setPersonas((prev) => [...prev, persona])
-    setSelectedPersonaId(persona.id)
     setCreatingPersona(false)
     setNewName('')
     setNewDescription('')
+    openBrandVoice(persona)
   }
 
   const handleSubmit = () => {
-    const persona = personas.find((p) => p.id === selectedPersonaId)
-    if (!persona) return
-    setPreferences({
-      name: 'Joseph',
-      nmls: NMLS_NUMBER,
-      persona,
+    const base = personas.find((p) => p.id === selectedPersonaId)
+    if (!base) return
+    const persona = {
+      ...base,
       coreValues: coreValues.trim(),
       tone,
       ageRange,
       income,
       education,
       painPoints: painPoints.trim(),
-    })
+    }
+    setPersonas((prev) => prev.map((p) => (p.id === persona.id ? persona : p)))
+    setPreferences({ name: 'Joseph', nmls: NMLS_NUMBER, persona })
     onComplete?.(persona)
   }
+
+  const selectedPersona = personas.find((p) => p.id === selectedPersonaId)
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -172,6 +212,7 @@ export default function PreferenceSetup({ onComplete }) {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-10">
+        {step === 'persona' && (
         <Section number="00" title="Persona Selector">
           <div className="grid sm:grid-cols-2 gap-3">
             {personas.map((p) => {
@@ -218,7 +259,7 @@ export default function PreferenceSetup({ onComplete }) {
               return (
                 <div
                   key={p.id}
-                  onClick={() => setSelectedPersonaId(p.id)}
+                  onClick={() => openBrandVoice(p)}
                   className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${
                     selected
                       ? 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
@@ -311,6 +352,28 @@ export default function PreferenceSetup({ onComplete }) {
             </button>
           )}
         </Section>
+        )}
+
+        {step === 'brandVoice' && selectedPersona && (
+        <>
+        <button
+          type="button"
+          onClick={() => setStep('persona')}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-4"
+        >
+          <ArrowLeftIcon />
+          Back to personas
+        </button>
+
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-bold shrink-0">
+            {selectedPersona.initials || initials(selectedPersona.name)}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500">Editing brand voice for</p>
+            <h2 className="text-base font-bold text-slate-900 truncate">{selectedPersona.name}</h2>
+          </div>
+        </div>
 
         <Section number="01" title="Brand Voice">
           <label className="block text-sm font-semibold text-slate-900">Core values</label>
@@ -424,6 +487,8 @@ export default function PreferenceSetup({ onComplete }) {
         >
           Set Brand Guidelines
         </button>
+        </>
+        )}
       </main>
     </div>
   )
