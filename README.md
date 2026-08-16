@@ -59,3 +59,18 @@ The backend will call `http://localhost:11434/api/generate` using the `llama3.2`
 ├── .gitignore
 └── README.md
 ```
+
+
+
+To start on local host: 
+1. Start backend: 
+# TERMINAL 1
+cd "D:\ZeTechProjects\arman\mortgage-marketing-AI\server"
+.\venv\Scripts\Activate.ps1
+python app.py
+
+
+2. Start Frontend on another terminal
+# TERMINAL 2
+cd "D:\ZeTechProjects\arman\mortgage-marketing-AI\client"
+npm run dev
