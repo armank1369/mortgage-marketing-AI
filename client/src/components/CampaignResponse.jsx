@@ -1,6 +1,8 @@
+import { useState } from 'react'
+import axios from 'axios'
 import Section from './Section'
 import platformBadge from './platformBadge'
-import ContentBriefCard from './ContentBriefCard'
+import { ScriptLine, CreativeDirectionGrid } from './ContentBriefCard'
 import SocialImageGenerator from './socialImage/SocialImageGenerator'
 
 const PILLAR_STYLES = [
@@ -87,120 +89,206 @@ function PlatformBreakdownBody({ platforms }) {
   )
 }
 
-function ContentCalendarBody({ calendar }) {
-  if (!calendar || calendar.length === 0) {
-    return <p className="text-xs text-slate-400">No calendar entries returned.</p>
-  }
-  return (
-    <div className="space-y-3">
-      {calendar.map((entry, i) => {
-        const badge = platformBadge(entry.platform)
-        return (
-          <div key={i} className="rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-3">
-                <div className="text-center leading-tight shrink-0 w-10">
-                  <div className="text-[10px] font-semibold text-slate-400 uppercase">{entry.day}</div>
-                  <div className="text-xs font-bold text-slate-700">{entry.date}</div>
-                </div>
-                <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${badge.className}`}>
-                  <span>{badge.label}</span>
-                  {entry.platform}
-                </span>
-                {entry.category && (
-                  <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                    {entry.category}
-                  </span>
-                )}
-              </div>
-              {entry.time && (
-                <span className="text-[11px] text-slate-400 shrink-0">🕐 {entry.time}</span>
-              )}
-            </div>
-            {entry.caption && (
-              <p className="text-xs text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">{entry.caption}</p>
-            )}
-            {Array.isArray(entry.hashtags) && entry.hashtags.length > 0 && (
-              <p className="text-xs text-blue-600 mt-2 break-words">{entry.hashtags.join(' ')}</p>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
+  const [copied, setCopied] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState('')
+  const badge = platformBadge(entry.platform)
+  const video = entry.video
+  const script = video?.script || {}
+  const direction = video?.creative_direction || {}
+  const details = video?.quick_details || {}
 
-function VideoBriefCard({ brief, nmls, persona }) {
-  const script = brief.script || {}
-  const direction = brief.creative_direction || {}
-  const details = brief.quick_details || {}
+  const generateVideo = async () => {
+    setGenerating(true)
+    setGenError('')
+    try {
+      const { data } = await axios.post('/api/video-brief', {
+        caption: entry.caption,
+        platform: entry.platform,
+        category: entry.category,
+        persona,
+        nmls_number: nmls,
+      })
+      onVideoGenerated(data.video)
+    } catch {
+      setGenError('Could not generate a video script. Please try again.')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const buildCopyText = () =>
     [
-      brief.title,
-      '',
-      'SCRIPT',
+      entry.caption,
+      Array.isArray(entry.hashtags) && entry.hashtags.length > 0 ? entry.hashtags.join(' ') : '',
+      video ? 'SCRIPT' : '',
       script.intro?.text ? `Intro (${script.intro.time || ''}): ${script.intro.text}` : '',
       script.body?.text ? `Body (${script.body.time || ''}): ${script.body.text}` : '',
       script.cta?.text ? `CTA (${script.cta.time || ''}): ${script.cta.text}` : '',
-      '',
-      'CREATIVE DIRECTION',
+      video ? 'CREATIVE DIRECTION' : '',
       direction.setting ? `Setting: ${direction.setting}` : '',
       direction.camera ? `Camera: ${direction.camera}` : '',
       direction.lighting ? `Lighting: ${direction.lighting}` : '',
       direction.energy ? `Energy: ${direction.energy}` : '',
       direction.background ? `Background: ${direction.background}` : '',
       direction.clothing ? `Clothing: ${direction.clothing}` : '',
-      '',
-      'QUICK DETAILS',
+      video ? 'QUICK DETAILS' : '',
       details.duration ? `Duration: ${details.duration}` : '',
       details.tone ? `Tone: ${details.tone}` : '',
       details.call_to_action ? `Call-to-Action: ${details.call_to_action}` : '',
-      details.platforms?.length ? `Platforms: ${details.platforms.join(', ')}` : '',
     ]
       .filter(Boolean)
       .join('\n')
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(buildCopyText())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard unavailable — ignore
+    }
+  }
+
   return (
-    <ContentBriefCard
-      title={brief.title}
-      platform={details.platforms?.[0]}
-      script={[
-        { label: 'Intro', time: script.intro?.time, text: script.intro?.text },
-        { label: 'Body', time: script.body?.time, text: script.body?.text },
-        { label: 'CTA', time: script.cta?.time, text: script.cta?.text },
-      ]}
-      direction={direction}
-      details={details}
-      onCopyText={buildCopyText}
-    >
-      <SocialImageGenerator
-        title={brief.title}
-        script={{ hook: script.intro?.text, body: script.body?.text, cta: script.cta?.text }}
-        platform={details.platforms?.[0]}
-        persona={persona}
-        nmls={nmls}
-      />
-    </ContentBriefCard>
+    <div className="rounded-xl border border-slate-200 overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <div className="text-center leading-tight shrink-0 w-10">
+              <div className="text-[10px] font-semibold text-slate-400 uppercase">{entry.day}</div>
+              <div className="text-xs font-bold text-slate-700">{entry.date}</div>
+            </div>
+            <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full ${badge.className}`}>
+              <span>{badge.label}</span>
+              {entry.platform}
+            </span>
+            {entry.category && (
+              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                {entry.category}
+              </span>
+            )}
+            {video && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+                <span>🎥</span>
+                Script
+              </span>
+            )}
+          </div>
+          {entry.time && (
+            <span className="text-[11px] text-slate-400 shrink-0">🕐 {entry.time}</span>
+          )}
+        </div>
+        {entry.caption && (
+          <p className="text-xs text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">{entry.caption}</p>
+        )}
+        {Array.isArray(entry.hashtags) && entry.hashtags.length > 0 && (
+          <p className="text-xs text-blue-600 mt-2 break-words">{entry.hashtags.join(' ')}</p>
+        )}
+        {!video && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={generateVideo}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generating && (
+                <span className="w-3 h-3 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin" />
+              )}
+              {generating ? 'Generating video script...' : '🎥 Generate video script'}
+            </button>
+            {genError && <p className="text-[11px] text-red-500 mt-1.5">{genError}</p>}
+          </div>
+        )}
+      </div>
+
+      {video && (
+        <>
+          <div className="px-4 py-4 border-t border-slate-100">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Script</div>
+            <ScriptLine label="Intro" time={script.intro?.time} text={script.intro?.text} />
+            <ScriptLine label="Body" time={script.body?.time} text={script.body?.text} />
+            <ScriptLine label="CTA" time={script.cta?.time} text={script.cta?.text} />
+          </div>
+
+          <div className="px-4 py-4 border-t border-slate-100">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
+            <CreativeDirectionGrid direction={direction} />
+          </div>
+
+          <div className="px-4 py-4 border-t border-slate-100 bg-slate-50/60">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Quick Details</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {details.duration && (
+                <div>
+                  <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Duration</div>
+                  <div className="text-sm font-semibold text-slate-800">{details.duration}</div>
+                </div>
+              )}
+              {details.tone && (
+                <div>
+                  <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Tone</div>
+                  <div className="text-sm font-semibold text-slate-800">{details.tone}</div>
+                </div>
+              )}
+              {details.call_to_action && (
+                <div className="col-span-2 sm:col-span-1">
+                  <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">Call-to-Action</div>
+                  <div className="text-sm font-semibold text-slate-800">{details.call_to_action}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <SocialImageGenerator
+            title={entry.category}
+            script={{ hook: script.intro?.text, body: script.body?.text, cta: script.cta?.text }}
+            platform={entry.platform}
+            persona={persona}
+            nmls={nmls}
+          />
+
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100">
+            <span className="text-[11px] text-slate-400">Draft ready</span>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
+            >
+              {copied ? '✓ Copied' : '📋 Copy'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
-function VideoBriefsBody({ briefs, nmls, persona }) {
-  if (!briefs || briefs.length === 0) {
-    return <p className="text-xs text-slate-400">No video briefs returned.</p>
+function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
+  if (!calendar || calendar.length === 0) {
+    return <p className="text-xs text-slate-400">No calendar entries returned.</p>
   }
   return (
-    <div className="space-y-4">
-      {briefs.map((brief, i) => (
-        <VideoBriefCard key={i} brief={brief} nmls={nmls} persona={persona} />
+    <div className="space-y-3">
+      {calendar.map((entry, i) => (
+        <CalendarEntryCard
+          key={i}
+          entry={entry}
+          nmls={nmls}
+          persona={persona}
+          onVideoGenerated={(video) => onVideoGenerated(i, video)}
+        />
       ))}
     </div>
   )
 }
 
-export default function CampaignResponse({ data, nmls, persona }) {
+export default function CampaignResponse({ data, nmls, persona, onVideoGenerated }) {
   if (!data) return null
-  const { content_strategy, platform_breakdown, content_calendar, video_briefs } = data
+  const { content_strategy, platform_breakdown, content_calendar } = data
+  const scriptedCount = (content_calendar || []).filter((entry) => entry.video).length
 
   return (
     <div className="w-full max-w-3xl space-y-3">
@@ -220,19 +308,15 @@ export default function CampaignResponse({ data, nmls, persona }) {
       <Section
         icon="📅"
         title="Content Calendar"
-        subtitle={`${content_calendar?.length || 0} scheduled posts`}
+        subtitle={`${content_calendar?.length || 0} scheduled posts${scriptedCount ? ` · ${scriptedCount} with a video script` : ''}`}
         defaultOpen={false}
       >
-        <ContentCalendarBody calendar={content_calendar} />
-      </Section>
-
-      <Section
-        icon="🎬"
-        title="Video Content Briefs"
-        subtitle={`${video_briefs?.length || 0} script-ready video idea${(video_briefs?.length || 0) === 1 ? '' : 's'}`}
-        defaultOpen={false}
-      >
-        <VideoBriefsBody briefs={video_briefs} nmls={nmls} persona={persona} />
+        <ContentCalendarBody
+          calendar={content_calendar}
+          nmls={nmls}
+          persona={persona}
+          onVideoGenerated={onVideoGenerated}
+        />
       </Section>
     </div>
   )

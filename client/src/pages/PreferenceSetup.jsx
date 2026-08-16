@@ -156,22 +156,22 @@ export default function PreferenceSetup({ onComplete }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-dvh bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-bold">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-bold shrink-0">
               L
             </div>
-            <h1 className="text-lg font-bold text-slate-900">Lucent Social Media Assistant</h1>
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">Lucent Social Media Assistant</h1>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-full px-3 py-1.5">
+          <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-full px-3 py-1.5">
             Brand Setup
           </span>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-10">
+      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
         <Section number="00" title="Persona Selector">
           <div className="grid sm:grid-cols-2 gap-3">
             {personas.map((p) => {
@@ -329,32 +329,41 @@ export default function PreferenceSetup({ onComplete }) {
         <Section number="02" title="Tone of Voice">
           <div className="space-y-5">
             {TONE_SCALES.map((scale) => (
-              <div key={scale.key} className="flex items-center gap-2 sm:gap-3">
-                <span className="w-24 sm:w-32 text-xs font-medium text-slate-600 shrink-0">
-                  {scale.low}
-                </span>
-                <div className="flex-1 flex gap-1.5">
-                  {[1, 2, 3, 4, 5].map((n) => {
-                    const active = tone[scale.key] === n
-                    return (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setTone((prev) => ({ ...prev, [scale.key]: n }))}
-                        className={`h-9 flex-1 rounded-lg border-2 text-sm font-semibold transition-all ${
-                          active
-                            ? 'bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-900/20'
-                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    )
-                  })}
+              <div key={scale.key}>
+                {/* Labels sit above the buttons on mobile so the 5 rating buttons keep a
+                    usable tap-target width instead of being squeezed by two fixed-width
+                    labels flanking them on a narrow screen; sm+ reverts to one row. */}
+                <div className="flex sm:hidden items-center justify-between text-xs font-medium text-slate-600 mb-1.5">
+                  <span>{scale.low}</span>
+                  <span>{scale.high}</span>
                 </div>
-                <span className="w-24 sm:w-32 text-xs font-medium text-slate-600 shrink-0 text-right">
-                  {scale.high}
-                </span>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className="hidden sm:inline sm:w-32 text-xs font-medium text-slate-600 shrink-0">
+                    {scale.low}
+                  </span>
+                  <div className="flex-1 flex gap-1.5">
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const active = tone[scale.key] === n
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setTone((prev) => ({ ...prev, [scale.key]: n }))}
+                          className={`h-9 flex-1 rounded-lg border-2 text-sm font-semibold transition-all ${
+                            active
+                              ? 'bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-900/20'
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="hidden sm:inline sm:w-32 text-xs font-medium text-slate-600 shrink-0 text-right">
+                    {scale.high}
+                  </span>
+                </div>
               </div>
             ))}
           </div>

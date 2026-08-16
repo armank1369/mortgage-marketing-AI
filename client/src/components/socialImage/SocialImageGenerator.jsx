@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import axios from 'axios'
 import { toPng } from 'html-to-image'
 import TEMPLATE_COMPONENTS, { TEMPLATE_DIMENSIONS } from './templates'
@@ -24,6 +24,21 @@ export default function SocialImageGenerator({ title, script, platform, persona,
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState(false)
   const captureRef = useRef(null)
+  const previewBoxRef = useRef(null)
+  // The preview box is CSS-fluid (w-full, capped at PREVIEW_MAX_WIDTH) so it never overflows
+  // a narrow phone screen — this tracks its actual rendered width so the inner native-resolution
+  // template can be scaled down to match exactly, instead of assuming the desktop 340px width.
+  const [previewWidth, setPreviewWidth] = useState(PREVIEW_MAX_WIDTH)
+
+  useEffect(() => {
+    const el = previewBoxRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry?.contentRect.width) setPreviewWidth(entry.contentRect.width)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [result])
 
   const generate = async () => {
     setLoading(true)
@@ -70,7 +85,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
 
   const TemplateComponent = result ? TEMPLATE_COMPONENTS[result.template] : null
   const dims = result ? TEMPLATE_DIMENSIONS[result.template] : null
-  const scale = dims ? PREVIEW_MAX_WIDTH / dims.width : 1
+  const scale = dims ? previewWidth / dims.width : 1
   const previewHeight = dims ? dims.height * scale : 0
 
   return (
@@ -118,8 +133,9 @@ export default function SocialImageGenerator({ title, script, platform, persona,
       ) : (
         <div>
           <div
-            style={{ width: PREVIEW_MAX_WIDTH, height: previewHeight, overflow: 'hidden' }}
-            className="rounded-lg border border-slate-200 mx-auto"
+            ref={previewBoxRef}
+            style={{ maxWidth: PREVIEW_MAX_WIDTH, height: previewHeight, overflow: 'hidden' }}
+            className="w-full rounded-lg border border-slate-200 mx-auto"
           >
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
               <div ref={captureRef} style={{ width: dims.width, height: dims.height }}>

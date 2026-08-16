@@ -68,21 +68,25 @@ export default function CalendarPage() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <header className="bg-white border-b border-slate-200 px-6 py-3 shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
-          <h2 className="text-sm font-semibold text-slate-900">{monthName}</h2>
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shrink-0 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+          <h2 className="text-sm font-semibold text-slate-900 truncate">{monthName}</h2>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm shadow-blue-200"
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm shadow-blue-200 shrink-0"
         >
           + New Entry
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden bg-white">
+      {/* Fixed-width grid (700px) scrolls horizontally below that — a 7-day week squeezed
+          into a phone's ~350px usable width would make every cell too narrow to read, so this
+          trades "see the whole week at once" for "each day stays legible," same tradeoff a
+          swipeable native calendar app makes. */}
+      <div className="flex-1 overflow-y-auto overflow-x-auto p-4 sm:p-6">
+        <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden bg-white min-w-[700px]">
           {DAY_LABELS.map((label) => (
             <div key={label} className="bg-white px-3 py-2 text-xs font-semibold text-slate-500 text-center">
               {label}
