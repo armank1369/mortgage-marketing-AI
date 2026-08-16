@@ -43,6 +43,14 @@ The chat began with the request: “Create a two-week social media campaign for 
 
 The summary is deterministic and local. It does not make an extra Claude request, which avoids additional latency, API cost, and failure points for a presentation-focused feature.
 
+### Editable chat title and description
+
+Each saved chat keeps the same compact sidebar layout but now exposes an edit control on hover.
+
+Selecting the pencil turns the title and description into inline fields. Selecting the same control again (shown as a checkmark while editing) saves both values back to the existing `chat.title` and `chat.summary` metadata. Pressing Enter while editing the title also saves.
+
+Because these are already first-class chat-session fields, this does not introduce a new storage concept and maps directly to future `chat_sessions.title` and `chat_sessions.summary` database columns.
+
 ### Multi Image Carousel wording
 
 The internal format value remains:
@@ -59,11 +67,21 @@ Multi Image Carousel
 
 Keeping the internal value stable is important because existing rendering and backend formatting logic already depends on `carousel`.
 
-### Current rates and promo fields
+### Specific-rate and promotion guardrail
 
-The reviewed branch does not currently expose dedicated Current Rates or Promo fields in the working UI, so there is no settings field to remove in this patch.
+The working UI does not expose dedicated Current Rates or Promo settings. The campaign clarification flow previously could still ask Joseph whether he had a specific current rate or promotion to feature, so that behavior is removed.
 
-The backend's no-fabrication safeguards remain in place. If generated marketing content needs a rate, promotion, fee, or similar fact that was not supplied, the AI should continue asking for it or using a clearly marked placeholder rather than inventing a value.
+The prototype now follows a conservative product-level rule:
+
+- do not ask Joseph for a specific rate, rate discount, promotional rate, teaser/special rate, or pricing promotion to feature;
+- do not generate Joseph-specific or guaranteed pricing offers;
+- do not use placeholders such as `[INSERT CURRENT RATE]` or `[INSERT PROMO]`;
+- allow general market-rate context only as neutral educational information when the number is user-supplied or otherwise verified;
+- never present general market context as a rate Joseph is offering or guaranteeing.
+
+The clarification parser also removes restricted pricing/promotion questions or options before they reach the frontend if the model produces one despite the prompt.
+
+This is intentionally a conservative product policy for the prototype; it is not a statement that every advertisement mentioning a rate is automatically unlawful.
 
 ## Chat Session Data Model
 
@@ -214,6 +232,7 @@ When database integration resumes, the recommended direction is to introduce exp
   - removes Settings;
   - introduces database-ready chat metadata;
   - adds timestamp/content-type/summary UI;
+  - adds inline editing for chat titles and descriptions;
   - preserves metadata when messages are modified;
   - gives deleted sessions fresh identities.
 
@@ -228,7 +247,10 @@ When database integration resumes, the recommended direction is to introduce exp
 
 - `server/app.py`
   - changes the clarification option shown to users from `Carousel` to `Multi Image Carousel`;
-  - keeps the structured output format value `carousel`.
+  - keeps the structured output format value `carousel`;
+  - removes specific-rate/promotion solicitation from campaign planning;
+  - filters restricted pricing/promotion questions before they reach the UI;
+  - adds an output backstop for Joseph-specific pricing offers while preserving neutral market-rate context.
 
 - `README.md`
   - updates the setup instructions from the obsolete Ollama workflow to the current Anthropic backend;
@@ -251,5 +273,7 @@ After applying the patch:
 7. Generate different output types and verify content-type tags update.
 8. Request a post without specifying format and confirm the clarification UI offers `Multi Image Carousel`.
 9. Generate a carousel and confirm the content card says `Multi Image Carousel` while the multi-slide viewer still works.
-10. Delete a chat, create/use another chat, refresh, and verify chat identity/selection remains stable.
-11. Clear a chat and verify its messages, summary, and content-type tags clear without breaking the persona/title.
+10. Hover a saved chat, select the edit button, change its title and description, select the checkmark, refresh, and verify both edits persist.
+11. Run the 2-week campaign clarification flow in a new/cleared chat and verify no option asks for a specific current rate, discount, or promotion to feature.
+12. Delete a chat, create/use another chat, refresh, and verify chat identity/selection remains stable.
+13. Clear a chat and verify its messages, summary, and content-type tags clear without breaking the persona/title.

@@ -31,6 +31,21 @@ function TrashIcon() {
   )
 }
 
+function EditIcon({ done = false }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {done ? (
+        <path d="M20 6L9 17l-5-5" />
+      ) : (
+        <>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </>
+      )}
+    </svg>
+  )
+}
+
 function CloseIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -154,6 +169,9 @@ export default function ChatPage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [chatToDelete, setChatToDelete] = useState(null)
   const [showPersonaModal, setShowPersonaModal] = useState(false)
+  const [editingChatId, setEditingChatId] = useState(null)
+  const [draftChatTitle, setDraftChatTitle] = useState('')
+  const [draftChatSummary, setDraftChatSummary] = useState('')
   const endRef = useRef(null)
 
   const nmls = NMLS_NUMBER
@@ -396,6 +414,34 @@ export default function ChatPage() {
     }
   }
 
+  const saveChatEdits = (chatId) => {
+    const now = new Date().toISOString()
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              title: draftChatTitle.trim() || chat.persona?.name || 'Chat',
+              summary: draftChatSummary.trim(),
+              updatedAt: now,
+            }
+          : chat
+      )
+    )
+  }
+
+  const toggleChatEdit = (chat) => {
+    if (editingChatId === chat.id) {
+      saveChatEdits(chat.id)
+      setEditingChatId(null)
+      return
+    }
+
+    setDraftChatTitle(chat.title || chat.persona?.name || 'Chat')
+    setDraftChatSummary(chat.summary || '')
+    setEditingChatId(chat.id)
+  }
+
   const clearChat = () => {
     const now = new Date().toISOString()
     setChats((prev) =>
@@ -486,6 +532,7 @@ export default function ChatPage() {
                 const timestamp = formatChatTimestamp(chat.createdAt)
                 const visibleTypes = (chat.contentTypes || []).slice(0, 2)
                 const hiddenTypeCount = Math.max(0, (chat.contentTypes || []).length - visibleTypes.length)
+                const isEditing = editingChatId === chat.id
 
                 return (
                   <div
@@ -497,7 +544,30 @@ export default function ChatPage() {
                         : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                     }`}
                   >
-                    <span className="w-full pr-7 text-sm font-semibold truncate">{displayLabel}</span>
+                    {isEditing ? (
+                      <input
+                        value={draftChatTitle}
+                        onChange={(e) => setDraftChatTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            saveChatEdits(chat.id)
+                            setEditingChatId(null)
+                          }
+                        }}
+                        maxLength={80}
+                        aria-label="Chat title"
+                        className={`w-full pr-14 text-sm font-semibold rounded-md border px-2 py-1 outline-none ${
+                          isActive
+                            ? 'bg-slate-800 border-slate-600 text-white focus:border-blue-400'
+                            : 'bg-slate-900 border-slate-700 text-slate-200 focus:border-blue-500'
+                        }`}
+                      />
+                    ) : (
+                      <span className="w-full pr-14 text-sm font-semibold truncate">{displayLabel}</span>
+                    )}
                     {timestamp && (
                       <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
                         {timestamp}
@@ -524,16 +594,52 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {chat.summary && (
-                      <p
-                        className={`mt-1.5 text-[10px] leading-4 line-clamp-2 ${
-                          isActive ? 'text-slate-300' : 'text-slate-500'
+                    {isEditing ? (
+                      <textarea
+                        value={draftChatSummary}
+                        onChange={(e) => setDraftChatSummary(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        rows={2}
+                        maxLength={240}
+                        placeholder="Chat description"
+                        aria-label="Chat description"
+                        className={`mt-1.5 w-full text-[10px] leading-4 rounded-md border px-2 py-1.5 resize-none outline-none ${
+                          isActive
+                            ? 'bg-slate-800 border-slate-600 text-slate-200 placeholder:text-slate-500 focus:border-blue-400'
+                            : 'bg-slate-900 border-slate-700 text-slate-300 placeholder:text-slate-600 focus:border-blue-500'
                         }`}
-                        title={chat.summary}
-                      >
-                        {chat.summary}
-                      </p>
+                      />
+                    ) : (
+                      chat.summary && (
+                        <p
+                          className={`mt-1.5 text-[10px] leading-4 line-clamp-2 ${
+                            isActive ? 'text-slate-300' : 'text-slate-500'
+                          }`}
+                          title={chat.summary}
+                        >
+                          {chat.summary}
+                        </p>
+                      )
                     )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleChatEdit(chat)
+                      }}
+                      aria-label={isEditing ? `Save ${displayLabel}` : `Edit ${displayLabel}`}
+                      title={isEditing ? 'Save chat title and description' : 'Edit chat title and description'}
+                      className={`absolute top-2 right-8 p-1 rounded-md transition-all ${
+                        isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      } ${
+                        isActive
+                          ? 'text-slate-300 hover:text-blue-300 hover:bg-white/10'
+                          : 'text-slate-400 hover:text-blue-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      <EditIcon done={isEditing} />
+                    </button>
 
                     <button
                       type="button"
