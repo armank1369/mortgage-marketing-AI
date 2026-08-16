@@ -186,8 +186,8 @@ export default function ChatPage() {
   const personaLabel = activePersona?.name || 'No persona'
 
   const personaColor = isDefaultPersona
-    ? 'bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/20'
-    : 'bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20'
+    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
+    : 'bg-violet-50 text-violet-700 ring-1 ring-violet-100'
 
   const actionBtnClass = 'text-xs text-slate-400 hover:text-slate-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-100'
 
@@ -485,13 +485,13 @@ export default function ChatPage() {
   return (
     <div className="h-screen flex bg-slate-50">
       {/* Sidebar */}
-      <aside className="w-72 bg-slate-900 flex flex-col shrink-0">
-        <div className="p-5 border-b border-slate-800">
+      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0">
+        <div className="p-5 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
               JM
             </div>
-            <h1 className="text-sm font-bold text-white">MoJoJo SMM AI</h1>
+            <h1 className="text-sm font-bold text-slate-900">MoJoJo SMM AI</h1>
           </div>
           <div className={`mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${personaColor}`}>
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -506,8 +506,8 @@ export default function ChatPage() {
               onClick={() => setActiveNav(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeNav === item.id
-                  ? 'bg-blue-500/15 text-blue-300'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <span className="text-base">{item.icon}</span>
@@ -517,7 +517,7 @@ export default function ChatPage() {
           <button
             type="button"
             onClick={() => setShowSetup(true)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-t border-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium transition-colors text-slate-500 hover:text-slate-900 hover:bg-slate-100 border-t border-slate-100"
           >
             <span className="text-base">➕</span>
             New Chat
@@ -537,11 +537,14 @@ export default function ChatPage() {
                 return (
                   <div
                     key={chat.id}
-                    onClick={() => setActiveChatId(chat.id)}
+                    onClick={() => {
+                      setActiveChatId(chat.id)
+                      setActiveNav('chat')
+                    }}
                     className={`group relative w-full flex flex-col items-start px-3 py-2.5 rounded-lg text-left cursor-pointer transition-colors ${
                       isActive
-                        ? 'bg-slate-700 text-white'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        ? 'bg-slate-100 text-slate-900'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
                     }`}
                   >
                     {isEditing ? (
@@ -559,17 +562,13 @@ export default function ChatPage() {
                         }}
                         maxLength={80}
                         aria-label="Chat title"
-                        className={`w-full pr-14 text-sm font-semibold rounded-md border px-2 py-1 outline-none ${
-                          isActive
-                            ? 'bg-slate-800 border-slate-600 text-white focus:border-blue-400'
-                            : 'bg-slate-900 border-slate-700 text-slate-200 focus:border-blue-500'
-                        }`}
+                        className="w-full pr-14 text-sm font-semibold rounded-md border px-2 py-1 outline-none bg-white border-slate-300 text-slate-900 focus:border-blue-500"
                       />
                     ) : (
                       <span className="w-full pr-14 text-sm font-semibold truncate">{displayLabel}</span>
                     )}
                     {timestamp && (
-                      <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                      <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>
                         {timestamp}
                       </span>
                     )}
@@ -580,14 +579,14 @@ export default function ChatPage() {
                           <span
                             key={type}
                             className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
-                              isActive ? 'bg-white/10 text-slate-200' : 'bg-slate-800 text-slate-400'
+                              isActive ? 'bg-white text-slate-600' : 'bg-slate-100 text-slate-500'
                             }`}
                           >
                             {contentTypeLabel(type)}
                           </span>
                         ))}
                         {hiddenTypeCount > 0 && (
-                          <span className={`text-[9px] ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                          <span className={`text-[9px] ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>
                             +{hiddenTypeCount}
                           </span>
                         )}
@@ -603,17 +602,13 @@ export default function ChatPage() {
                         maxLength={240}
                         placeholder="Chat description"
                         aria-label="Chat description"
-                        className={`mt-1.5 w-full text-[10px] leading-4 rounded-md border px-2 py-1.5 resize-none outline-none ${
-                          isActive
-                            ? 'bg-slate-800 border-slate-600 text-slate-200 placeholder:text-slate-500 focus:border-blue-400'
-                            : 'bg-slate-900 border-slate-700 text-slate-300 placeholder:text-slate-600 focus:border-blue-500'
-                        }`}
+                        className="mt-1.5 w-full text-[10px] leading-4 rounded-md border px-2 py-1.5 resize-none outline-none bg-white border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-blue-500"
                       />
                     ) : (
                       chat.summary && (
                         <p
                           className={`mt-1.5 text-[10px] leading-4 line-clamp-2 ${
-                            isActive ? 'text-slate-300' : 'text-slate-500'
+                            isActive ? 'text-slate-500' : 'text-slate-400'
                           }`}
                           title={chat.summary}
                         >
@@ -634,8 +629,8 @@ export default function ChatPage() {
                         isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       } ${
                         isActive
-                          ? 'text-slate-300 hover:text-blue-300 hover:bg-white/10'
-                          : 'text-slate-400 hover:text-blue-400 hover:bg-slate-700'
+                          ? 'text-slate-500 hover:text-blue-600 hover:bg-slate-200'
+                          : 'text-slate-400 hover:text-blue-600 hover:bg-slate-200'
                       }`}
                     >
                       <EditIcon done={isEditing} />
@@ -648,11 +643,7 @@ export default function ChatPage() {
                         setChatToDelete(chat)
                       }}
                       aria-label={`Delete ${displayLabel}`}
-                      className={`absolute top-2 right-2 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 ${
-                        isActive
-                          ? 'text-slate-300 hover:text-red-300 hover:bg-white/10'
-                          : 'text-slate-400 hover:text-red-500 hover:bg-slate-700'
-                      }`}
+                      className="absolute top-2 right-2 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 hover:bg-slate-200"
                     >
                       <TrashIcon />
                     </button>
@@ -662,7 +653,7 @@ export default function ChatPage() {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500">
+        <div className="p-4 border-t border-slate-100 text-xs text-slate-400">
           {preferences.name} | NMLS #{nmls}
         </div>
       </aside>
@@ -925,7 +916,7 @@ export default function ChatPage() {
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Brand Voice</h4>
                 <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-                  {preferences.coreValues || 'Not configured.'}
+                  {activePersona?.coreValues || 'Not configured.'}
                 </p>
               </div>
 
@@ -933,7 +924,7 @@ export default function ChatPage() {
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Tone of Voice</h4>
                 <div className="space-y-4">
                   {TONE_SCALES.map((scale) => {
-                    const value = preferences.tone?.[scale.key]
+                    const value = activePersona?.tone?.[scale.key]
                     return (
                       <div key={scale.key}>
                         <div className="flex justify-between text-[11px] text-slate-500">
@@ -962,20 +953,20 @@ export default function ChatPage() {
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Age range</p>
                     <p className="mt-1 text-sm text-slate-700">
-                      {preferences.ageRange ? `Age range: ${preferences.ageRange[0]}-${preferences.ageRange[1]}` : 'Not configured.'}
+                      {activePersona?.ageRange ? `Age range: ${activePersona.ageRange[0]}-${activePersona.ageRange[1]}` : 'Not configured.'}
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Income</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.income || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.income || 'Not configured.'}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Education</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.education || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.education || 'Not configured.'}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Pain points</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.painPoints || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.painPoints || 'Not configured.'}</p>
                   </div>
                 </div>
               </div>

@@ -3,17 +3,6 @@ import { usePreferences } from '../context/PreferencesContext'
 import DualRangeSlider from '../components/DualRangeSlider'
 import { NMLS_NUMBER } from '../constants'
 
-const INITIAL_PERSONAS = [
-  {
-    id: 'business-owner',
-    name: 'The Business Owner',
-    initials: 'BO',
-    description:
-      'Age 35-60, self-employed or entrepreneur. Complex finances, frustrated with traditional banks. Needs Non-QM loan options.',
-    apiKey: 'self-employed',
-  },
-]
-
 const INCOME_OPTIONS = ['Under $100k', '$100k-$200k', '$200k-$300k', '$300k-$500k', '$500k+']
 
 const EDUCATION_OPTIONS = ['High school', 'Some college', "Bachelor's degree", 'Graduate degree']
@@ -32,8 +21,31 @@ const DEFAULT_TONE = {
   matterOfFact: 3,
 }
 
+// Brand voice (core values, tone, target audience) belongs to each persona individually, so
+// every persona carries its own copy — new personas start from these defaults.
+const DEFAULT_BRAND_VOICE = {
+  coreValues: '',
+  tone: DEFAULT_TONE,
+  ageRange: [25, 45],
+  income: INCOME_OPTIONS[0],
+  education: EDUCATION_OPTIONS[0],
+  painPoints: '',
+}
+
+const INITIAL_PERSONAS = [
+  {
+    id: 'business-owner',
+    name: 'The Business Owner',
+    initials: 'BO',
+    description:
+      'Age 35-60, self-employed or entrepreneur. Complex finances, frustrated with traditional banks. Needs Non-QM loan options.',
+    apiKey: 'self-employed',
+    ...DEFAULT_BRAND_VOICE,
+  },
+]
+
 const fieldClass =
-  'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 placeholder:text-slate-400'
+  'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-700 focus:border-sky-700 bg-slate-50/50 placeholder:text-slate-400'
 
 const initials = (name) =>
   name.split(' ').map((word) => word[0]).slice(0, 2).join('').toUpperCase()
@@ -54,11 +66,19 @@ function PlusIcon() {
   )
 }
 
+function ArrowLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  )
+}
+
 function Section({ number, title, children }) {
   return (
     <section className="mb-10">
       <div className="flex items-center gap-3 mb-4">
-        <span className="w-8 h-8 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center justify-center">
+        <span className="w-8 h-8 rounded-lg bg-sky-700 text-white text-xs font-bold flex items-center justify-center">
           {number}
         </span>
         <h2 className="text-base font-bold text-slate-900">{title}</h2>
@@ -78,10 +98,11 @@ export default function PreferenceSetup({ onComplete }) {
 
   const initialPersonas = useMemo(() => {
     if (!savedPersona) return INITIAL_PERSONAS
+    const merged = { ...DEFAULT_BRAND_VOICE, ...savedPersona }
     const index = INITIAL_PERSONAS.findIndex((p) => p.apiKey === savedPersona.apiKey)
-    if (index === -1) return [savedPersona, ...INITIAL_PERSONAS]
+    if (index === -1) return [merged, ...INITIAL_PERSONAS]
     const copy = [...INITIAL_PERSONAS]
-    copy[index] = savedPersona
+    copy[index] = merged
     return copy
   }, [savedPersona])
 
@@ -90,12 +111,16 @@ export default function PreferenceSetup({ onComplete }) {
     savedPersona?.id || INITIAL_PERSONAS[0].id
   )
 
-  const [coreValues, setCoreValues] = useState(saved.coreValues || '')
-  const [tone, setTone] = useState(saved.tone || DEFAULT_TONE)
-  const [ageRange, setAgeRange] = useState(saved.ageRange || [25, 45])
-  const [income, setIncome] = useState(saved.income || INCOME_OPTIONS[0])
-  const [education, setEducation] = useState(saved.education || EDUCATION_OPTIONS[0])
-  const [painPoints, setPainPoints] = useState(saved.painPoints || '')
+  // Two-step flow: pick (or create) a persona on its own page, then land on a second page to
+  // edit and save that specific persona's brand voice — never both at once.
+  const [step, setStep] = useState('persona')
+
+  const [coreValues, setCoreValues] = useState('')
+  const [tone, setTone] = useState(DEFAULT_TONE)
+  const [ageRange, setAgeRange] = useState([25, 45])
+  const [income, setIncome] = useState(INCOME_OPTIONS[0])
+  const [education, setEducation] = useState(EDUCATION_OPTIONS[0])
+  const [painPoints, setPainPoints] = useState('')
 
   const [editingPersonaId, setEditingPersonaId] = useState(null)
   const [draftName, setDraftName] = useState('')
@@ -122,6 +147,18 @@ export default function PreferenceSetup({ onComplete }) {
     setEditingPersonaId(null)
   }
 
+  // Loads a persona's own brand voice into the step-2 form and switches to it.
+  const openBrandVoice = (persona) => {
+    setSelectedPersonaId(persona.id)
+    setCoreValues(persona.coreValues || '')
+    setTone(persona.tone || DEFAULT_TONE)
+    setAgeRange(persona.ageRange || [25, 45])
+    setIncome(persona.income || INCOME_OPTIONS[0])
+    setEducation(persona.education || EDUCATION_OPTIONS[0])
+    setPainPoints(persona.painPoints || '')
+    setStep('brandVoice')
+  }
+
   const saveNewPersona = () => {
     const name = newName.trim()
     if (!name) return
@@ -130,37 +167,40 @@ export default function PreferenceSetup({ onComplete }) {
       name,
       description: newDescription.trim() || 'Custom persona',
       apiKey: 'custom',
+      ...DEFAULT_BRAND_VOICE,
     }
     setPersonas((prev) => [...prev, persona])
-    setSelectedPersonaId(persona.id)
     setCreatingPersona(false)
     setNewName('')
     setNewDescription('')
+    openBrandVoice(persona)
   }
 
   const handleSubmit = () => {
-    const persona = personas.find((p) => p.id === selectedPersonaId)
-    if (!persona) return
-    setPreferences({
-      name: 'Joseph',
-      nmls: NMLS_NUMBER,
-      persona,
+    const base = personas.find((p) => p.id === selectedPersonaId)
+    if (!base) return
+    const persona = {
+      ...base,
       coreValues: coreValues.trim(),
       tone,
       ageRange,
       income,
       education,
       painPoints: painPoints.trim(),
-    })
+    }
+    setPersonas((prev) => prev.map((p) => (p.id === persona.id ? persona : p)))
+    setPreferences({ name: 'Joseph', nmls: NMLS_NUMBER, persona })
     onComplete?.(persona)
   }
+
+  const selectedPersona = personas.find((p) => p.id === selectedPersonaId)
 
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-bold">
+            <div className="w-8 h-8 rounded-lg bg-sky-700 text-white flex items-center justify-center text-sm font-bold">
               L
             </div>
             <h1 className="text-lg font-bold text-slate-900">Lucent Social Media Assistant</h1>
@@ -172,6 +212,7 @@ export default function PreferenceSetup({ onComplete }) {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-10">
+        {step === 'persona' && (
         <Section number="00" title="Persona Selector">
           <div className="grid sm:grid-cols-2 gap-3">
             {personas.map((p) => {
@@ -199,7 +240,7 @@ export default function PreferenceSetup({ onComplete }) {
                       <button
                         type="button"
                         onClick={() => saveEdit(p.id)}
-                        className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+                        className="flex-1 bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
                       >
                         Save
                       </button>
@@ -218,7 +259,7 @@ export default function PreferenceSetup({ onComplete }) {
               return (
                 <div
                   key={p.id}
-                  onClick={() => setSelectedPersonaId(p.id)}
+                  onClick={() => openBrandVoice(p)}
                   className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${
                     selected
                       ? 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
@@ -283,7 +324,7 @@ export default function PreferenceSetup({ onComplete }) {
                 <button
                   type="button"
                   onClick={saveNewPersona}
-                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+                  className="flex-1 bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
                 >
                   Add Persona
                 </button>
@@ -311,6 +352,28 @@ export default function PreferenceSetup({ onComplete }) {
             </button>
           )}
         </Section>
+        )}
+
+        {step === 'brandVoice' && selectedPersona && (
+        <>
+        <button
+          type="button"
+          onClick={() => setStep('persona')}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors mb-4"
+        >
+          <ArrowLeftIcon />
+          Back to personas
+        </button>
+
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-bold shrink-0">
+            {selectedPersona.initials || initials(selectedPersona.name)}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500">Editing brand voice for</p>
+            <h2 className="text-base font-bold text-slate-900 truncate">{selectedPersona.name}</h2>
+          </div>
+        </div>
 
         <Section number="01" title="Brand Voice">
           <label className="block text-sm font-semibold text-slate-900">Core values</label>
@@ -333,7 +396,7 @@ export default function PreferenceSetup({ onComplete }) {
                 <span className="w-24 sm:w-32 text-xs font-medium text-slate-600 shrink-0">
                   {scale.low}
                 </span>
-                <div className="flex-1 flex gap-1.5">
+                <div className="flex-1 flex justify-center gap-1.5">
                   {[1, 2, 3, 4, 5].map((n) => {
                     const active = tone[scale.key] === n
                     return (
@@ -341,7 +404,7 @@ export default function PreferenceSetup({ onComplete }) {
                         key={n}
                         type="button"
                         onClick={() => setTone((prev) => ({ ...prev, [scale.key]: n }))}
-                        className={`h-9 flex-1 rounded-lg border-2 text-sm font-semibold transition-all ${
+                        className={`h-9 w-9 shrink-0 rounded-lg border-2 text-sm font-semibold transition-all ${
                           active
                             ? 'bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-900/20'
                             : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
@@ -420,10 +483,12 @@ export default function PreferenceSetup({ onComplete }) {
         <button
           type="button"
           onClick={handleSubmit}
-          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-lg shadow-slate-900/10"
+          className="w-full bg-sky-700 hover:bg-sky-800 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-lg shadow-sky-900/10"
         >
           Set Brand Guidelines
         </button>
+        </>
+        )}
       </main>
     </div>
   )

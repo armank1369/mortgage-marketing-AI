@@ -88,20 +88,12 @@ function normalizeChat(chat, now) {
   }
 }
 
+// Brand voice (core values, tone, target audience) now lives on the persona itself rather
+// than as one global set shared by every persona, so the persona object is stored whole.
 export function savePreferencesToStorage(preferences) {
   try {
     const payload = {
       persona: preferences.persona || null,
-      core_values: preferences.coreValues || '',
-      professional: preferences.tone?.professional ?? 3,
-      authoritative: preferences.tone?.authoritative ?? 3,
-      serious: preferences.tone?.serious ?? 3,
-      matterOfFact: preferences.tone?.matterOfFact ?? 3,
-      age_min: preferences.ageRange?.[0] ?? 25,
-      age_max: preferences.ageRange?.[1] ?? 45,
-      income_range: preferences.income || '',
-      education_level: preferences.education || '',
-      pain_points: preferences.painPoints || '',
       nmls_number: preferences.nmls || '',
     }
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(payload))
@@ -115,24 +107,33 @@ export function loadPreferencesFromStorage() {
     const raw = localStorage.getItem(PREFERENCES_KEY)
     if (!raw) return null
     const stored = JSON.parse(raw)
+    let persona = stored.persona || null
+    // One-time migration: older saves kept brand-voice fields at the top level instead of on
+    // the persona. If a loaded persona doesn't have its own copy yet, fold the old top-level
+    // fields onto it so existing brand voice settings aren't lost.
+    if (persona && persona.coreValues === undefined) {
+      persona = {
+        ...persona,
+        coreValues: stored.core_values || '',
+        tone: {
+          professional: stored.professional ?? 3,
+          authoritative: stored.authoritative ?? 3,
+          serious: stored.serious ?? 3,
+          matterOfFact: stored.matterOfFact ?? 3,
+        },
+        ageRange: [
+          typeof stored.age_min === 'number' ? stored.age_min : 25,
+          typeof stored.age_max === 'number' ? stored.age_max : 45,
+        ],
+        income: stored.income_range || '',
+        education: stored.education_level || '',
+        painPoints: stored.pain_points || '',
+      }
+    }
     return {
       name: 'Joseph',
       nmls: stored.nmls_number || '',
-      persona: stored.persona || null,
-      coreValues: stored.core_values || '',
-      tone: {
-        professional: stored.professional ?? 3,
-        authoritative: stored.authoritative ?? 3,
-        serious: stored.serious ?? 3,
-        matterOfFact: stored.matterOfFact ?? 3,
-      },
-      ageRange: [
-        typeof stored.age_min === 'number' ? stored.age_min : 25,
-        typeof stored.age_max === 'number' ? stored.age_max : 45,
-      ],
-      income: stored.income_range || '',
-      education: stored.education_level || '',
-      painPoints: stored.pain_points || '',
+      persona,
     }
   } catch {
     return null

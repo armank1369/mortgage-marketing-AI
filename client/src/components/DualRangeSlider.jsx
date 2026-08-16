@@ -38,12 +38,12 @@ export default function DualRangeSlider({ min = 1, max = 100, value, onChange })
     <div ref={trackRef} className="relative h-6 select-none touch-none">
       <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-slate-200" />
       <div
-        className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-slate-900"
+        className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-sky-700"
         style={{ left: `${lowPct}%`, right: `${100 - highPct}%` }}
       />
       <div
         onPointerDown={startDrag('low')}
-        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-slate-900 shadow cursor-grab active:cursor-grabbing"
+        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-sky-700 shadow cursor-grab active:cursor-grabbing"
         style={{ left: `${lowPct}%` }}
         role="slider"
         aria-label="Minimum age"
@@ -53,7 +53,7 @@ export default function DualRangeSlider({ min = 1, max = 100, value, onChange })
       />
       <div
         onPointerDown={startDrag('high')}
-        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-slate-900 shadow cursor-grab active:cursor-grabbing"
+        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-sky-700 shadow cursor-grab active:cursor-grabbing"
         style={{ left: `${highPct}%` }}
         role="slider"
         aria-label="Maximum age"
