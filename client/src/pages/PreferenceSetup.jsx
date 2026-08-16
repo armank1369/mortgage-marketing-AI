@@ -33,7 +33,7 @@ const DEFAULT_TONE = {
 }
 
 const fieldClass =
-  'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 bg-slate-50/50 placeholder:text-slate-400'
+  'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-700 focus:border-sky-700 bg-slate-50/50 placeholder:text-slate-400'
 
 const initials = (name) =>
   name.split(' ').map((word) => word[0]).slice(0, 2).join('').toUpperCase()
@@ -58,7 +58,7 @@ function Section({ number, title, children }) {
   return (
     <section className="mb-10">
       <div className="flex items-center gap-3 mb-4">
-        <span className="w-8 h-8 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center justify-center">
+        <span className="w-8 h-8 rounded-lg bg-sky-700 text-white text-xs font-bold flex items-center justify-center">
           {number}
         </span>
         <h2 className="text-base font-bold text-slate-900">{title}</h2>
@@ -160,7 +160,7 @@ export default function PreferenceSetup({ onComplete }) {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-bold">
+            <div className="w-8 h-8 rounded-lg bg-sky-700 text-white flex items-center justify-center text-sm font-bold">
               L
             </div>
             <h1 className="text-lg font-bold text-slate-900">Lucent Social Media Assistant</h1>
@@ -199,7 +199,7 @@ export default function PreferenceSetup({ onComplete }) {
                       <button
                         type="button"
                         onClick={() => saveEdit(p.id)}
-                        className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+                        className="flex-1 bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
                       >
                         Save
                       </button>
@@ -283,7 +283,7 @@ export default function PreferenceSetup({ onComplete }) {
                 <button
                   type="button"
                   onClick={saveNewPersona}
-                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+                  className="flex-1 bg-sky-700 hover:bg-sky-800 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
                 >
                   Add Persona
                 </button>
@@ -333,7 +333,7 @@ export default function PreferenceSetup({ onComplete }) {
                 <span className="w-24 sm:w-32 text-xs font-medium text-slate-600 shrink-0">
                   {scale.low}
                 </span>
-                <div className="flex-1 flex gap-1.5">
+                <div className="flex-1 flex justify-center gap-1.5">
                   {[1, 2, 3, 4, 5].map((n) => {
                     const active = tone[scale.key] === n
                     return (
@@ -341,7 +341,7 @@ export default function PreferenceSetup({ onComplete }) {
                         key={n}
                         type="button"
                         onClick={() => setTone((prev) => ({ ...prev, [scale.key]: n }))}
-                        className={`h-9 flex-1 rounded-lg border-2 text-sm font-semibold transition-all ${
+                        className={`h-9 w-9 shrink-0 rounded-lg border-2 text-sm font-semibold transition-all ${
                           active
                             ? 'bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-900/20'
                             : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
@@ -420,7 +420,7 @@ export default function PreferenceSetup({ onComplete }) {
         <button
           type="button"
           onClick={handleSubmit}
-          className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-lg shadow-slate-900/10"
+          className="w-full bg-sky-700 hover:bg-sky-800 text-white font-semibold py-3.5 rounded-xl transition-colors shadow-lg shadow-sky-900/10"
         >
           Set Brand Guidelines
         </button>
