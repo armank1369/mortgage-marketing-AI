@@ -21,7 +21,6 @@ const QUICK_PROMPTS = [
 const NAV_ITEMS = [
   { id: 'chat', label: 'Chat', icon: '💬' },
   { id: 'calendar', label: 'Calendar', icon: '📅' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
 ]
 
 function TrashIcon() {
@@ -343,14 +342,6 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col min-w-0">
         {activeNav === 'calendar' ? (
           <CalendarPage />
-        ) : activeNav === 'settings' ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center text-2xl mb-4 mx-auto">⚙️</div>
-              <p className="text-slate-900 font-semibold text-sm">Settings</p>
-              <p className="text-slate-400 text-xs mt-1">Settings coming soon</p>
-            </div>
-          </div>
         ) : (
         <>
         {/* Chat header */}
