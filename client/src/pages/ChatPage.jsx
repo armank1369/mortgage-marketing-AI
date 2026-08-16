@@ -32,13 +32,27 @@ const QUICK_PROMPTS = [
 const NAV_ITEMS = [
   { id: 'chat', label: 'Chat', icon: '💬' },
   { id: 'calendar', label: 'Calendar', icon: '📅' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
 ]
 
 function TrashIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
+    </svg>
+  )
+}
+
+function EditIcon({ done = false }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {done ? (
+        <path d="M20 6L9 17l-5-5" />
+      ) : (
+        <>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </>
+      )}
     </svg>
   )
 }
@@ -71,21 +85,106 @@ const TONE_SCALES = [
   { key: 'matterOfFact', low: 'Matter of Fact', high: 'Enthusiastic' },
 ]
 
+const CHAT_SLOT_COUNT = 3
+
+const CONTENT_TYPE_LABELS = {
+  campaign: 'Campaign',
+  posts: 'Posts',
+  text: 'Text',
+  'text-only': 'Text',
+  'single-image': 'Image',
+  carousel: 'Multi Image Carousel',
+  video: 'Video',
+}
+
+function createChatSession(persona = null) {
+  const now = persona ? new Date().toISOString() : null
+  return {
+    id: makeId(),
+    persona,
+    personaId: persona?.id || persona?.apiKey || null,
+    title: persona?.name || 'New Chat',
+    summary: '',
+    createdAt: now,
+    updatedAt: now,
+    contentTypes: [],
+    messages: [],
+  }
+}
+
+function createInitialChats(persona) {
+  return Array.from({ length: CHAT_SLOT_COUNT }, (_, index) =>
+    createChatSession(index === 0 ? persona || null : null)
+  )
+}
+
+function formatChatTimestamp(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function buildChatSummary(message) {
+  const clean = String(message || '').replace(/\s+/g, ' ').trim()
+  if (!clean) return ''
+  const clipped = clean.length > 150 ? `${clean.slice(0, 147).trimEnd()}...` : clean
+  return `The chat began with the request: “${clipped}”`
+}
+
+function getResponseContentTypes(data) {
+  if (data.type === 'campaign') {
+    const types = ['campaign']
+    // Video scripts are generated on-demand per calendar entry (see the "Generate video
+    // script" button) rather than upfront, so this reflects whatever's been generated so far
+    // rather than a fixed video_briefs list.
+    if (data.campaign?.content_calendar?.some((entry) => entry.video)) types.push('video')
+    return types
+  }
+
+  if (data.type === 'posts') {
+    const formats = (data.posts?.posts || []).map((post) => post.format).filter(Boolean)
+    return formats.length > 0 ? [...new Set(formats)] : ['posts']
+  }
+
+  if (data.type === 'text') return ['text']
+  return []
+}
+
+function mergeContentTypes(current = [], incoming = []) {
+  return [...new Set([...current, ...incoming].filter(Boolean))]
+}
+
+function contentTypeLabel(type) {
+  return CONTENT_TYPE_LABELS[type] || type
+}
+
 export default function ChatPage() {
   const { preferences } = usePreferences()
   const [activeNav, setActiveNav] = useState('chat')
   const storedChats = useRef(loadChatsFromStorage()).current
-  const [chats, setChats] = useState(() => {
-    if (storedChats && Array.isArray(storedChats.chats) && storedChats.chats.length === 3) {
-      return storedChats.chats
+  const initialChats = useRef(null)
+  if (!initialChats.current) {
+    initialChats.current =
+      storedChats?.chats?.length === CHAT_SLOT_COUNT
+        ? storedChats.chats
+        : createInitialChats(preferences.persona)
+  }
+
+  const [chats, setChats] = useState(initialChats.current)
+  const [activeChatId, setActiveChatId] = useState(() => {
+    const candidates = initialChats.current
+    if (storedChats?.activeChatId && candidates.some((chat) => chat.id === storedChats.activeChatId)) {
+      return storedChats.activeChatId
     }
-    return [
-      { id: 1, label: 'Chat 1', persona: preferences.persona || null, messages: [] },
-      { id: 2, label: 'Chat 2', persona: null, messages: [] },
-      { id: 3, label: 'Chat 3', persona: null, messages: [] },
-    ]
+    return candidates.find((chat) => chat.persona)?.id || candidates[0]?.id || null
   })
-  const [activeChatId, setActiveChatId] = useState(() => storedChats?.activeChatId ?? 1)
   const [showSetup, setShowSetup] = useState(false)
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
@@ -93,6 +192,9 @@ export default function ChatPage() {
   const [chatToDelete, setChatToDelete] = useState(null)
   const [showPersonaModal, setShowPersonaModal] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [editingChatId, setEditingChatId] = useState(null)
+  const [draftChatTitle, setDraftChatTitle] = useState('')
+  const [draftChatSummary, setDraftChatSummary] = useState('')
   const endRef = useRef(null)
   const abortControllerRef = useRef(null)
 
@@ -108,8 +210,8 @@ export default function ChatPage() {
   const personaLabel = activePersona?.name || 'No persona'
 
   const personaColor = isDefaultPersona
-    ? 'bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/20'
-    : 'bg-violet-500/10 text-violet-300 ring-1 ring-violet-500/20'
+    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
+    : 'bg-violet-50 text-violet-700 ring-1 ring-violet-100'
 
   const actionBtnClass = 'text-xs text-slate-400 hover:text-slate-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-100'
 
@@ -121,26 +223,61 @@ export default function ChatPage() {
     saveChatsToStorage(chats, activeChatId)
   }, [chats, activeChatId])
 
-  const updateActiveChatMessages = (updater) => {
+  const updateActiveChatMessages = (updater, metadataUpdater = null) => {
+    const now = new Date().toISOString()
     setChats((prev) =>
-      prev.map((c) =>
-        c.id === activeChatId ? { ...c, messages: updater(c.messages) } : c
-      )
+      prev.map((chat) => {
+        if (chat.id !== activeChatId) return chat
+        const nextMessages = updater(chat.messages)
+        const metadata =
+          typeof metadataUpdater === 'function'
+            ? metadataUpdater(chat, nextMessages)
+            : metadataUpdater || {}
+        return { ...chat, ...metadata, messages: nextMessages, updatedAt: now }
+      })
     )
   }
 
   const handleSetupComplete = (persona) => {
     setShowSetup(false)
     if (!persona) return
-    const emptyChat = chats.find((c) => c.messages.length === 0)
+
+    const now = new Date().toISOString()
+    const emptyChat =
+      chats.find((chat) => !chat.persona && chat.messages.length === 0) ||
+      chats.find((chat) => chat.messages.length === 0)
+
     if (emptyChat) {
       setActiveChatId(emptyChat.id)
       setChats((prev) =>
-        prev.map((c) => (c.id === emptyChat.id ? { ...c, persona } : c))
+        prev.map((chat) =>
+          chat.id === emptyChat.id
+            ? {
+                ...chat,
+                persona,
+                personaId: persona.id || persona.apiKey || null,
+                title: persona.name || 'New Chat',
+                summary: '',
+                createdAt: chat.createdAt || now,
+                updatedAt: now,
+                contentTypes: [],
+              }
+            : chat
+        )
       )
     } else {
       setChats((prev) =>
-        prev.map((c) => (c.id === activeChatId ? { ...c, persona } : c))
+        prev.map((chat) =>
+          chat.id === activeChatId
+            ? {
+                ...chat,
+                persona,
+                personaId: persona.id || persona.apiKey || null,
+                title: persona.name || chat.title,
+                updatedAt: now,
+              }
+            : chat
+        )
       )
     }
   }
@@ -155,27 +292,54 @@ export default function ChatPage() {
         { message, persona, nmls_number: nmls },
         { signal: controller.signal }
       )
+      const createdAt = new Date().toISOString()
+      const contentTypes = getResponseContentTypes(data)
+      let assistantMessage
+
       if (data.type === 'campaign') {
-        updateActiveChatMessages((msgs) => [
-          ...msgs,
-          { id: makeId(), role: 'assistant', type: 'campaign', campaign: data.campaign, prompt: message },
-        ])
+        assistantMessage = {
+          id: makeId(),
+          role: 'assistant',
+          type: 'campaign',
+          campaign: data.campaign,
+          prompt: message,
+          createdAt,
+        }
       } else if (data.type === 'clarification') {
-        updateActiveChatMessages((msgs) => [
-          ...msgs,
-          { id: makeId(), role: 'assistant', type: 'clarification', clarification: data.clarification, prompt: message },
-        ])
+        assistantMessage = {
+          id: makeId(),
+          role: 'assistant',
+          type: 'clarification',
+          clarification: data.clarification,
+          prompt: message,
+          createdAt,
+        }
       } else if (data.type === 'posts') {
-        updateActiveChatMessages((msgs) => [
-          ...msgs,
-          { id: makeId(), role: 'assistant', type: 'posts', posts: data.posts, prompt: message },
-        ])
+        assistantMessage = {
+          id: makeId(),
+          role: 'assistant',
+          type: 'posts',
+          posts: data.posts,
+          prompt: message,
+          createdAt,
+        }
       } else {
-        updateActiveChatMessages((msgs) => [
-          ...msgs,
-          { id: makeId(), role: 'assistant', type: 'text', text: data.response, prompt: message },
-        ])
+        assistantMessage = {
+          id: makeId(),
+          role: 'assistant',
+          type: 'text',
+          text: data.response,
+          prompt: message,
+          createdAt,
+        }
       }
+
+      updateActiveChatMessages(
+        (msgs) => [...msgs, assistantMessage],
+        (chat) => ({
+          contentTypes: mergeContentTypes(chat.contentTypes, contentTypes),
+        })
+      )
     } catch (err) {
       // Cancelled by clearChat (or a superseded request) — the chat that would have
       // received this response may no longer exist in its old form, so there's nothing
@@ -189,6 +353,7 @@ export default function ChatPage() {
           type: 'text',
           text: 'Sorry, I could not generate a response. Please check that the server is running and try again.',
           prompt: message,
+          createdAt: new Date().toISOString(),
         },
       ])
     } finally {
@@ -204,13 +369,39 @@ export default function ChatPage() {
   const handleSend = (text) => {
     const msg = (text ?? input).trim()
     if (!msg || isTyping) return
+
+    const now = new Date().toISOString()
     const personaObj = activeChat.persona || preferences.persona
-    if (personaObj && !activeChat.persona) {
-      setChats((prev) =>
-        prev.map((c) => (c.id === activeChatId ? { ...c, persona: personaObj } : c))
+
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              persona: chat.persona || personaObj,
+              personaId: chat.personaId || personaObj?.id || personaObj?.apiKey || null,
+              title:
+                chat.title && chat.title !== 'New Chat'
+                  ? chat.title
+                  : personaObj?.name || 'New Chat',
+              summary: chat.summary || buildChatSummary(msg),
+              createdAt: chat.createdAt || now,
+              updatedAt: now,
+              messages: [
+                ...chat.messages,
+                {
+                  id: makeId(),
+                  role: 'user',
+                  type: 'text',
+                  text: msg,
+                  createdAt: now,
+                },
+              ],
+            }
+          : chat
       )
-    }
-    updateActiveChatMessages((msgs) => [...msgs, { id: makeId(), role: 'user', text: msg }])
+    )
+
     setInput('')
     sendMessage(msg)
   }
@@ -262,7 +453,7 @@ export default function ChatPage() {
       const original = updated[index].text
       const lines = original.split('\n').filter(Boolean)
       const shortened = lines.slice(0, 2).join('\n') + `\n\n— Joseph Kim | NMLS #${nmls}`
-      updated[index] = { role: 'assistant', type: 'text', text: shortened, prompt: updated[index].prompt }
+      updated[index] = { ...updated[index], type: 'text', text: shortened }
       return updated
     })
   }
@@ -275,26 +466,71 @@ export default function ChatPage() {
     }
   }
 
+  const saveChatEdits = (chatId) => {
+    const now = new Date().toISOString()
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              title: draftChatTitle.trim() || chat.persona?.name || 'Chat',
+              summary: draftChatSummary.trim(),
+              updatedAt: now,
+            }
+          : chat
+      )
+    )
+  }
+
+  const toggleChatEdit = (chat) => {
+    if (editingChatId === chat.id) {
+      saveChatEdits(chat.id)
+      setEditingChatId(null)
+      return
+    }
+
+    setDraftChatTitle(chat.title || chat.persona?.name || 'Chat')
+    setDraftChatSummary(chat.summary || '')
+    setEditingChatId(chat.id)
+  }
+
   const clearChat = () => {
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
     setIsTyping(false)
-    updateActiveChatMessages(() => [])
+
+    const now = new Date().toISOString()
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              messages: [],
+              summary: '',
+              contentTypes: [],
+              updatedAt: now,
+            }
+          : chat
+      )
+    )
     setShowClearConfirm(false)
   }
 
   const confirmDeleteChat = () => {
     if (!chatToDelete) return
+
     const id = chatToDelete.id
+    const replacement = createChatSession(null)
+    const next = chats.find((chat) => chat.id !== id && chat.persona)
+
     setChats((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, persona: null, messages: [] } : c))
+      prev.map((chat) => (chat.id === id ? replacement : chat))
     )
+
     if (id === activeChatId) {
-      const next = chats
-        .filter((c) => c.id !== id && c.messages.length > 0)
-        .sort((a, b) => a.id - b.id)[0]
-      setActiveChatId(next ? next.id : 1)
+      setActiveChatId(next?.id || replacement.id)
     }
+
     setChatToDelete(null)
   }
 
@@ -316,19 +552,20 @@ export default function ChatPage() {
         />
       )}
 
-      {/* Sidebar — static column on desktop, off-canvas drawer on mobile */}
+      {/* Sidebar — dark off-canvas drawer on mobile, Ken's light static column on desktop
+          (team decision: keep the mobile drawer dark, keep the light theme for desktop). */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-64 md:w-56 bg-slate-900 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
+        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 md:bg-white md:border-r md:border-slate-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-5 border-b border-slate-800">
+        <div className="p-5 border-b border-slate-800 md:border-slate-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
                 JM
               </div>
-              <h1 className="text-sm font-bold text-white">MoJoJo SMM AI</h1>
+              <h1 className="text-sm font-bold text-white md:text-slate-900">MoJoJo SMM AI</h1>
             </div>
             <button
               type="button"
@@ -355,8 +592,8 @@ export default function ChatPage() {
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeNav === item.id
-                  ? 'bg-blue-500/15 text-blue-300'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'bg-blue-500/15 md:bg-blue-50 text-blue-300 md:text-blue-600'
+                  : 'text-slate-400 md:text-slate-500 hover:text-slate-200 md:hover:text-slate-900 hover:bg-slate-800 md:hover:bg-slate-100'
               }`}
             >
               <span className="text-base">{item.icon}</span>
@@ -369,38 +606,126 @@ export default function ChatPage() {
               setShowSetup(true)
               setSidebarOpen(false)
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-t border-slate-800"
+            className="w-full flex items-center gap-3 px-3 py-2.5 mt-3 rounded-lg text-sm font-medium transition-colors text-slate-400 md:text-slate-500 hover:text-slate-200 md:hover:text-slate-900 hover:bg-slate-800 md:hover:bg-slate-100 border-t border-slate-800 md:border-slate-100"
           >
             <span className="text-base">➕</span>
             New Chat
           </button>
 
-          <div className="pt-3 space-y-1">
+          <div className="pt-3 space-y-1.5">
             {chats
               .filter((chat) => chat.persona)
-              .map((chat, index) => {
+              .map((chat) => {
                 const isActive = chat.id === activeChatId
-                // Label reflects position in the visible list, not the fixed underlying slot
-                // id — so after a chat is deleted, the remaining ones renumber from 1 instead
-                // of leaving a gap (e.g. deleting Chat 1 no longer leaves "Chat 2, Chat 3").
-                const displayLabel = `Chat ${index + 1}`
+                const displayLabel = chat.title || chat.persona?.name || 'Chat'
+                const timestamp = formatChatTimestamp(chat.createdAt)
+                const visibleTypes = (chat.contentTypes || []).slice(0, 2)
+                const hiddenTypeCount = Math.max(0, (chat.contentTypes || []).length - visibleTypes.length)
+                const isEditing = editingChatId === chat.id
+
                 return (
                   <div
                     key={chat.id}
                     onClick={() => {
                       setActiveChatId(chat.id)
+                      setActiveNav('chat')
                       setSidebarOpen(false)
                     }}
-                    className={`group relative w-full flex flex-col items-start px-3 py-2 rounded-lg text-left cursor-pointer transition-colors ${
+                    className={`group relative w-full flex flex-col items-start px-3 py-2.5 rounded-lg text-left cursor-pointer transition-colors ${
                       isActive
-                        ? 'bg-slate-700 text-white'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        ? 'bg-slate-700 md:bg-slate-100 text-white md:text-slate-900'
+                        : 'text-slate-400 md:text-slate-500 hover:bg-slate-800 md:hover:bg-slate-50 hover:text-slate-200 md:hover:text-slate-700'
                     }`}
                   >
-                    <span className="text-sm font-medium">{displayLabel}</span>
-                    <span className={`text-[11px] ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
-                      {chat.persona ? chat.persona.name : 'Empty'}
-                    </span>
+                    {isEditing ? (
+                      <input
+                        value={draftChatTitle}
+                        onChange={(e) => setDraftChatTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            saveChatEdits(chat.id)
+                            setEditingChatId(null)
+                          }
+                        }}
+                        maxLength={80}
+                        aria-label="Chat title"
+                        className="w-full pr-14 text-sm font-semibold rounded-md border px-2 py-1 outline-none bg-white border-slate-300 text-slate-900 focus:border-blue-500"
+                      />
+                    ) : (
+                      <span className="w-full pr-14 text-sm font-semibold truncate">{displayLabel}</span>
+                    )}
+                    {timestamp && (
+                      <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'}`}>
+                        {timestamp}
+                      </span>
+                    )}
+
+                    {visibleTypes.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5 pr-6">
+                        {visibleTypes.map((type) => (
+                          <span
+                            key={type}
+                            className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                              isActive ? 'bg-white/10 md:bg-white text-slate-200 md:text-slate-600' : 'bg-slate-800 md:bg-slate-100 text-slate-400 md:text-slate-500'
+                            }`}
+                          >
+                            {contentTypeLabel(type)}
+                          </span>
+                        ))}
+                        {hiddenTypeCount > 0 && (
+                          <span className={`text-[9px] ${isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'}`}>
+                            +{hiddenTypeCount}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {isEditing ? (
+                      <textarea
+                        value={draftChatSummary}
+                        onChange={(e) => setDraftChatSummary(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        rows={2}
+                        maxLength={240}
+                        placeholder="Chat description"
+                        aria-label="Chat description"
+                        className="mt-1.5 w-full text-[10px] leading-4 rounded-md border px-2 py-1.5 resize-none outline-none bg-white border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-blue-500"
+                      />
+                    ) : (
+                      chat.summary && (
+                        <p
+                          className={`mt-1.5 text-[10px] leading-4 line-clamp-2 ${
+                            isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'
+                          }`}
+                          title={chat.summary}
+                        >
+                          {chat.summary}
+                        </p>
+                      )
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleChatEdit(chat)
+                      }}
+                      aria-label={isEditing ? `Save ${displayLabel}` : `Edit ${displayLabel}`}
+                      title={isEditing ? 'Save chat title and description' : 'Edit chat title and description'}
+                      className={`absolute top-2 right-8 p-1 rounded-md transition-all ${
+                        isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      } ${
+                        isActive
+                          ? 'text-slate-300 md:text-slate-500 hover:text-blue-300 md:hover:text-blue-600 hover:bg-white/10 md:hover:bg-slate-200'
+                          : 'text-slate-400 hover:text-blue-400 md:hover:text-blue-600 hover:bg-slate-700 md:hover:bg-slate-200'
+                      }`}
+                    >
+                      <EditIcon done={isEditing} />
+                    </button>
+
                     <button
                       type="button"
                       onClick={(e) => {
@@ -408,11 +733,7 @@ export default function ChatPage() {
                         setChatToDelete(chat)
                       }}
                       aria-label={`Delete ${displayLabel}`}
-                      className={`absolute top-2 right-2 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 ${
-                        isActive
-                          ? 'text-slate-300 hover:text-red-300 hover:bg-white/10'
-                          : 'text-slate-400 hover:text-red-500 hover:bg-slate-700'
-                      }`}
+                      className="absolute top-2 right-2 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-400 md:hover:text-red-500 hover:bg-slate-700 md:hover:bg-slate-200"
                     >
                       <TrashIcon />
                     </button>
@@ -422,7 +743,7 @@ export default function ChatPage() {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500">
+        <div className="p-4 border-t border-slate-800 md:border-slate-100 text-xs text-slate-500 md:text-slate-400">
           {preferences.name} | NMLS #{nmls}
         </div>
       </aside>
@@ -444,14 +765,6 @@ export default function ChatPage() {
 
         {activeNav === 'calendar' ? (
           <CalendarPage />
-        ) : activeNav === 'settings' ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center text-2xl mb-4 mx-auto">⚙️</div>
-              <p className="text-slate-900 font-semibold text-sm">Settings</p>
-              <p className="text-slate-400 text-xs mt-1">Settings coming soon</p>
-            </div>
-          </div>
         ) : (
         <>
         {/* Chat header */}
@@ -459,7 +772,16 @@ export default function ChatPage() {
           <div className="flex items-center justify-between flex-wrap gap-x-2 gap-y-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500" />
-              <h2 className="text-sm font-semibold text-slate-900">Chat</h2>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {activeChat?.title || 'Chat'}
+                </h2>
+                {activeChat?.createdAt && (
+                  <p className="text-[10px] text-slate-400">
+                    {formatChatTimestamp(activeChat.createdAt)}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline text-xs text-slate-400">
@@ -702,7 +1024,7 @@ export default function ChatPage() {
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Brand Voice</h4>
                 <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-                  {preferences.coreValues || 'Not configured.'}
+                  {activePersona?.coreValues || 'Not configured.'}
                 </p>
               </div>
 
@@ -710,7 +1032,7 @@ export default function ChatPage() {
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Tone of Voice</h4>
                 <div className="space-y-4">
                   {TONE_SCALES.map((scale) => {
-                    const value = preferences.tone?.[scale.key]
+                    const value = activePersona?.tone?.[scale.key]
                     return (
                       <div key={scale.key}>
                         <div className="flex justify-between text-[11px] text-slate-500">
@@ -739,20 +1061,20 @@ export default function ChatPage() {
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Age range</p>
                     <p className="mt-1 text-sm text-slate-700">
-                      {preferences.ageRange ? `Age range: ${preferences.ageRange[0]}-${preferences.ageRange[1]}` : 'Not configured.'}
+                      {activePersona?.ageRange ? `Age range: ${activePersona.ageRange[0]}-${activePersona.ageRange[1]}` : 'Not configured.'}
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Income</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.income || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.income || 'Not configured.'}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Education</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.education || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.education || 'Not configured.'}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500 font-medium">Pain points</p>
-                    <p className="mt-1 text-sm text-slate-700">{preferences.painPoints || 'Not configured.'}</p>
+                    <p className="mt-1 text-sm text-slate-700">{activePersona?.painPoints || 'Not configured.'}</p>
                   </div>
                 </div>
               </div>

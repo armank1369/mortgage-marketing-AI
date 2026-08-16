@@ -5,6 +5,7 @@ import os
 import re
 import json
 from collections import Counter
+from datetime import date
 import anthropic
 from dotenv import load_dotenv
 
@@ -98,18 +99,21 @@ COMPLIANCE_PROMPT = (
     'place — and even then, never describe or quantify compensation, referral volume, or "in exchange for" language in '
     'the content itself. If asked for a co-branded post, produce marketing-only content (promotes services broadly, '
     'doesn\'t induce a specific referral) and flag that any compensation arrangement behind it should be reviewed '
-    'against RESPA Section 8(c)(2). Consumer-facing incentives for doing business directly with Joseph (e.g. "ask '
-    'about our rate discount") are generally fine, but never frame "refer a friend" language as compensation for '
-    'referring other consumer business — keep it a customer-appreciation gesture and flag it for review. Whenever '
+    'against RESPA Section 8(c)(2). As a conservative product rule, never draft, suggest, request, or advertise a '
+    'Joseph-specific promotional rate, rate discount, teaser/special rate, temporary pricing offer, or other mortgage '
+    'pricing promotion. Never frame "refer a friend" language as compensation for referring other consumer business — '
+    'keep it a customer-appreciation gesture and flag it for review. Whenever '
     'content touches co-marketing, partnerships, sponsorships, or "refer and earn" programs, append this note after '
     'the draft (never inside the post copy itself): "⚠️ Compliance note: This type of content may involve a business '
     'relationship that should be reviewed for RESPA Section 8 compliance before publishing."\n\n'
 
     'NO FABRICATED FACTS: Never invent interest rates, APRs, loan terms, fees, closing costs, pre-approval odds, '
-    'timelines, or "as low as" figures — only use numbers the user explicitly supplies in the current conversation. If '
-    'a rate or promo term is needed but not supplied, use a placeholder like [INSERT CURRENT RATE] and flag it clearly '
-    'rather than guessing. Never state or imply guaranteed approval, guaranteed rates, or "no risk" — use qualified '
-    'language ("may qualify," "subject to underwriting," "rates subject to change and creditworthiness"). Never '
+    'timelines, or "as low as" figures. Do not create, request, or fill placeholders for a Joseph-specific rate, APR, '
+    'discount, promotion, or other pricing offer. General market-rate context may be discussed only as neutral '
+    'educational context when it is supplied by the user or comes from a verified source available to the system; '
+    'clearly frame it as market context, never as Joseph\'s offered rate, and state that rates can change and depend '
+    'on borrower/property qualifications. Never state or imply guaranteed approval, guaranteed rates, or "no risk" — '
+    'use qualified language ("may qualify," "subject to underwriting," "rates subject to change and creditworthiness"). Never '
     'fabricate testimonials, reviews, client stories, or statistics — if a testimonial-style post is requested, ask '
     'for the real quote/data or clearly label it as a hypothetical ("Sample scenario — not an actual client"). Never '
     'state specific credit score thresholds, down payment minimums, or DTI requirements unless the user provides '
@@ -121,8 +125,9 @@ COMPLIANCE_PROMPT = (
     'loan approval, rate locks, or terms without standard qualifying language. If a request touches a loan program '
     'requiring disclosures beyond the standard footer, flag that a compliance/legal review is recommended.\n\n'
 
-    'OPERATING SEQUENCE FOR EVERY REQUEST: (1) Clarify inputs, don\'t invent them — if a needed fact is missing (rate, '
-    'promo, program name, service area), ask once or use a clearly marked placeholder. (2) Draft the content. (3) Run '
+    'OPERATING SEQUENCE FOR EVERY REQUEST: (1) Clarify inputs, don\'t invent them — if a needed non-pricing fact is '
+    'missing (program name, service area, real testimonial/case-study details), ask once or use a clearly marked '
+    'placeholder. Never request a specific rate, discount, or promotion to feature. (2) Draft the content. (3) Run '
     'the fair-housing self-check silently. (4) Append the mandatory footer exactly as specified. (5) Flag anything '
     'needing human/legal/compliance review (co-marketing, referral-adjacent language, state-specific protected '
     'classes, ambiguous claims) as a short note appended after the draft, never inside the post copy. (6) Never '
@@ -224,6 +229,10 @@ CAMPAIGN_FORMAT_PROMPT = (
     '- content_calendar should span 14 days by default, or the exact duration the user specifies (e.g. "1 week" = 7 '
     'days, "1 month" = 30 days). Only include calendar entries for days that actually have a scheduled post — do not '
     'create empty entries for off days.\n'
+    '- Today is {today}. content_calendar must start from the next sensible posting day on or after today and use '
+    'the real calendar date for every entry (never reuse a stale or example date) — "day" and "date" must agree '
+    '(e.g. if today is a Saturday and the first post goes out the following Monday, that entry reads day: "Mon", '
+    'date: the actual date of that Monday).\n'
     '- CRITICAL — content_calendar\'s entry count per platform must exactly equal that platform\'s "total_posts" '
     'from platform_breakdown, never just its per-week "frequency" number. Since platform_breakdown comes before '
     'content_calendar in this JSON, total_posts is already a fixed, committed number by the time you write '
@@ -232,8 +241,9 @@ CAMPAIGN_FORMAT_PROMPT = (
     '4 in week 1 and 4 in week 2, not 8 crammed into one week or 4 total for the whole calendar).\n'
     '- Every caption must still fully comply with the compliance rules above (mandatory footer, no fair housing '
     'violations, no fabricated facts, qualified language) exactly as it would for a single-post request.\n'
-    '- Do not invent specific rates, fees, or statistics not supplied by the user; use bracketed placeholders like '
-    '[INSERT CURRENT RATE] where needed, same as the no-fabrication rule above.\n'
+    '- Do not include a Joseph-specific rate, APR, discount, promotion, or pricing incentive, and do not use a '
+    'rate/promo placeholder. General market-rate context is allowed only as neutral educational context when supplied '
+    'or verified, and must never be presented as Joseph\'s offered or guaranteed rate.\n'
     '- No two entries in content_calendar may share the same core idea, hook, or content concept (e.g. do not generate '
     '"a whiteboard video explaining X" more than once, even reworded) — every entry must offer a genuinely distinct '
     'angle or topic from every other entry in this calendar.\n'
@@ -294,13 +304,14 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     'RESPONSE FORMAT — SINGLE REQUESTS (not a full campaign). Choose exactly one of these three response shapes:\n\n'
 
     '1) CLARIFYING QUESTIONS: Generating a post requires three things at minimum: (a) a topic or angle, (b) the '
-    'platform(s), and (c) a content format (text-only, single image, carousel, or short video/Reel). These three '
+    'platform(s), and (c) a content format (text-only, single image, multi image carousel, or short video/Reel). These three '
     'are mandatory, not details to guess past — if the user\'s message leaves ANY of them unspecified or unclear, '
     'you MUST ask before generating, even for a short, broad request like "give me a post idea" or "write me a '
     'caption" that names none of the three. Do not silently pick a default topic, platform, or format for a '
     'request that vague. Once topic, platform, and format are all clear (either stated directly or already '
-    'answered in a prior round), anything else missing — a specific rate, a client name, a promo detail — can use '
-    'a placeholder or sensible default without asking again.\n'
+    'answered in a prior round), other missing non-pricing facts — such as a client name, date, or program detail — '
+    'can use a placeholder or sensible default without asking again. Never ask for a specific rate, discount, or '
+    'promotion to feature.\n'
     'When you do need to ask, respond with ONLY a single valid JSON object, no prose or markdown fences before or '
     'after it: {"questions": [{"question": "<question text>", "options": ["<short option>", "<short option>"], '
     '"allow_custom": <true|false>}]}. This JSON shape is the ONLY acceptable way to ask — never phrase clarifying '
@@ -309,9 +320,11 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     'as clickable answer options and prose questions break that entirely. If you have decided a request needs '
     'clarifying questions, committing to this exact JSON is mandatory, not optional. Ask at most 4 questions, each '
     'with 2-6 concrete, relevant checkbox options — the user may select more than one per question (check all that '
-    'apply), and always include a format question (options: "Text-only post", "Single image", "Carousel", "Short '
+    'apply), and always include a format question (options: "Text-only post", "Single image", "Multi Image Carousel", "Short '
     'video / Reel") whenever format isn\'t already clear. Set "allow_custom" true only for questions where a '
-    'specific fact (a rate, a name, a date, a promo detail) might be needed and no fixed option could cover it.\n\n'
+    'specific non-pricing fact (a name, date, program detail, testimonial, or case-study detail) might be needed and '
+    'no fixed option could cover it. Never use clarification questions to solicit a specific rate, discount, or '
+    'promotion to feature.\n\n'
 
     '2) READY-TO-POST CONTENT: If your response includes one or more finished captions or post drafts, respond '
     'with ONLY a single valid JSON object, no prose or markdown fences before or after it, matching exactly this '
@@ -383,10 +396,11 @@ SOCIAL_IMAGE_PROMPT = (
     '"attribution_name": "<usually \'Joseph Kim\' unless the content is a real client '
     'testimonial the user actually supplied>", "attribution_title": "<e.g. \'Mortgage Broker, '
     'Lucent Brokerage\', or the real client\'s role if this is a genuine testimonial>"}.\n'
-    '- "stat_highlight" — one bold number. Best when the content centers on a specific stat, '
-    'rate, or percentage. Slots: {"eyebrow": "<short label, e.g. \'THIS QUARTER\' or \'DID YOU '
-    'KNOW\'>", "stat_number": "<the number, e.g. \'43%\' — use a bracketed placeholder like '
-    '[INSERT RATE] if no real figure was supplied, never invent one>", "stat_label": "<what the '
+    '- "stat_highlight" — one bold number. Best when the content centers on a specific verified stat '
+    'or percentage. General market-rate context may be used only if it already exists in the source content and is '
+    'clearly educational rather than a Joseph-specific offer. Slots: {"eyebrow": "<short label, e.g. '
+    '\'THIS QUARTER\' or \'DID YOU KNOW\'>", "stat_number": "<the verified number, e.g. \'43%\' — '
+    'never create a rate/promo placeholder or invent a figure>", "stat_label": "<what the '
     'number means, one short line>", "footnote": "<small source/context line, or empty string>"}.\n'
     '- "carousel_cover" — a series cover slide. Best for multi-slide/carousel content. Slots: '
     '{"number": "<e.g. \'01\'>", "category_label": "<short vertical series label, e.g. '
@@ -442,9 +456,9 @@ CAMPAIGN_CLARIFICATION_PROMPT = (
     'Beyond platforms and cadence, also check whether the message already gives real answers for: (a) the '
     'specific goal or occasion for this push (e.g. general lead gen vs. promoting a new program vs. a seasonal '
     'push — not just the brand\'s standing marketing goal), (b) whether there is real evidence to ground the '
-    'content — recent client wins, testimonials, case studies, or a specific current rate/promo — or whether '
-    'placeholders should be used instead, and (c) whether there is a specific topic or timeframe already in mind '
-    'beyond the platform defaults.\n\n'
+    'content — recent client wins, testimonials, or case studies — or whether placeholders/hypotheticals should be '
+    'used instead, and (c) whether there is a specific topic or timeframe already in mind beyond the platform '
+    'defaults. Do not ask for, suggest, or offer a specific rate, rate discount, or promotion to feature.\n\n'
     'If the message already answers the platform question, the cadence question, AND (a), (b), and (c) — '
     'including because it contains a line starting with "Original request:" followed by an "Answers:" section, '
     'meaning the user already answered a previous round of these exact questions — respond with the single word '
@@ -455,7 +469,8 @@ CAMPAIGN_CLARIFICATION_PROMPT = (
     '"allow_custom": <true|false>}]}. Ask at most 5 questions, each with 2-6 concrete checkbox options — the user '
     'may select more than one per question. When the platform and/or cadence questions apply, they must be '
     'included and listed first, platform before cadence. Set "allow_custom" true for questions like real '
-    'testimonials or current rates where a fixed option can\'t capture the real answer.'
+    'testimonials, case-study details, dates, or program names where a fixed option can\'t capture the real '
+    'answer. Never include a specific rate, discount, promotion, or pricing-offer option.'
 )
 
 # Structured-output schema mirroring CAMPAIGN_FORMAT_PROMPT — guarantees valid JSON
@@ -608,6 +623,34 @@ FORBIDDEN_WORDS = [
     'stress free', 'magic', 'amazing', 'game changer', 'rock star', 'crush it',
 ]
 
+RESTRICTED_PRICING_OFFER_PHRASES = [
+    'specific current rate',
+    'specific rate to feature',
+    'promo to feature',
+    'promotion to feature',
+    'promotional rate',
+    'promo rate',
+    'rate discount',
+    'discounted rate',
+    'special rate',
+    'teaser rate',
+    'guaranteed rate',
+    'our current rate',
+    'our rate',
+    "joseph's rate",
+    "lucent's rate",
+]
+
+RESTRICTED_PRICING_FALLBACK = (
+    'This draft was withheld because it included a Joseph-specific pricing or promotional offer. '
+    'Please regenerate using general educational market context without presenting a specific offered or guaranteed rate.'
+)
+
+
+def has_restricted_pricing_offer(text):
+    normalized = _normalize(text or '')
+    return any(phrase in normalized for phrase in RESTRICTED_PRICING_OFFER_PHRASES)
+
 
 def build_footer(nmls):
     return f'Joseph Kim | NMLS #{nmls} | DRE #{DRE_NUMBER} | Equal Housing Opportunity'
@@ -657,6 +700,9 @@ def strip_markdown_deep(value):
 def enforce_compliance(response_text, nmls):
     flags = []
     footer = build_footer(nmls)
+    if has_restricted_pricing_offer(response_text):
+        flags.append('restricted_pricing_offer_removed')
+        response_text = RESTRICTED_PRICING_FALLBACK
     if footer not in response_text:
         flags.append('missing_or_altered_footer')
         response_text = response_text.rstrip() + '\n\n' + footer
@@ -695,6 +741,16 @@ def enforce_video_brief_compliance(brief, nmls):
     cta_text = cta.get('text', '') or ''
 
     full_text = '\n'.join([intro_text, body_text, cta_text])
+    if has_restricted_pricing_offer(full_text):
+        flags.append('restricted_pricing_offer_removed')
+        intro = script.get('intro') or {}
+        body = script.get('body') or {}
+        intro['text'] = RESTRICTED_PRICING_FALLBACK
+        body['text'] = ''
+        cta_text = ''
+        script['intro'] = intro
+        script['body'] = body
+        full_text = RESTRICTED_PRICING_FALLBACK
     if footer not in full_text and end_card not in full_text:
         flags.append('missing_or_altered_footer')
         cta_text = (cta_text.rstrip() + '\n\n' if cta_text.strip() else '') + end_card
@@ -802,7 +858,30 @@ def _parse_clarification(raw_response):
     except (json.JSONDecodeError, TypeError):
         data = _extract_json_object(text, '"questions"')
     if isinstance(data, dict) and isinstance(data.get('questions'), list) and data['questions']:
-        return data
+        cleaned_questions = []
+        for question in data['questions']:
+            if not isinstance(question, dict):
+                continue
+            if has_restricted_pricing_offer(str(question.get('question', ''))):
+                continue
+
+            options = question.get('options')
+            if isinstance(options, list):
+                options = [
+                    option
+                    for option in options
+                    if not has_restricted_pricing_offer(str(option))
+                ]
+
+            cleaned = {
+                **question,
+                'options': options if isinstance(options, list) else question.get('options'),
+            }
+            if not isinstance(options, list) or options or cleaned.get('allow_custom'):
+                cleaned_questions.append(cleaned)
+
+        if cleaned_questions:
+            return {**data, 'questions': cleaned_questions}
     return None
 
 
@@ -873,6 +952,13 @@ def enforce_posts_compliance(data, nmls):
             body_text = body
 
         full_text = '\n'.join([hook, body_text, cta])
+        if has_restricted_pricing_offer(full_text):
+            post_flags.append('restricted_pricing_offer_removed')
+            hook = RESTRICTED_PRICING_FALLBACK
+            body = [] if isinstance(raw_body, list) else ''
+            body_text = ''
+            cta = ''
+            full_text = hook
         if footer not in full_text:
             post_flags.append('missing_or_altered_footer')
             cta = (cta.rstrip() + '\n\n' if cta.strip() else '') + footer
@@ -1264,6 +1350,7 @@ def chat():
         system_prompt = shared_system_prompt
         if is_campaign:
             system_prompt += '\n\n' + CAMPAIGN_FORMAT_PROMPT
+            system_prompt = system_prompt.replace('{today}', date.today().strftime('%A, %B %d, %Y'))
         else:
             system_prompt += '\n\n' + NON_CAMPAIGN_FORMAT_PROMPT
         system_prompt = system_prompt.replace('{nmls}', nmls)
