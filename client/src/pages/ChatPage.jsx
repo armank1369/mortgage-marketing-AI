@@ -623,7 +623,7 @@ export default function ChatPage() {
       {/* Sidebar — dark off-canvas drawer on mobile, Ken's light static column on desktop
           (team decision: keep the mobile drawer dark, keep the light theme for desktop). */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 md:bg-white md:border-r md:border-slate-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
+        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 md:bg-lucent-cream md:border-r md:border-slate-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -931,7 +931,7 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap leading-relaxed text-sm bg-lucent-red text-white shadow-sm shadow-red-200">
+                  <div className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap leading-relaxed text-sm bg-imessage-blue text-white shadow-sm shadow-blue-200">
                     {msg.text}
                   </div>
                 </div>

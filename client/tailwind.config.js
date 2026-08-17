@@ -14,6 +14,10 @@ export default {
         'lucent-red-dark': '#b31a1b',
         'lucent-navy': '#181e28',
         'lucent-cream': '#f3f2ec',
+        // Classic iMessage "sent" bubble blue — deliberately distinct from the lucent-red
+        // accent, kept for the user chat bubble specifically since red reads as an alert/error
+        // color there rather than a friendly sent-message color.
+        'imessage-blue': '#0B93F6',
       },
       fontFamily: {
         // Already loaded via index.html for the generated social graphics (FONT_SERIF) —
