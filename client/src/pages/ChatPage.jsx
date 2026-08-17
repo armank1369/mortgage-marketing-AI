@@ -214,6 +214,7 @@ export default function ChatPage() {
   const [showSetup, setShowSetup] = useState(false)
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [activePromptCategory, setActivePromptCategory] = useState(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [chatToDelete, setChatToDelete] = useState(null)
   const [showPersonaModal, setShowPersonaModal] = useState(false)
@@ -928,26 +929,44 @@ export default function ChatPage() {
         {/* Quick prompts + input */}
         <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-4 shrink-0">
           <div className="max-w-4xl mx-auto">
-            <div className="space-y-2 mb-3">
-              {PROMPT_CATEGORIES.map((cat) => (
-                <div key={cat.category}>
-                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                    {cat.emoji} {cat.category}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {cat.prompts.map((prompt) => (
-                      <button
-                        key={prompt}
-                        onClick={() => handleSend(prompt)}
-                        disabled={isTyping}
-                        className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
+            <div className="mb-3">
+              <div className="flex flex-wrap gap-2">
+                {PROMPT_CATEGORIES.map((cat) => {
+                  const isActive = activePromptCategory === cat.category
+                  return (
+                    <button
+                      key={cat.category}
+                      type="button"
+                      onClick={() => setActivePromptCategory(isActive ? null : cat.category)}
+                      disabled={isTyping}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        isActive
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'bg-slate-100 border-transparent text-slate-500 hover:bg-blue-50 hover:text-blue-700'
+                      }`}
+                    >
+                      {cat.emoji} {cat.category}
+                    </button>
+                  )
+                })}
+              </div>
+              {activePromptCategory && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {PROMPT_CATEGORIES.find((cat) => cat.category === activePromptCategory)?.prompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => {
+                        handleSend(prompt)
+                        setActivePromptCategory(null)
+                      }}
+                      disabled={isTyping}
+                      className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
 
             <div className="flex gap-2">
