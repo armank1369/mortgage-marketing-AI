@@ -996,8 +996,8 @@ export default function ChatPage() {
                       // control layer, not just another row of same-looking buttons.
                       className={`text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         isActive
-                          ? 'bg-lucent-red border-lucent-red text-white'
-                          : 'bg-white border-slate-300 text-slate-700 hover:border-lucent-red hover:text-lucent-red'
+                          ? 'bg-lucent-blue border-lucent-blue text-white'
+                          : 'bg-white border-slate-300 text-slate-700 hover:border-lucent-blue hover:text-lucent-blue'
                       }`}
                     >
                       {cat.emoji} {cat.category}
@@ -1050,7 +1050,7 @@ export default function ChatPage() {
               <button
                 onClick={() => handleSend()}
                 disabled={!input.trim() || isTyping}
-                className="bg-lucent-red hover:bg-lucent-red-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm shadow-red-200 inline-flex items-center gap-2"
+                className="bg-lucent-blue hover:bg-lucent-blue-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm shadow-cyan-100 inline-flex items-center gap-2"
               >
                 {isTyping && (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
