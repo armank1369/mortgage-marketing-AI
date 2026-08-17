@@ -68,6 +68,19 @@ function ChevronRightIcon() {
   )
 }
 
+// Sunday-Saturday, matching the grid's own week layout (DAY_LABELS starts on Sun, and
+// buildMonthGrid offsets by firstDay.getDay() on that same assumption).
+function weekBounds(date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay())
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999)
+  return { start, end }
+}
+
+function toDateInputValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 // Entries saved from the chat (single posts, or a generated content_calendar) carry a
 // `details` payload — script/creative-direction/hashtags — so this modal can show the exact
 // same ContentBriefCard breakdown as the source card. A manually added or seed entry has no
@@ -134,7 +147,7 @@ function EntryDetailModal({ entry, onClose }) {
 }
 
 export default function CalendarPage() {
-  const { entries, addEntry, removeEntry } = useCalendar()
+  const { entries, addEntry, removeEntry, clearEntries } = useCalendar()
   const today = new Date()
   // The month currently on screen — starts on today's month but moves independently once the
   // user navigates, while `today` above stays fixed to the real date for the "today" highlight
@@ -151,6 +164,10 @@ export default function CalendarPage() {
 
   const [selectedEntry, setSelectedEntry] = useState(null)
   const [entryToDelete, setEntryToDelete] = useState(null)
+
+  const [showClearModal, setShowClearModal] = useState(false)
+  const [clearScope, setClearScope] = useState('day')
+  const [clearDate, setClearDate] = useState(() => toDateInputValue(today))
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -174,6 +191,32 @@ export default function CalendarPage() {
     if (!entryToDelete) return
     removeEntry(entryToDelete.id)
     setEntryToDelete(null)
+  }
+
+  const openClearModal = () => {
+    setClearScope('day')
+    setClearDate(toDateInputValue(today))
+    setShowClearModal(true)
+  }
+
+  const [clearY, clearM, clearD] = clearDate.split('-').map(Number)
+  const clearTargetDate = new Date(clearY, (clearM || 1) - 1, clearD || 1)
+
+  const matchesClearScope = (entry) => {
+    if (clearScope === 'all') return true
+    if (clearScope === 'day') return entry.date.toDateString() === clearTargetDate.toDateString()
+    if (clearScope === 'week') {
+      const { start, end } = weekBounds(clearTargetDate)
+      return entry.date >= start && entry.date <= end
+    }
+    return false
+  }
+
+  const clearMatchCount = entries.filter(matchesClearScope).length
+
+  const confirmClear = () => {
+    clearEntries(matchesClearScope)
+    setShowClearModal(false)
   }
 
   const entriesByKey = (day) =>
@@ -203,12 +246,22 @@ export default function CalendarPage() {
             <ChevronRightIcon />
           </button>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm shadow-blue-200 shrink-0"
-        >
-          + New Entry
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={openClearModal}
+            className="text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 text-sm font-medium px-3 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5"
+          >
+            <TrashIcon />
+            <span className="hidden sm:inline">Clear Calendar</span>
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm shadow-blue-200"
+          >
+            + New Entry
+          </button>
+        </div>
       </header>
 
       {/* Fixed-width grid (700px) scrolls horizontally below that — a 7-day week squeezed
@@ -385,6 +438,65 @@ export default function CalendarPage() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
               >
                 Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">Clear Calendar</h3>
+
+            <div className="space-y-2 mb-4">
+              {[
+                { value: 'day', label: 'Clear a specific day' },
+                { value: 'week', label: 'Clear a specific week' },
+                { value: 'all', label: 'Clear everything' },
+              ].map((option) => (
+                <label key={option.value} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="clearScope"
+                    checked={clearScope === option.value}
+                    onChange={() => setClearScope(option.value)}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+
+            {(clearScope === 'day' || clearScope === 'week') && (
+              <input
+                type="date"
+                value={clearDate}
+                onChange={(e) => setClearDate(e.target.value)}
+                className={`${inputClass} mb-4`}
+              />
+            )}
+
+            <p className="text-xs text-slate-500 mb-5">
+              {clearMatchCount === 0
+                ? 'No entries match this selection.'
+                : `This will permanently delete ${clearMatchCount} ${clearMatchCount === 1 ? 'entry' : 'entries'}. This cannot be undone.`}
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                className="flex-1 text-slate-500 hover:text-slate-700 text-xs font-medium py-2 rounded-lg transition-colors border border-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmClear}
+                disabled={clearMatchCount === 0}
+                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+              >
+                Clear
               </button>
             </div>
           </div>

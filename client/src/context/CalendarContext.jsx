@@ -53,6 +53,13 @@ export function CalendarProvider({ children }) {
     setEntries((prev) => prev.filter((entry) => entry.id !== id))
   }
 
+  // Bulk removal for the "Clear Calendar" feature — shouldMatch(entry) => true means "delete
+  // this one". Kept generic (day/week/everything are just different predicates from the
+  // caller) rather than three separate methods.
+  const clearEntries = (shouldMatch) => {
+    setEntries((prev) => prev.filter((entry) => !shouldMatch(entry)))
+  }
+
   // Used by the "Save to Calendar" buttons on AI-generated output (a campaign calendar or a
   // single post), keyed by that message's own id as the batchId. Re-saving the same batch (e.g.
   // after generating a video script for one entry) replaces its prior entries wholesale instead
@@ -74,7 +81,7 @@ export function CalendarProvider({ children }) {
 
   return (
     <CalendarContext.Provider
-      value={{ entries, addEntry, addEntries, removeEntry, upsertEntries, isBatchSaved }}
+      value={{ entries, addEntry, addEntries, removeEntry, clearEntries, upsertEntries, isBatchSaved }}
     >
       {children}
     </CalendarContext.Provider>
