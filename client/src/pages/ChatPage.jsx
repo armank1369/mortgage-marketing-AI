@@ -623,7 +623,7 @@ export default function ChatPage() {
       {/* Sidebar — dark off-canvas drawer on mobile, Ken's light static column on desktop
           (team decision: keep the mobile drawer dark, keep the light theme for desktop). */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 md:bg-lucent-cream md:border-r md:border-slate-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
+        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 md:bg-slate-50 md:border-r md:border-slate-200 flex flex-col shrink-0 transform transition-transform duration-200 ease-out md:transform-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -636,7 +636,7 @@ export default function ChatPage() {
               {/* Sidebar is too narrow (w-72, minus icon/padding) for the name + tagline to fit
                   on one line — stacked here, with the tagline muted so it reads as secondary. */}
               <div className="leading-tight">
-                <h1 className="font-serif text-base font-semibold italic text-white md:text-slate-900">Lucie</h1>
+                <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie</h1>
                 <p className="text-[10px] font-medium text-slate-300 md:text-slate-500">Lucent's AI Social Media Assistant</p>
               </div>
             </div>
@@ -837,7 +837,7 @@ export default function ChatPage() {
               lighter muted tagline, matching the reference lockup style. truncate is still a
               safety net for narrower devices rather than an awkward mid-word wrap. */}
           <span className="truncate">
-            <span className="font-serif text-base font-semibold italic text-white">Lucie</span>{' '}
+            <span className="text-sm font-bold text-white">Lucie</span>{' '}
             <span className="text-xs font-medium text-slate-400">Lucent's AI Social Media Assistant</span>
           </span>
         </div>
