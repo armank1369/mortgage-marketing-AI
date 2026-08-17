@@ -21,12 +21,34 @@ function makeId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-const QUICK_PROMPTS = [
-  'Give me a post idea',
-  'What should I post this week?',
-  'Write me a caption',
-  'How do I get more leads?',
-  'Create a content strategy and 2-week social media calendar for my mortgage brand',
+const PROMPT_CATEGORIES = [
+  {
+    category: 'Content Creation',
+    emoji: '💡',
+    prompts: [
+      'Give me a post idea for a first-time homebuyer tip',
+      'Write an engaging caption for a recent client success story',
+      'Turn a complex market update into a simple, educational post',
+    ],
+  },
+  {
+    category: 'Strategy & Planning',
+    emoji: '🗓️',
+    prompts: [
+      'What should I post this week?',
+      'Create a content strategy and 2-week social media calendar for my mortgage brand',
+      'Outline a multi-post campaign for a new service launch',
+    ],
+  },
+  {
+    category: 'Growth & Lead Generation',
+    emoji: '🚀',
+    prompts: [
+      'How do I get more leads from my current audience?',
+      'Write a strong call-to-action that drives profile link clicks',
+      'What are some ways to improve my local community engagement?',
+    ],
+  },
 ]
 
 const NAV_ITEMS = [
@@ -906,16 +928,25 @@ export default function ChatPage() {
         {/* Quick prompts + input */}
         <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-4 shrink-0">
           <div className="max-w-4xl mx-auto">
-            <div className="flex flex-wrap gap-2 mb-3">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => handleSend(prompt)}
-                  disabled={isTyping}
-                  className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {prompt}
-                </button>
+            <div className="space-y-2 mb-3">
+              {PROMPT_CATEGORIES.map((cat) => (
+                <div key={cat.category}>
+                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                    {cat.emoji} {cat.category}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {cat.prompts.map((prompt) => (
+                      <button
+                        key={prompt}
+                        onClick={() => handleSend(prompt)}
+                        disabled={isTyping}
+                        className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
 
