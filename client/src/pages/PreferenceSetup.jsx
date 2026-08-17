@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { usePreferences } from '../context/PreferencesContext'
 import DualRangeSlider from '../components/DualRangeSlider'
 import { NMLS_NUMBER } from '../constants'
+import lucieAvatar from '../assets/lucie-avatar.jpg'
 
 const INCOME_OPTIONS = ['Under $100k', '$100k-$200k', '$200k-$300k', '$300k-$500k', '$500k+']
 
@@ -200,10 +201,8 @@ export default function PreferenceSetup({ onComplete }) {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-sky-700 text-white flex items-center justify-center text-sm font-bold shrink-0">
-              L
-            </div>
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">Lucent Social Media Assistant</h1>
+            <img src={lucieAvatar} alt="Lucie" className="w-8 h-8 rounded-full object-cover shrink-0" />
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">Lucie: Lucent's AI Social Media Assistant</h1>
           </div>
           <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-full px-3 py-1.5">
             Brand Setup
