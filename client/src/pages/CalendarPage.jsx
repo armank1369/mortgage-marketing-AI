@@ -68,13 +68,17 @@ function ChevronRightIcon() {
   )
 }
 
-// Sunday-Saturday, matching the grid's own week layout (DAY_LABELS starts on Sun, and
-// buildMonthGrid offsets by firstDay.getDay() on that same assumption).
+// The picked date plus the 6 days following it — not snapped to a Sun-Sat calendar week, so
+// picking 8/17 always means "8/17 through 8/23", whatever weekday 8/17 happens to be.
 function weekBounds(date) {
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay())
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   start.setHours(0, 0, 0, 0)
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999)
   return { start, end }
+}
+
+function formatShortDate(date) {
+  return `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`
 }
 
 function toDateInputValue(date) {
@@ -468,12 +472,19 @@ export default function CalendarPage() {
             </div>
 
             {(clearScope === 'day' || clearScope === 'week') && (
-              <input
-                type="date"
-                value={clearDate}
-                onChange={(e) => setClearDate(e.target.value)}
-                className={`${inputClass} mb-4`}
-              />
+              <div className="mb-4">
+                <input
+                  type="date"
+                  value={clearDate}
+                  onChange={(e) => setClearDate(e.target.value)}
+                  className={inputClass}
+                />
+                {clearScope === 'week' && (
+                  <p className="text-xs text-slate-500 mt-1.5">
+                    {formatShortDate(weekBounds(clearTargetDate).start)} - {formatShortDate(weekBounds(clearTargetDate).end)}
+                  </p>
+                )}
+              </div>
             )}
 
             <p className="text-xs text-slate-500 mb-5">
