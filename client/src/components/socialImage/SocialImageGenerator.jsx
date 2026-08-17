@@ -3,22 +3,25 @@ import axios from 'axios'
 import { toPng } from 'html-to-image'
 import TEMPLATE_COMPONENTS, { TEMPLATE_DIMENSIONS } from './templates'
 
-const PLATFORM_TABS = [
-  { key: 'instagram', label: 'Instagram' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'facebook', label: 'Facebook' },
-  { key: 'stories', label: 'Stories' },
-]
-
 const PREVIEW_MAX_WIDTH = 340
 
-function guessDefaultTab(platform) {
+// The graphic must always match the specific platform this post/entry was actually written
+// for — letting the user pick a different one here used to produce an "Instagram" image for a
+// caption that was written (tone, length, hashtag count) for LinkedIn. TikTok isn't included
+// since TikTok posts are always video-format and never reach this component.
+const PLATFORM_LABELS = {
+  instagram: 'Instagram',
+  linkedin: 'LinkedIn',
+  facebook: 'Facebook',
+}
+
+function resolvePlatformLabel(platform) {
   const key = (platform || '').toLowerCase()
-  return PLATFORM_TABS.some((t) => t.key === key) ? key : 'instagram'
+  return PLATFORM_LABELS[key] || platform || 'Instagram'
 }
 
 export default function SocialImageGenerator({ title, script, platform, persona, nmls }) {
-  const [activeTab, setActiveTab] = useState(() => guessDefaultTab(platform))
+  const platformLabel = resolvePlatformLabel(platform)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -44,11 +47,10 @@ export default function SocialImageGenerator({ title, script, platform, persona,
     setLoading(true)
     setError('')
     try {
-      const tabLabel = PLATFORM_TABS.find((t) => t.key === activeTab)?.label || 'Instagram'
       const { data } = await axios.post('/api/social-image', {
         title,
         script,
-        platform: tabLabel,
+        platform: platformLabel,
         persona,
         nmls_number: nmls,
         previous_attempt: result || undefined,
@@ -90,23 +92,11 @@ export default function SocialImageGenerator({ title, script, platform, persona,
 
   return (
     <div className="px-4 py-4 border-t border-slate-100">
-      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Social Image</div>
-
-      <div className="flex items-center gap-1.5 mb-3">
-        {PLATFORM_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
-              activeTab === tab.key
-                ? 'bg-slate-900 text-white border-slate-900'
-                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Social Image</div>
+        <span className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-900 text-white">
+          {platformLabel}
+        </span>
       </div>
 
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
