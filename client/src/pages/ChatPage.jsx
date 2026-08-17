@@ -842,7 +842,7 @@ export default function ChatPage() {
                 </div>
               ) : msg.role === 'assistant' && msg.type === 'posts' ? (
                 <div className="flex justify-start">
-                  <PostsResponse data={msg.posts} />
+                  <PostsResponse data={msg.posts} nmls={nmls} persona={persona} />
                 </div>
               ) : msg.role === 'assistant' ? (
                 // Same card chrome as CampaignResponse's Section component — every AI

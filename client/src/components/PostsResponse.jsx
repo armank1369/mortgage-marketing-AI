@@ -1,9 +1,10 @@
 import Section from './Section'
 import ContentBriefCard from './ContentBriefCard'
+import SocialImageGenerator from './socialImage/SocialImageGenerator'
 import { useCalendar } from '../context/CalendarContext'
 import { bestPostingTime } from '../utils/postingTimes'
 
-function PostCard({ post }) {
+function PostCard({ post, nmls, persona }) {
   const { addEntry } = useCalendar()
   const script = post.script || {}
   const direction = post.creative_direction || {}
@@ -54,11 +55,23 @@ function PostCard({ post }) {
       hashtags={post.hashtags}
       onCopyText={buildCopyText}
       onSaveToCalendar={handleSaveToCalendar}
-    />
+    >
+      {/* Video-format posts already come back with a full spoken script instead — a social
+          image only makes sense as a substitute visual for formats that don't have one. */}
+      {post.format !== 'video' && (
+        <SocialImageGenerator
+          title={post.title}
+          script={script}
+          platform={post.platform}
+          persona={persona}
+          nmls={nmls}
+        />
+      )}
+    </ContentBriefCard>
   )
 }
 
-export default function PostsResponse({ data }) {
+export default function PostsResponse({ data, nmls, persona }) {
   const posts = data?.posts || []
   if (posts.length === 0) return null
 
@@ -72,7 +85,7 @@ export default function PostsResponse({ data }) {
         {data?.intro && <p className="text-sm text-slate-600 mb-4 leading-relaxed">{data.intro}</p>}
         <div className="space-y-4">
           {posts.map((post, i) => (
-            <PostCard key={i} post={post} />
+            <PostCard key={i} post={post} nmls={nmls} persona={persona} />
           ))}
         </div>
       </Section>
