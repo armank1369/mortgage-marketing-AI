@@ -636,7 +636,7 @@ export default function ChatPage() {
               {/* Sidebar is too narrow (w-72, minus icon/padding) for the name + tagline to fit
                   on one line — stacked here, with the tagline muted so it reads as secondary. */}
               <div className="leading-tight">
-                <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie</h1>
+                <h1 className="font-serif text-base font-semibold italic text-white md:text-slate-900">Lucie</h1>
                 <p className="text-[10px] font-medium text-slate-300 md:text-slate-500">Lucent's AI Social Media Assistant</p>
               </div>
             </div>
@@ -837,7 +837,7 @@ export default function ChatPage() {
               lighter muted tagline, matching the reference lockup style. truncate is still a
               safety net for narrower devices rather than an awkward mid-word wrap. */}
           <span className="truncate">
-            <span className="text-sm font-bold text-white">Lucie</span>{' '}
+            <span className="font-serif text-base font-semibold italic text-white">Lucie</span>{' '}
             <span className="text-xs font-medium text-slate-400">Lucent's AI Social Media Assistant</span>
           </span>
         </div>
@@ -931,7 +931,7 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap leading-relaxed text-sm bg-blue-600 text-white shadow-sm shadow-blue-200">
+                  <div className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-5 py-3.5 whitespace-pre-wrap leading-relaxed text-sm bg-lucent-red text-white shadow-sm shadow-red-200">
                     {msg.text}
                   </div>
                 </div>
@@ -996,8 +996,8 @@ export default function ChatPage() {
                       // control layer, not just another row of same-looking buttons.
                       className={`text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         isActive
-                          ? 'bg-blue-600 border-blue-600 text-white'
-                          : 'bg-white border-slate-300 text-slate-700 hover:border-blue-400 hover:text-blue-700'
+                          ? 'bg-lucent-red border-lucent-red text-white'
+                          : 'bg-white border-slate-300 text-slate-700 hover:border-lucent-red hover:text-lucent-red'
                       }`}
                     >
                       {cat.emoji} {cat.category}
@@ -1050,7 +1050,7 @@ export default function ChatPage() {
               <button
                 onClick={() => handleSend()}
                 disabled={!input.trim() || isTyping}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm shadow-blue-200 inline-flex items-center gap-2"
+                className="bg-lucent-red hover:bg-lucent-red-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm shadow-red-200 inline-flex items-center gap-2"
               >
                 {isTyping && (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
