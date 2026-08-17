@@ -21,6 +21,8 @@ function makeId() {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+// Each category's full pool — a random 3-item subset is drawn client-side (see
+// pickRandomPrompts) rather than shown in full, so this never touches the API payload.
 const PROMPT_CATEGORIES = [
   {
     category: 'Content Creation',
@@ -29,6 +31,9 @@ const PROMPT_CATEGORIES = [
       'Give me a post idea for a first-time homebuyer tip',
       'Write an engaging caption for a recent client success story',
       'Turn a complex market update into a simple, educational post',
+      'Explain the benefits of refinancing in a short Reel script',
+      'Create a post debunking a common mortgage myth',
+      'Draft a caption highlighting a new loan product',
     ],
   },
   {
@@ -38,6 +43,9 @@ const PROMPT_CATEGORIES = [
       'What should I post this week?',
       'Create a content strategy and 2-week social media calendar for my mortgage brand',
       'Outline a multi-post campaign for a new service launch',
+      'Develop a strategy for targeting local real estate agents',
+      'Give me a 30-day plan to increase my profile visits',
+      'Draft a content calendar focused on VA and FHA loans',
     ],
   },
   {
@@ -45,11 +53,25 @@ const PROMPT_CATEGORIES = [
     emoji: '🚀',
     prompts: [
       'How do I get more leads from my current audience?',
-      'Write a strong call-to-action that drives profile link clicks',
+      'Write a strong call-to-action that drives profile link clicks for pre-approvals',
       'What are some ways to improve my local community engagement?',
+      'Give me ideas for a co-marketing post with a local realtor',
+      'Draft an outreach message to a potential referral partner',
+      'How can I optimize my bio to capture more borrower leads?',
     ],
   },
 ]
+
+// Fisher-Yates shuffle, then take the first `count` — used to rotate which 3 prompts show
+// per category so repeat visits don't always see the exact same options.
+function pickRandomPrompts(prompts, count = 3) {
+  const shuffled = [...prompts]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled.slice(0, count)
+}
 
 const NAV_ITEMS = [
   { id: 'chat', label: 'Chat', icon: '💬' },
@@ -215,6 +237,15 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [activePromptCategory, setActivePromptCategory] = useState(null)
+  // Which 3 prompts are currently showing per category — rolled fresh on mount below, and
+  // re-rolled each time a category is opened so the options don't go stale across visits.
+  const [displayedPrompts, setDisplayedPrompts] = useState(() => {
+    const initial = {}
+    PROMPT_CATEGORIES.forEach((cat) => {
+      initial[cat.category] = pickRandomPrompts(cat.prompts)
+    })
+    return initial
+  })
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [chatToDelete, setChatToDelete] = useState(null)
   const [showPersonaModal, setShowPersonaModal] = useState(false)
@@ -937,7 +968,14 @@ export default function ChatPage() {
                     <button
                       key={cat.category}
                       type="button"
-                      onClick={() => setActivePromptCategory(isActive ? null : cat.category)}
+                      onClick={() => {
+                        if (isActive) {
+                          setActivePromptCategory(null)
+                          return
+                        }
+                        setActivePromptCategory(cat.category)
+                        setDisplayedPrompts((prev) => ({ ...prev, [cat.category]: pickRandomPrompts(cat.prompts) }))
+                      }}
                       disabled={isTyping}
                       // Bordered/bold "tab" styling (vs. the flat filled pills used for the
                       // prompts themselves below) so the category row reads as a distinct
@@ -956,7 +994,7 @@ export default function ChatPage() {
               </div>
               {activePromptCategory && (
                 <div className="flex flex-wrap gap-2 mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-                  {PROMPT_CATEGORIES.find((cat) => cat.category === activePromptCategory)?.prompts.map((prompt) => (
+                  {(displayedPrompts[activePromptCategory] || []).map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => {
