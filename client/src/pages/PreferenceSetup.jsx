@@ -202,7 +202,10 @@ export default function PreferenceSetup({ onComplete }) {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <img src={lucieAvatar} alt="Lucie" className="w-8 h-8 rounded-full object-cover shrink-0" />
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate">Lucie: Lucent's AI Social Media Assistant</h1>
+            <h1 className="text-base sm:text-lg text-slate-900 truncate">
+              <span className="font-bold">Lucie</span>
+              <span className="font-normal">: Lucent's AI Social Media Assistant</span>
+            </h1>
           </div>
           <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-full px-3 py-1.5">
             Brand Setup
