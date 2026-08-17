@@ -235,7 +235,6 @@ function createChatSession(persona = null) {
     persona,
     personaId: persona?.id || persona?.apiKey || null,
     title: persona?.name || 'New Chat',
-    summary: '',
     createdAt: now,
     updatedAt: now,
     contentTypes: [],
@@ -262,11 +261,75 @@ function formatChatTimestamp(value) {
   }).format(date)
 }
 
-function buildChatSummary(message) {
-  const clean = String(message || '').replace(/\s+/g, ' ').trim()
-  if (!clean) return ''
-  const clipped = clean.length > 150 ? `${clean.slice(0, 147).trimEnd()}...` : clean
-  return `The chat began with the request: “${clipped}”`
+// Sidebar-only variant of formatChatTimestamp — no year (matches "Last edited: Aug 17, 12:40
+// AM"), and driven by updatedAt rather than createdAt so it actually reflects the chat's most
+// recent activity, not just when it was first opened.
+function formatLastEdited(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const formatted = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+  return `Last edited: ${formatted}`
+}
+
+// Common leading words in requests ("Write me a caption about...", "Can you give me...") that
+// add no distinguishing information to a short title — stripped so the remaining topic words
+// (e.g. "DSCR", "loans") carry the title instead of getting buried after "Write Me A Caption".
+const TITLE_STOPWORDS = new Set([
+  'a', 'an', 'the', 'me', 'my', 'please', 'can', 'you', 'write', 'give', 'create', 'draft',
+  'make', 'help', 'i', 'need', 'generate', 'for', 'about', 'with', 'to', 'of', 'and', 'on', 'in',
+  'this', 'that', 'idea', 'ideas',
+])
+
+// Client-side heuristic (no API call) — picks the first few non-filler words of the opening
+// message as a short, topic-derived title, replacing the old behavior where every new chat
+// under the same persona showed that persona's name as its title and looked identical.
+function deriveSmartTitle(message) {
+  const clean = String(message || '').replace(/\s+/g, ' ').trim().replace(/[?!.,:;"“”]+$/g, '')
+  if (!clean) return 'New Chat'
+  const words = clean.split(' ').filter((w) => w && !TITLE_STOPWORDS.has(w.toLowerCase()))
+  const picked = (words.length > 0 ? words : clean.split(' ')).slice(0, 5)
+  const title = picked
+    .map((w) => (/^[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ')
+  return title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title
+}
+
+// Short display text for one message, regardless of its type — a campaign/posts/clarification
+// response has no single "text" field the way a plain-text reply does, so each type needs its
+// own extraction instead of falling back to an empty string.
+function getMessagePreviewText(message) {
+  if (!message) return ''
+  if (message.type === 'campaign') {
+    return message.campaign?.content_strategy?.title || 'Generated a content strategy and calendar'
+  }
+  if (message.type === 'posts') {
+    const first = message.posts?.posts?.[0]
+    return first?.title || 'Generated post ideas'
+  }
+  if (message.type === 'clarification') {
+    return message.clarification?.questions?.[0]?.question || 'Asked a few quick questions'
+  }
+  return message.text || ''
+}
+
+// Replaces the old static "The chat began with the request..." string, which never changed
+// after the first message — this recomputes from whatever the most recent message actually is,
+// every render, so the sidebar reflects current activity instead of going stale.
+function buildLatestActivityPreview(chat) {
+  const messages = chat.messages || []
+  const last = messages[messages.length - 1]
+  if (!last) return ''
+  const label = last.role === 'user' ? 'You' : 'Lucie'
+  const text = getMessagePreviewText(last).replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  const clipped = text.length > 60 ? `${text.slice(0, 57).trimEnd()}...` : text
+  return `${label}: ${clipped}`
 }
 
 function getResponseContentTypes(data) {
@@ -339,7 +402,6 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [editingChatId, setEditingChatId] = useState(null)
   const [draftChatTitle, setDraftChatTitle] = useState('')
-  const [draftChatSummary, setDraftChatSummary] = useState('')
   const endRef = useRef(null)
   const abortControllerRef = useRef(null)
 
@@ -402,7 +464,6 @@ export default function ChatPage() {
                 persona,
                 personaId: persona.id || persona.apiKey || null,
                 title: persona.name || 'New Chat',
-                summary: '',
                 createdAt: chat.createdAt || now,
                 updatedAt: now,
                 contentTypes: [],
@@ -519,32 +580,32 @@ export default function ChatPage() {
     const personaObj = activeChat.persona || preferences.persona
 
     setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === activeChatId
-          ? {
-              ...chat,
-              persona: chat.persona || personaObj,
-              personaId: chat.personaId || personaObj?.id || personaObj?.apiKey || null,
-              title:
-                chat.title && chat.title !== 'New Chat'
-                  ? chat.title
-                  : personaObj?.name || 'New Chat',
-              summary: chat.summary || buildChatSummary(msg),
-              createdAt: chat.createdAt || now,
-              updatedAt: now,
-              messages: [
-                ...chat.messages,
-                {
-                  id: makeId(),
-                  role: 'user',
-                  type: 'text',
-                  text: msg,
-                  createdAt: now,
-                },
-              ],
-            }
-          : chat
-      )
+      prev.map((chat) => {
+        if (chat.id !== activeChatId) return chat
+        // Only auto-derive a title on the chat's first-ever message, and only if it hasn't
+        // already been manually renamed (e.g. before that first message was sent) — a real
+        // rename should never get silently overwritten by the heuristic.
+        const isFirstMessage = chat.messages.length === 0
+        const hasDefaultTitle = !chat.title || chat.title === 'New Chat' || chat.title === personaObj?.name
+        return {
+          ...chat,
+          persona: chat.persona || personaObj,
+          personaId: chat.personaId || personaObj?.id || personaObj?.apiKey || null,
+          title: isFirstMessage && hasDefaultTitle ? deriveSmartTitle(msg) : chat.title,
+          createdAt: chat.createdAt || now,
+          updatedAt: now,
+          messages: [
+            ...chat.messages,
+            {
+              id: makeId(),
+              role: 'user',
+              type: 'text',
+              text: msg,
+              createdAt: now,
+            },
+          ],
+        }
+      })
     )
 
     setInput('')
@@ -629,7 +690,6 @@ export default function ChatPage() {
           ? {
               ...chat,
               title: draftChatTitle.trim() || chat.persona?.name || 'Chat',
-              summary: draftChatSummary.trim(),
               updatedAt: now,
             }
           : chat
@@ -645,7 +705,6 @@ export default function ChatPage() {
     }
 
     setDraftChatTitle(chat.title || chat.persona?.name || 'Chat')
-    setDraftChatSummary(chat.summary || '')
     setEditingChatId(chat.id)
   }
 
@@ -661,7 +720,6 @@ export default function ChatPage() {
           ? {
               ...chat,
               messages: [],
-              summary: '',
               contentTypes: [],
               updatedAt: now,
             }
@@ -776,10 +834,12 @@ export default function ChatPage() {
               .map((chat) => {
                 const isActive = chat.id === activeChatId
                 const displayLabel = chat.title || chat.persona?.name || 'Chat'
-                const timestamp = formatChatTimestamp(chat.createdAt)
+                const lastEdited = formatLastEdited(chat.updatedAt || chat.createdAt)
                 const visibleTypes = (chat.contentTypes || []).slice(0, 2)
                 const hiddenTypeCount = Math.max(0, (chat.contentTypes || []).length - visibleTypes.length)
                 const isEditing = editingChatId === chat.id
+                const latestActivity = buildLatestActivityPreview(chat)
+                const personaName = chat.persona?.name
 
                 return (
                   <div
@@ -815,14 +875,27 @@ export default function ChatPage() {
                     ) : (
                       <span className="w-full pr-14 text-sm font-semibold truncate">{displayLabel}</span>
                     )}
-                    {timestamp && (
-                      <span className={`mt-0.5 text-[10px] ${isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'}`}>
-                        {timestamp}
+                    {lastEdited && (
+                      <span
+                        className={`mt-0.5 w-full truncate text-[10px] ${isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'}`}
+                      >
+                        {lastEdited}
                       </span>
                     )}
 
-                    {visibleTypes.length > 0 && (
+                    {(personaName || visibleTypes.length > 0) && (
                       <div className="flex flex-wrap items-center gap-1 mt-1.5 pr-6">
+                        {personaName && (
+                          <span
+                            className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${
+                              isActive
+                                ? 'border-white/20 text-slate-300 md:border-slate-300 md:text-slate-500'
+                                : 'border-slate-700 text-slate-500 md:border-slate-200 md:text-slate-400'
+                            }`}
+                          >
+                            {personaName}
+                          </span>
+                        )}
                         {visibleTypes.map((type) => (
                           <span
                             key={type}
@@ -841,28 +914,15 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {isEditing ? (
-                      <textarea
-                        value={draftChatSummary}
-                        onChange={(e) => setDraftChatSummary(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        rows={2}
-                        maxLength={240}
-                        placeholder="Chat description"
-                        aria-label="Chat description"
-                        className="mt-1.5 w-full text-[10px] leading-4 rounded-md border px-2 py-1.5 resize-none outline-none bg-white border-slate-300 text-slate-800 placeholder:text-slate-400 focus:border-blue-500"
-                      />
-                    ) : (
-                      chat.summary && (
-                        <p
-                          className={`mt-1.5 text-[10px] leading-4 line-clamp-2 ${
-                            isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'
-                          }`}
-                          title={chat.summary}
-                        >
-                          {chat.summary}
-                        </p>
-                      )
+                    {latestActivity && (
+                      <p
+                        className={`mt-1.5 w-full truncate text-[10px] leading-4 ${
+                          isActive ? 'text-slate-300 md:text-slate-500' : 'text-slate-500 md:text-slate-400'
+                        }`}
+                        title={latestActivity}
+                      >
+                        {latestActivity}
+                      </p>
                     )}
 
                     <button
@@ -871,8 +931,8 @@ export default function ChatPage() {
                         e.stopPropagation()
                         toggleChatEdit(chat)
                       }}
-                      aria-label={isEditing ? `Save ${displayLabel}` : `Edit ${displayLabel}`}
-                      title={isEditing ? 'Save chat title and description' : 'Edit chat title and description'}
+                      aria-label={isEditing ? `Save ${displayLabel}` : `Rename ${displayLabel}`}
+                      title={isEditing ? 'Save chat title' : 'Rename chat'}
                       className={`absolute top-2 right-8 p-1 rounded-md transition-all ${
                         isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                       } ${
