@@ -103,9 +103,8 @@ export const FORMAT_BADGES = {
   video: { icon: '🎥', label: 'Video' },
 }
 
-export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, children }) {
+export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, saved, children }) {
   const [copied, setCopied] = useState(false)
-  const [saved, setSaved] = useState(false)
   const gradient = platformGradient(platform)
   const badge = platform ? platformBadge(platform) : null
   const formatBadge = format ? FORMAT_BADGES[format] : null
@@ -126,11 +125,6 @@ export default function ContentBriefCard({ title, platform, format, script, dire
     } catch {
       // clipboard unavailable — ignore
     }
-  }
-
-  const handleSaveToCalendar = () => {
-    onSaveToCalendar()
-    setSaved(true)
   }
 
   return (
@@ -238,11 +232,10 @@ export default function ContentBriefCard({ title, platform, format, script, dire
           {onSaveToCalendar && (
             <button
               type="button"
-              onClick={handleSaveToCalendar}
-              disabled={saved}
-              className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
+              onClick={onSaveToCalendar}
+              className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
             >
-              {saved ? '✓ Saved to Calendar' : '📅 Save to Calendar'}
+              {saved ? '🔄 Update Saved Calendar' : '📅 Save to Calendar'}
             </button>
           )}
           <button

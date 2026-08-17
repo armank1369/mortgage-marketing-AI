@@ -53,8 +53,29 @@ export function CalendarProvider({ children }) {
     setEntries((prev) => prev.filter((entry) => entry.id !== id))
   }
 
+  // Used by the "Save to Calendar" buttons on AI-generated output (a campaign calendar or a
+  // single post), keyed by that message's own id as the batchId. Re-saving the same batch (e.g.
+  // after generating a video script for one entry) replaces its prior entries wholesale instead
+  // of appending a second copy — addEntry/addEntries above stay untouched for the Calendar
+  // page's own manual "+ New Entry" form, which has no batch to reconcile against.
+  const upsertEntries = (batchId, newEntries) => {
+    setEntries((prev) => [
+      ...prev.filter((entry) => entry.batchId !== batchId),
+      ...newEntries.map((entry, i) => ({
+        status: 'Scheduled',
+        ...entry,
+        id: `${batchId}-${i}`,
+        batchId,
+      })),
+    ])
+  }
+
+  const isBatchSaved = (batchId) => entries.some((entry) => entry.batchId === batchId)
+
   return (
-    <CalendarContext.Provider value={{ entries, addEntry, addEntries, removeEntry }}>
+    <CalendarContext.Provider
+      value={{ entries, addEntry, addEntries, removeEntry, upsertEntries, isBatchSaved }}
+    >
       {children}
     </CalendarContext.Provider>
   )

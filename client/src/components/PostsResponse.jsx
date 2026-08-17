@@ -4,8 +4,9 @@ import SocialImageGenerator from './socialImage/SocialImageGenerator'
 import { useCalendar } from '../context/CalendarContext'
 import { bestPostingTime } from '../utils/postingTimes'
 
-function PostCard({ post, nmls, persona }) {
-  const { addEntry } = useCalendar()
+function PostCard({ post, nmls, persona, batchId }) {
+  const { upsertEntries, isBatchSaved } = useCalendar()
+  const saved = isBatchSaved(batchId)
   const script = post.script || {}
   const direction = post.creative_direction || {}
   const details = post.quick_details || {}
@@ -19,25 +20,27 @@ function PostCard({ post, nmls, persona }) {
   }
 
   const handleSaveToCalendar = () => {
-    addEntry({
-      topic: post.title,
-      platform: post.platform,
-      format: post.format,
-      time: bestPostingTime(post.platform),
-      date: new Date(),
-      // Carried along so the calendar's detail modal can show the same full breakdown as
-      // this card, not just the topic/platform/date shell.
-      details: {
-        script: [
-          { label: 'Hook', text: script.hook },
-          isCarousel ? { label: 'Body', slides: script.body } : { label: 'Body', text: script.body },
-          { label: 'CTA', text: script.cta },
-        ],
-        direction,
-        quickDetails: details,
-        hashtags: post.hashtags,
+    upsertEntries(batchId, [
+      {
+        topic: post.title,
+        platform: post.platform,
+        format: post.format,
+        time: bestPostingTime(post.platform),
+        date: new Date(),
+        // Carried along so the calendar's detail modal can show the same full breakdown as
+        // this card, not just the topic/platform/date shell.
+        details: {
+          script: [
+            { label: 'Hook', text: script.hook },
+            isCarousel ? { label: 'Body', slides: script.body } : { label: 'Body', text: script.body },
+            { label: 'CTA', text: script.cta },
+          ],
+          direction,
+          quickDetails: details,
+          hashtags: post.hashtags,
+        },
       },
-    })
+    ])
   }
 
   return (
@@ -55,6 +58,7 @@ function PostCard({ post, nmls, persona }) {
       hashtags={post.hashtags}
       onCopyText={buildCopyText}
       onSaveToCalendar={handleSaveToCalendar}
+      saved={saved}
     >
       {/* Video-format posts already come back with a full spoken script instead — a social
           image only makes sense as a substitute visual for formats that don't have one. */}
@@ -71,7 +75,7 @@ function PostCard({ post, nmls, persona }) {
   )
 }
 
-export default function PostsResponse({ data, nmls, persona }) {
+export default function PostsResponse({ data, nmls, persona, batchId }) {
   const posts = data?.posts || []
   if (posts.length === 0) return null
 
@@ -85,7 +89,7 @@ export default function PostsResponse({ data, nmls, persona }) {
         {data?.intro && <p className="text-sm text-slate-600 mb-4 leading-relaxed">{data.intro}</p>}
         <div className="space-y-4">
           {posts.map((post, i) => (
-            <PostCard key={i} post={post} nmls={nmls} persona={persona} />
+            <PostCard key={i} post={post} nmls={nmls} persona={persona} batchId={`${batchId}-${i}`} />
           ))}
         </div>
       </Section>

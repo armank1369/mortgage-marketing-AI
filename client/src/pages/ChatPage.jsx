@@ -904,6 +904,7 @@ export default function ChatPage() {
                     nmls={nmls}
                     persona={persona}
                     onVideoGenerated={(entryIndex, video) => setCalendarEntryVideo(i, entryIndex, video)}
+                    batchId={msg.id}
                   />
                 </div>
               ) : msg.role === 'assistant' && msg.type === 'clarification' ? (
@@ -916,7 +917,7 @@ export default function ChatPage() {
                 </div>
               ) : msg.role === 'assistant' && msg.type === 'posts' ? (
                 <div className="flex justify-start">
-                  <PostsResponse data={msg.posts} nmls={nmls} persona={persona} />
+                  <PostsResponse data={msg.posts} nmls={nmls} persona={persona} batchId={msg.id} />
                 </div>
               ) : msg.role === 'assistant' ? (
                 // Same card chrome as CampaignResponse's Section component — every AI

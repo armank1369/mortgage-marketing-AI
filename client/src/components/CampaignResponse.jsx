@@ -80,13 +80,17 @@ function calendarEntryDetails(entry) {
   }
 }
 
-function SaveCalendarButton({ calendar }) {
-  const { addEntries } = useCalendar()
-  const [saved, setSaved] = useState(false)
+function SaveCalendarButton({ calendar, batchId }) {
+  const { upsertEntries, isBatchSaved } = useCalendar()
+  // Derived from the calendar's own persisted entries (via batchId) rather than local
+  // component state — a reload or chat switch used to reset a plain useState flag back to
+  // false, silently re-enabling the button and letting a second click duplicate every entry.
+  const saved = isBatchSaved(batchId)
 
   const handleSave = () => {
     const dates = distributeCalendarDates(calendar)
-    addEntries(
+    upsertEntries(
+      batchId,
       calendar.map((entry, i) => ({
         topic: entry.category || entry.caption,
         platform: entry.platform,
@@ -96,17 +100,15 @@ function SaveCalendarButton({ calendar }) {
         details: calendarEntryDetails(entry),
       }))
     )
-    setSaved(true)
   }
 
   return (
     <button
       type="button"
       onClick={handleSave}
-      disabled={saved}
-      className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500"
+      className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
     >
-      {saved ? '✓ Saved to Calendar' : '📅 Save to Calendar'}
+      {saved ? '🔄 Update Saved Calendar' : '📅 Save to Calendar'}
     </button>
   )
 }
@@ -417,7 +419,7 @@ function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
   )
 }
 
-export default function CampaignResponse({ data, nmls, persona, onVideoGenerated }) {
+export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId }) {
   if (!data) return null
   const { content_strategy, platform_breakdown, content_calendar } = data
   const scriptedCount = (content_calendar || []).filter((entry) => entry.video).length
@@ -443,7 +445,7 @@ export default function CampaignResponse({ data, nmls, persona, onVideoGenerated
         subtitle={`${content_calendar?.length || 0} scheduled posts${scriptedCount ? ` · ${scriptedCount} with a video script` : ''}`}
         defaultOpen={false}
         headerAction={
-          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} /> : null
+          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} batchId={batchId} /> : null
         }
       >
         <ContentCalendarBody
