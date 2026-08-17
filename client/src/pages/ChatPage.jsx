@@ -939,19 +939,23 @@ export default function ChatPage() {
                       type="button"
                       onClick={() => setActivePromptCategory(isActive ? null : cat.category)}
                       disabled={isTyping}
-                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      // Bordered/bold "tab" styling (vs. the flat filled pills used for the
+                      // prompts themselves below) so the category row reads as a distinct
+                      // control layer, not just another row of same-looking buttons.
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         isActive
                           ? 'bg-blue-600 border-blue-600 text-white'
-                          : 'bg-slate-100 border-transparent text-slate-500 hover:bg-blue-50 hover:text-blue-700'
+                          : 'bg-white border-slate-300 text-slate-700 hover:border-blue-400 hover:text-blue-700'
                       }`}
                     >
                       {cat.emoji} {cat.category}
+                      <span className="ml-1 text-[10px] align-middle">{isActive ? '▲' : '▼'}</span>
                     </button>
                   )
                 })}
               </div>
               {activePromptCategory && (
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
                   {PROMPT_CATEGORIES.find((cat) => cat.category === activePromptCategory)?.prompts.map((prompt) => (
                     <button
                       key={prompt}
@@ -960,7 +964,7 @@ export default function ChatPage() {
                         setActivePromptCategory(null)
                       }}
                       disabled={isTyping}
-                      className="text-xs bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="text-xs bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 text-slate-500 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {prompt}
                     </button>
