@@ -103,8 +103,19 @@ export const FORMAT_BADGES = {
   video: { icon: '🎥', label: 'Video' },
 }
 
+// Local Y/M/D components, not toISOString() (which is UTC-based and can land on the wrong
+// calendar day near midnight in negative-UTC-offset timezones) — matches the date the user
+// actually sees on their own clock, and mirrors how the Calendar page's own "+ New Entry"
+// form and date-input round-trip already work.
+function todayInputValue() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, saved, children }) {
   const [copied, setCopied] = useState(false)
+  const [pickingDate, setPickingDate] = useState(false)
+  const [dateValue, setDateValue] = useState(todayInputValue)
   const gradient = platformGradient(platform)
   const badge = platform ? platformBadge(platform) : null
   const formatBadge = format ? FORMAT_BADGES[format] : null
@@ -125,6 +136,12 @@ export default function ContentBriefCard({ title, platform, format, script, dire
     } catch {
       // clipboard unavailable — ignore
     }
+  }
+
+  const handleConfirmSave = () => {
+    if (!dateValue) return
+    onSaveToCalendar(dateValue)
+    setPickingDate(false)
   }
 
   return (
@@ -230,13 +247,45 @@ export default function ContentBriefCard({ title, platform, format, script, dire
         <span className="text-[11px] text-slate-400">Draft ready</span>
         <div className="flex items-center gap-1.5">
           {onSaveToCalendar && (
-            <button
-              type="button"
-              onClick={onSaveToCalendar}
-              className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
-            >
-              {saved ? '🔄 Update Saved Calendar' : '📅 Save to Calendar'}
-            </button>
+            pickingDate ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={dateValue}
+                  onChange={(e) => setDateValue(e.target.value)}
+                  autoFocus
+                  className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
+                />
+                <button
+                  type="button"
+                  onClick={handleConfirmSave}
+                  disabled={!dateValue}
+                  aria-label="Confirm date and save"
+                  className="text-xs font-medium text-white bg-lucent-blue hover:bg-lucent-blue-dark disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-2.5 py-1.5 transition-colors"
+                >
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPickingDate(false)}
+                  aria-label="Cancel"
+                  className="text-xs font-medium text-slate-400 hover:text-slate-600 rounded-lg px-2 py-1.5 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setDateValue(todayInputValue())
+                  setPickingDate(true)
+                }}
+                className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
+              >
+                {saved ? '🔄 Update Saved Calendar' : '📅 Save to Calendar'}
+              </button>
+            )
           )}
           <button
             type="button"
