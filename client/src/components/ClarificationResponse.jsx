@@ -23,8 +23,8 @@ function QuestionBlock({ question, selected, customText, onSelectOption, onCusto
               onClick={() => onSelectOption(option)}
               className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
                 selectedOption
-                  ? 'bg-lucent-blue border-lucent-blue text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-lucent-blue hover:text-lucent-blue'
+                  ? 'bg-lucent-navy border-lucent-navy text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-lucent-navy hover:text-lucent-navy'
               }`}
             >
               {/* Radio glyph for single-choice questions (e.g. platform on a single post, or
@@ -132,7 +132,7 @@ export default function ClarificationResponse({ data, submitted, onSubmit }) {
             <button
               type="button"
               onClick={handleContinue}
-              className="bg-lucent-blue hover:bg-lucent-blue-dark text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+              className="bg-lucent-navy hover:bg-lucent-navy-light text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Continue
             </button>

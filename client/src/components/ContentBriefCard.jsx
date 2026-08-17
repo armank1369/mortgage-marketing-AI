@@ -261,7 +261,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
                   onClick={handleConfirmSave}
                   disabled={!dateValue}
                   aria-label="Confirm date and save"
-                  className="text-xs font-medium text-white bg-lucent-blue hover:bg-lucent-blue-dark disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-2.5 py-1.5 transition-colors"
+                  className="text-xs font-medium text-white bg-lucent-navy hover:bg-lucent-navy-light disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-2.5 py-1.5 transition-colors"
                 >
                   ✓
                 </button>
