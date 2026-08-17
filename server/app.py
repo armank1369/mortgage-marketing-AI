@@ -331,17 +331,21 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     'can use a placeholder or sensible default without asking again. Never ask for a specific rate, discount, or '
     'promotion to feature.\n'
     'When you do need to ask, respond with ONLY a single valid JSON object, no prose or markdown fences before or '
-    'after it: {"questions": [{"question": "<question text>", "options": ["<short option>", "<short option>"], '
-    '"allow_custom": <true|false>}]}. This JSON shape is the ONLY acceptable way to ask — never phrase clarifying '
-    'questions as a numbered or bulleted list in prose instead (e.g. "I need three things: 1. ... 2. ... 3. ..."); '
-    'that plain-text phrasing is a formatting failure, not a valid alternative, because the app renders shape (1) '
-    'as clickable answer options and prose questions break that entirely. If you have decided a request needs '
-    'clarifying questions, committing to this exact JSON is mandatory, not optional. Ask at most 4 questions, each '
-    'with 2-6 concrete, relevant checkbox options — the user may select more than one per question (check all that '
-    'apply), and always include a format question (options: "Text-only post", "Single image", "Multi Image Carousel", "Short '
-    'video / Reel") whenever format isn\'t already clear. Set "allow_custom" true only for questions where a '
-    'specific non-pricing fact (a name, date, program detail, testimonial, or case-study detail) might be needed and '
-    'no fixed option could cover it. Never use clarification questions to solicit a specific rate, discount, or '
+    'after it: {"questions": [{"question": "<question text>", "type": "<single|multiple>", "options": '
+    '["<short option>", "<short option>"], "allow_custom": <true|false>}]}. This JSON shape is the ONLY acceptable '
+    'way to ask — never phrase clarifying questions as a numbered or bulleted list in prose instead (e.g. "I need '
+    'three things: 1. ... 2. ... 3. ..."); that plain-text phrasing is a formatting failure, not a valid '
+    'alternative, because the app renders shape (1) as clickable answer options and prose questions break that '
+    'entirely. If you have decided a request needs clarifying questions, committing to this exact JSON is '
+    'mandatory, not optional. Ask at most 4 questions, each with 2-6 concrete, relevant options. Set "type" to '
+    '"multiple" (checkboxes, check all that apply) by default, except set it to "single" (radio buttons, exactly '
+    'one choice) for any question where more than one answer would be contradictory for this request — this '
+    'always includes the platform question (a single post/caption/idea goes out on exactly one platform) and the '
+    'format question (a single post cannot be text-only, a single image, a carousel, AND a video at once). Always '
+    'include a format question (options: "Text-only post", "Single image", "Multi Image Carousel", "Short video / '
+    'Reel") whenever format isn\'t already clear. Set "allow_custom" true only for questions where a specific '
+    'non-pricing fact (a name, date, program detail, testimonial, or case-study detail) might be needed and no '
+    'fixed option could cover it. Never use clarification questions to solicit a specific rate, discount, or '
     'promotion to feature.\n\n'
 
     '2) READY-TO-POST CONTENT: If your response includes one or more finished captions or post drafts, respond '
@@ -483,12 +487,15 @@ CAMPAIGN_CLARIFICATION_PROMPT = (
     'PROCEED and nothing else, so the full campaign can be built. Never ask about something already answered in '
     'the message or in an "Answers:" section.\n\n'
     'Otherwise, respond with ONLY a single valid JSON object, no prose or markdown fences before or after it: '
-    '{"questions": [{"question": "<question text>", "options": ["<short option>", "<short option>"], '
-    '"allow_custom": <true|false>}]}. Ask at most 5 questions, each with 2-6 concrete checkbox options — the user '
-    'may select more than one per question. When the platform and/or cadence questions apply, they must be '
-    'included and listed first, platform before cadence. Set "allow_custom" true for questions like real '
-    'testimonials, case-study details, dates, or program names where a fixed option can\'t capture the real '
-    'answer. Never include a specific rate, discount, promotion, or pricing-offer option.'
+    '{"questions": [{"question": "<question text>", "type": "<single|multiple>", "options": ["<short option>", '
+    '"<short option>"], "allow_custom": <true|false>}]}. Ask at most 5 questions, each with 2-6 concrete options. '
+    'Set "type" to "multiple" (checkboxes, check all that apply) by default — this includes the platform question, '
+    'since a campaign can genuinely span several platforms at once. Set "type" to "single" (radio buttons, exactly '
+    'one choice) for any question with one mutually exclusive right answer for this request, such as the cadence '
+    'question (a calendar has one posting cadence, not several at once). When the platform and/or cadence '
+    'questions apply, they must be included and listed first, platform before cadence. Set "allow_custom" true '
+    'for questions like real testimonials, case-study details, dates, or program names where a fixed option '
+    'can\'t capture the real answer. Never include a specific rate, discount, promotion, or pricing-offer option.'
 )
 
 # Structured-output schema mirroring CAMPAIGN_FORMAT_PROMPT — guarantees valid JSON
@@ -896,6 +903,7 @@ def _parse_clarification(raw_response):
             cleaned = {
                 **question,
                 'options': options if isinstance(options, list) else question.get('options'),
+                'type': question.get('type') if question.get('type') in ('single', 'multiple') else 'multiple',
             }
             if not isinstance(options, list) or options or cleaned.get('allow_custom'):
                 cleaned_questions.append(cleaned)
