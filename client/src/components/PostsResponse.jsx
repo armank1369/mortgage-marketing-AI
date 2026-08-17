@@ -19,7 +19,7 @@ function PostCard({ post, nmls, persona, batchId }) {
     return [script.hook || '', bodyText, script.cta || ''].filter(Boolean).join('\n\n')
   }
 
-  const handleSaveToCalendar = (dateInputValue) => {
+  const handleSaveToCalendar = (dateInputValue, timeValue) => {
     // dateInputValue is a "YYYY-MM-DD" string from the date-picker's <input type="date">.
     // Built from local Y/M/D components rather than `new Date(dateInputValue)` — the latter
     // parses as UTC midnight, which can land on the previous calendar day once converted back
@@ -30,7 +30,7 @@ function PostCard({ post, nmls, persona, batchId }) {
         topic: post.title,
         platform: post.platform,
         format: post.format,
-        time: bestPostingTime(post.platform),
+        time: timeValue || bestPostingTime(post.platform),
         date: new Date(y, m - 1, d),
         // Carried along so the calendar's detail modal can show the same full breakdown as
         // this card, not just the topic/platform/date shell.

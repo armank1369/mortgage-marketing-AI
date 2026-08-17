@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import platformBadge, { platformGradient } from './platformBadge'
+import { recommendedPostingTimes } from '../utils/postingTimes'
 
 export function ScriptLine({ label, time, text }) {
   if (!text) return null
@@ -116,6 +117,10 @@ export default function ContentBriefCard({ title, platform, format, script, dire
   const [copied, setCopied] = useState(false)
   const [pickingDate, setPickingDate] = useState(false)
   const [dateValue, setDateValue] = useState(todayInputValue)
+  // Locked to a curated per-platform list (not a free-typed time) so a saved post always lands
+  // in one of that platform's actual best-practice posting windows.
+  const timeOptions = recommendedPostingTimes(platform)
+  const [timeValue, setTimeValue] = useState(timeOptions[0])
   const gradient = platformGradient(platform)
   const badge = platform ? platformBadge(platform) : null
   const formatBadge = format ? FORMAT_BADGES[format] : null
@@ -140,7 +145,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
 
   const handleConfirmSave = () => {
     if (!dateValue) return
-    onSaveToCalendar(dateValue)
+    onSaveToCalendar(dateValue, timeValue)
     setPickingDate(false)
   }
 
@@ -248,7 +253,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
         <div className="flex items-center gap-1.5">
           {onSaveToCalendar && (
             pickingDate ? (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap justify-end">
                 <input
                   type="date"
                   value={dateValue}
@@ -256,6 +261,16 @@ export default function ContentBriefCard({ title, platform, format, script, dire
                   autoFocus
                   className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
                 />
+                <select
+                  value={timeValue}
+                  onChange={(e) => setTimeValue(e.target.value)}
+                  aria-label="Posting time"
+                  className="text-xs border border-slate-300 rounded-lg pl-2 pr-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
+                >
+                  {timeOptions.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={handleConfirmSave}
@@ -279,6 +294,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
                 type="button"
                 onClick={() => {
                   setDateValue(todayInputValue())
+                  setTimeValue(timeOptions[0])
                   setPickingDate(true)
                 }}
                 className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
