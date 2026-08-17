@@ -9,7 +9,7 @@ import Section from '../components/Section'
 import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
 import { NMLS_NUMBER } from '../constants'
-import lucentLogo from '../assets/lucent-logo.png'
+import lucieAvatar from '../assets/lucie-avatar.jpg'
 
 // crypto.randomUUID() only exists in a secure context (HTTPS, or the special-cased
 // "localhost") — it throws on plain http://<lan-ip>, which is exactly how this app gets
@@ -631,7 +631,7 @@ export default function ChatPage() {
         <div className="p-5 border-b border-slate-800 md:border-slate-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <img src={lucentLogo} alt="Lucent" className="w-7 h-7 rounded-md object-cover shrink-0" />
+              <img src={lucieAvatar} alt="Lucie" className="w-7 h-7 rounded-full object-cover shrink-0" />
               {/* Sidebar is too narrow (w-72, minus icon/padding) for the name + tagline to fit
                   on one line — stacked here, with the tagline muted so it reads as secondary. */}
               <div className="leading-tight">
