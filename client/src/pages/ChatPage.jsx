@@ -630,10 +630,15 @@ export default function ChatPage() {
         <div className="p-5 border-b border-slate-800 md:border-slate-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+              <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                 JM
               </div>
-              <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie: Lucent's Social Media Strategist</h1>
+              {/* Sidebar is too narrow (w-72, minus icon/padding) for the name + tagline to fit
+                  on one line — stacked here, with the tagline muted so it reads as secondary. */}
+              <div className="leading-tight">
+                <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie</h1>
+                <p className="text-[10px] font-medium text-slate-300 md:text-slate-500">Lucent's AI Social Media Assistant</p>
+              </div>
             </div>
             <button
               type="button"
@@ -828,7 +833,13 @@ export default function ChatPage() {
           >
             <MenuIcon />
           </button>
-          <span className="text-sm font-bold text-white truncate">Lucie: Lucent's Social Media Strategist</span>
+          {/* Mobile bar has room for both on one line (confirmed at 390px width) — bold name +
+              lighter muted tagline, matching the reference lockup style. truncate is still a
+              safety net for narrower devices rather than an awkward mid-word wrap. */}
+          <span className="truncate">
+            <span className="text-sm font-bold text-white">Lucie</span>{' '}
+            <span className="text-xs font-medium text-slate-400">Lucent's AI Social Media Assistant</span>
+          </span>
         </div>
 
         {activeNav === 'calendar' ? (
