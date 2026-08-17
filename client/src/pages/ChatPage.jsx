@@ -289,15 +289,32 @@ const TITLE_STOPWORDS = new Set([
 // Client-side heuristic (no API call) — picks the first few non-filler words of the opening
 // message as a short, topic-derived title, replacing the old behavior where every new chat
 // under the same persona showed that persona's name as its title and looked identical.
+const TITLE_MAX_CHARS = 32
+
 function deriveSmartTitle(message) {
   const clean = String(message || '').replace(/\s+/g, ' ').trim().replace(/[?!.,:;"“”]+$/g, '')
   if (!clean) return 'New Chat'
   const words = clean.split(' ').filter((w) => w && !TITLE_STOPWORDS.has(w.toLowerCase()))
-  const picked = (words.length > 0 ? words : clean.split(' ')).slice(0, 5)
-  const title = picked
+  const picked = (words.length > 0 ? words : clean.split(' ')).slice(0, 4)
     .map((w) => (/^[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(' ')
-  return title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title
+
+  // Truncate on word boundaries rather than slicing mid-word ("Mortgage" -> "Mor...") — drop
+  // trailing words until what's left fits, always keeping at least one word even if that one
+  // word alone still needs a hard character cut.
+  const kept = []
+  let length = 0
+  for (const w of picked) {
+    const nextLength = length + (kept.length > 0 ? 1 : 0) + w.length
+    if (nextLength > TITLE_MAX_CHARS && kept.length > 0) break
+    kept.push(w)
+    length = nextLength
+  }
+  const title = kept.join(' ')
+  const truncated = kept.length < picked.length
+  if (title.length > TITLE_MAX_CHARS) {
+    return `${title.slice(0, TITLE_MAX_CHARS - 3).trimEnd()}...`
+  }
+  return truncated ? `${title}...` : title
 }
 
 // Short display text for one message, regardless of its type — a campaign/posts/clarification
@@ -873,7 +890,9 @@ export default function ChatPage() {
                         className="w-full pr-14 text-sm font-semibold rounded-md border px-2 py-1 outline-none bg-white border-slate-300 text-slate-900 focus:border-blue-500"
                       />
                     ) : (
-                      <span className="w-full pr-14 text-sm font-semibold truncate">{displayLabel}</span>
+                      <span className="w-full pr-14 text-sm font-semibold truncate" title={displayLabel}>
+                        {displayLabel}
+                      </span>
                     )}
                     {lastEdited && (
                       <span
