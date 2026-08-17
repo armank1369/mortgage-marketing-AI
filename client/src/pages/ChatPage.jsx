@@ -633,7 +633,7 @@ export default function ChatPage() {
               <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
                 JM
               </div>
-              <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie</h1>
+              <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie: Lucent's Social Media Strategist</h1>
             </div>
             <button
               type="button"
@@ -819,16 +819,16 @@ export default function ChatPage() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile top bar — hamburger to open the drawer, hidden on desktop where the sidebar is always visible */}
-        <div className="md:hidden flex items-center gap-3 bg-slate-900 px-4 py-3 shrink-0">
+        <div className="md:hidden flex items-center gap-3 bg-slate-900 px-4 py-3 shrink-0 min-w-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            className="text-slate-300 hover:text-white transition-colors p-1"
+            className="text-slate-300 hover:text-white transition-colors p-1 shrink-0"
           >
             <MenuIcon />
           </button>
-          <span className="text-sm font-bold text-white">Lucie</span>
+          <span className="text-sm font-bold text-white truncate">Lucie: Lucent's Social Media Strategist</span>
         </div>
 
         {activeNav === 'calendar' ? (
