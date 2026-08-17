@@ -363,14 +363,6 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
             </div>
           </div>
 
-          <SocialImageGenerator
-            title={entry.category}
-            script={{ hook: script.intro?.text, body: script.body?.text, cta: script.cta?.text }}
-            platform={entry.platform}
-            persona={persona}
-            nmls={nmls}
-          />
-
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100">
             <span className="text-[11px] text-slate-400">Draft ready</span>
             <button
@@ -382,6 +374,25 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
             </button>
           </div>
         </>
+      )}
+
+      {/* Video-format slots get a script instead (above); every other format gets a graphic
+          option here, since there's no script to build one from. */}
+      {entry.format && entry.format !== 'video' && (
+        <SocialImageGenerator
+          title={entry.category}
+          script={{
+            hook: '',
+            body:
+              entry.format === 'carousel' && Array.isArray(entry.slides) && entry.slides.length > 0
+                ? entry.slides
+                : entry.caption,
+            cta: '',
+          }}
+          platform={entry.platform}
+          persona={persona}
+          nmls={nmls}
+        />
       )}
     </div>
   )
