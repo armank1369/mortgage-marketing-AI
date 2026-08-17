@@ -95,7 +95,7 @@ const LOADING_TIPS = [
 ]
 
 const LOADING_STAGE_2_DELAY_MS = 10000
-const LOADING_TIP_ROTATE_MS = 6000
+const LOADING_TIP_ROTATE_MS = 10000
 
 function pickRandom(list, excluding) {
   if (list.length <= 1) return list[0]
