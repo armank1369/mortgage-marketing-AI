@@ -5,8 +5,11 @@ import { useCalendar } from '../context/CalendarContext'
 import { bestPostingTime } from '../utils/postingTimes'
 
 function PostCard({ post, nmls, persona, batchId }) {
-  const { upsertEntries, isBatchSaved } = useCalendar()
+  const { entries, upsertEntries, isBatchSaved } = useCalendar()
   const saved = isBatchSaved(batchId)
+  // This post's own previously-saved entry (if any) is excluded so re-opening the picker on an
+  // already-saved post doesn't flag its own existing slot as a conflict with itself.
+  const bookedTimes = entries.filter((entry) => entry.batchId !== batchId && entry.platform === post.platform)
   const script = post.script || {}
   const direction = post.creative_direction || {}
   const details = post.quick_details || {}
@@ -64,6 +67,7 @@ function PostCard({ post, nmls, persona, batchId }) {
       onCopyText={buildCopyText}
       onSaveToCalendar={handleSaveToCalendar}
       saved={saved}
+      bookedTimes={bookedTimes}
     >
       {/* Video-format posts already come back with a full spoken script instead — a social
           image only makes sense as a substitute visual for formats that don't have one. */}

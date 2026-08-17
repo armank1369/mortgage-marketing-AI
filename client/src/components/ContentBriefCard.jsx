@@ -113,14 +113,28 @@ function todayInputValue() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, saved, children }) {
+function parseDateInputValue(dateValue) {
+  const [y, m, d] = dateValue.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, saved, bookedTimes, children }) {
   const [copied, setCopied] = useState(false)
   const [pickingDate, setPickingDate] = useState(false)
   const [dateValue, setDateValue] = useState(todayInputValue)
-  // Locked to a curated per-platform list (not a free-typed time) so a saved post always lands
-  // in one of that platform's actual best-practice posting windows.
-  const timeOptions = recommendedPostingTimes(platform)
-  const [timeValue, setTimeValue] = useState(timeOptions[0])
+  // Every on-the-half-hour option in that platform+weekday's recommended window, not a fixed
+  // handful — recomputed whenever the picked date changes since the window depends on the day
+  // of week the date falls on.
+  const timeOptions = recommendedPostingTimes(platform, parseDateInputValue(dateValue))
+  // Other already-saved posts to the same platform on the same date — same-platform only,
+  // since two different platforms posting at the same moment isn't actually a conflict.
+  const takenTimes = new Set(
+    (bookedTimes || [])
+      .filter((entry) => entry.date.toDateString() === parseDateInputValue(dateValue).toDateString())
+      .map((entry) => entry.time)
+  )
+  const [timeValue, setTimeValue] = useState(() => timeOptions.find((t) => !takenTimes.has(t)) || '')
+  const allTimesTaken = timeOptions.length > 0 && timeOptions.every((t) => takenTimes.has(t))
   const gradient = platformGradient(platform)
   const badge = platform ? platformBadge(platform) : null
   const formatBadge = format ? FORMAT_BADGES[format] : null
@@ -143,8 +157,22 @@ export default function ContentBriefCard({ title, platform, format, script, dire
     }
   }
 
+  // Changing the date can change which weekday-window applies (and which times are already
+  // booked) — re-anchor the selected time to the new date's first open slot rather than
+  // silently keeping a time that may no longer be valid or may now conflict.
+  const handleDateChange = (newDateValue) => {
+    setDateValue(newDateValue)
+    const newTimeOptions = recommendedPostingTimes(platform, parseDateInputValue(newDateValue))
+    const newTaken = new Set(
+      (bookedTimes || [])
+        .filter((entry) => entry.date.toDateString() === parseDateInputValue(newDateValue).toDateString())
+        .map((entry) => entry.time)
+    )
+    setTimeValue(newTimeOptions.find((t) => !newTaken.has(t)) || '')
+  }
+
   const handleConfirmSave = () => {
-    if (!dateValue) return
+    if (!dateValue || !timeValue || takenTimes.has(timeValue)) return
     onSaveToCalendar(dateValue, timeValue)
     setPickingDate(false)
   }
@@ -253,48 +281,69 @@ export default function ContentBriefCard({ title, platform, format, script, dire
         <div className="flex items-center gap-1.5">
           {onSaveToCalendar && (
             pickingDate ? (
-              <div className="flex items-center gap-1 flex-wrap justify-end">
-                <input
-                  type="date"
-                  value={dateValue}
-                  onChange={(e) => setDateValue(e.target.value)}
-                  autoFocus
-                  className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
-                />
-                <select
-                  value={timeValue}
-                  onChange={(e) => setTimeValue(e.target.value)}
-                  aria-label="Posting time"
-                  className="text-xs border border-slate-300 rounded-lg pl-2 pr-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
-                >
-                  {timeOptions.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleConfirmSave}
-                  disabled={!dateValue}
-                  aria-label="Confirm date and save"
-                  className="text-xs font-medium text-white bg-lucent-navy hover:bg-lucent-navy-light disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-2.5 py-1.5 transition-colors"
-                >
-                  ✓
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPickingDate(false)}
-                  aria-label="Cancel"
-                  className="text-xs font-medium text-slate-400 hover:text-slate-600 rounded-lg px-2 py-1.5 transition-colors"
-                >
-                  ✕
-                </button>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1 flex-wrap justify-end">
+                  <input
+                    type="date"
+                    value={dateValue}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                    autoFocus
+                    className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
+                  />
+                  <select
+                    value={timeValue}
+                    onChange={(e) => setTimeValue(e.target.value)}
+                    aria-label="Posting time"
+                    disabled={allTimesTaken}
+                    className="text-xs border border-slate-300 rounded-lg pl-2 pr-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {timeOptions.map((t) => (
+                      <option key={t} value={t} disabled={takenTimes.has(t)}>
+                        {t}{takenTimes.has(t) ? ' (booked)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleConfirmSave}
+                    disabled={!dateValue || !timeValue || takenTimes.has(timeValue)}
+                    aria-label="Confirm date and save"
+                    className="text-xs font-medium text-white bg-lucent-navy hover:bg-lucent-navy-light disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-2.5 py-1.5 transition-colors"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickingDate(false)}
+                    aria-label="Cancel"
+                    className="text-xs font-medium text-slate-400 hover:text-slate-600 rounded-lg px-2 py-1.5 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {allTimesTaken ? (
+                  <p className="text-[11px] text-red-600">
+                    Every recommended {platform} time on this date is already booked — try another date.
+                  </p>
+                ) : takenTimes.has(timeValue) ? (
+                  <p className="text-[11px] text-red-600">
+                    {timeValue} is already booked for {platform} on this date.
+                  </p>
+                ) : null}
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => {
-                  setDateValue(todayInputValue())
-                  setTimeValue(timeOptions[0])
+                  const initialDate = todayInputValue()
+                  setDateValue(initialDate)
+                  const initialTaken = new Set(
+                    (bookedTimes || [])
+                      .filter((entry) => entry.date.toDateString() === parseDateInputValue(initialDate).toDateString())
+                      .map((entry) => entry.time)
+                  )
+                  const initialOptions = recommendedPostingTimes(platform, parseDateInputValue(initialDate))
+                  setTimeValue(initialOptions.find((t) => !initialTaken.has(t)) || '')
                   setPickingDate(true)
                 }}
                 className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
