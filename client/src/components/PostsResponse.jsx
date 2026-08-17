@@ -1,7 +1,10 @@
 import Section from './Section'
 import ContentBriefCard from './ContentBriefCard'
+import { useCalendar } from '../context/CalendarContext'
+import { bestPostingTime } from '../utils/postingTimes'
 
 function PostCard({ post }) {
+  const { addEntry } = useCalendar()
   const script = post.script || {}
   const direction = post.creative_direction || {}
   const details = post.quick_details || {}
@@ -12,6 +15,28 @@ function PostCard({ post }) {
       ? script.body.map((slide, i) => `Slide ${i + 2}: ${slide}`).join('\n\n')
       : script.body || ''
     return [script.hook || '', bodyText, script.cta || ''].filter(Boolean).join('\n\n')
+  }
+
+  const handleSaveToCalendar = () => {
+    addEntry({
+      topic: post.title,
+      platform: post.platform,
+      format: post.format,
+      time: bestPostingTime(post.platform),
+      date: new Date(),
+      // Carried along so the calendar's detail modal can show the same full breakdown as
+      // this card, not just the topic/platform/date shell.
+      details: {
+        script: [
+          { label: 'Hook', text: script.hook },
+          isCarousel ? { label: 'Body', slides: script.body } : { label: 'Body', text: script.body },
+          { label: 'CTA', text: script.cta },
+        ],
+        direction,
+        quickDetails: details,
+        hashtags: post.hashtags,
+      },
+    })
   }
 
   return (
@@ -28,6 +53,7 @@ function PostCard({ post }) {
       details={details}
       hashtags={post.hashtags}
       onCopyText={buildCopyText}
+      onSaveToCalendar={handleSaveToCalendar}
     />
   )
 }
