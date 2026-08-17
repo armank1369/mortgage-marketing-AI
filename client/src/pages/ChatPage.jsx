@@ -633,7 +633,7 @@ export default function ChatPage() {
               <div className="w-7 h-7 rounded-md bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
                 JM
               </div>
-              <h1 className="text-sm font-bold text-white md:text-slate-900">MoJoJo SMM AI</h1>
+              <h1 className="text-sm font-bold text-white md:text-slate-900">Lucie</h1>
             </div>
             <button
               type="button"
@@ -828,7 +828,7 @@ export default function ChatPage() {
           >
             <MenuIcon />
           </button>
-          <span className="text-sm font-bold text-white">MoJoJo SMM AI</span>
+          <span className="text-sm font-bold text-white">Lucie</span>
         </div>
 
         {activeNav === 'calendar' ? (
