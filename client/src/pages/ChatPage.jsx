@@ -461,6 +461,16 @@ export default function ChatPage() {
     )
 
     setInput('')
+    // Preset prompts stay fixed until the user has actually sent something (or hits "More")
+    // — rerolling on every category open felt like the options were shifting under them.
+    // Once they've sent a first query, it's safe to hand back a fresh set for next time.
+    setDisplayedPrompts(() => {
+      const next = {}
+      PROMPT_CATEGORIES.forEach((cat) => {
+        next[cat.category] = pickRandomPrompts(cat.prompts)
+      })
+      return next
+    })
     sendMessage(msg)
   }
 
@@ -968,14 +978,7 @@ export default function ChatPage() {
                     <button
                       key={cat.category}
                       type="button"
-                      onClick={() => {
-                        if (isActive) {
-                          setActivePromptCategory(null)
-                          return
-                        }
-                        setActivePromptCategory(cat.category)
-                        setDisplayedPrompts((prev) => ({ ...prev, [cat.category]: pickRandomPrompts(cat.prompts) }))
-                      }}
+                      onClick={() => setActivePromptCategory(isActive ? null : cat.category)}
                       disabled={isTyping}
                       // Bordered/bold "tab" styling (vs. the flat filled pills used for the
                       // prompts themselves below) so the category row reads as a distinct
@@ -1007,6 +1010,19 @@ export default function ChatPage() {
                       {prompt}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cat = PROMPT_CATEGORIES.find((c) => c.category === activePromptCategory)
+                      if (cat) {
+                        setDisplayedPrompts((prev) => ({ ...prev, [cat.category]: pickRandomPrompts(cat.prompts) }))
+                      }
+                    }}
+                    disabled={isTyping}
+                    className="text-xs text-slate-400 hover:text-blue-700 border border-dashed border-slate-300 hover:border-blue-300 px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🔄 More
+                  </button>
                 </div>
               )}
             </div>
