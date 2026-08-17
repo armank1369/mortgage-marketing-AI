@@ -194,6 +194,15 @@ CAMPAIGN_INTENT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Non-campaign requests that are still broad or time-bound ("What should I post this week?",
+# "What should I post today?") don't clearly name a single deliverable the way "give me a
+# caption" does — they could reasonably resolve to one post or several. Only checked when
+# CAMPAIGN_INTENT_PATTERN didn't already match, so it never overrides the full-campaign path.
+AMBIGUOUS_SCOPE_PATTERN = re.compile(
+    r'\b(week|today|month|strategy|calendar)\b',
+    re.IGNORECASE,
+)
+
 CAMPAIGN_FORMAT_PROMPT = (
     'OUTPUT FORMAT — CONTENT CAMPAIGN REQUEST. The user is asking you to build a content strategy and/or posting '
     'calendar, not a single caption. Respond with ONLY a single valid JSON object — no prose, no markdown fences, '
@@ -398,6 +407,21 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     '"Answers:" section, the user is responding to clarifying questions you already asked — do not ask again. Use '
     'shape (2) to generate the actual content now, treating any question left unanswered there as "use your '
     'judgment / a placeholder."'
+)
+
+# Appended to NON_CAMPAIGN_FORMAT_PROMPT only when AMBIGUOUS_SCOPE_PATTERN matches the message —
+# overrides that prompt's default single-select rule for platform/format, since a broad or
+# time-bound request like "What should I post this week?" hasn't committed to one deliverable
+# the way "give me a caption" has.
+AMBIGUOUS_SCOPE_PROMPT = (
+    'AMBIGUOUS SCOPE: this request uses broad or time-bound phrasing (e.g. "this week", "today", "this month", '
+    '"strategy") rather than naming one specific deliverable — it could reasonably resolve to a single post or to '
+    'several. If you ask clarifying questions per shape (1), every question — including platform, format, and '
+    'topic — must use "type": "multiple" (checkboxes, check all that apply) here, never "single". Do not lock the '
+    'user into one platform, one format, or one topic for a request this open-ended. Phrase the platform, format, '
+    'and topic questions with inclusive, pluralized wording when they apply — exactly like this: "What '
+    'platform(s) are we targeting?", "What format(s) are you considering?", and "What topic(s) should we '
+    'cover?".'
 )
 
 # Drives the "Generate social image" action on a video brief — picks one of six fixed
@@ -876,7 +900,7 @@ def _extract_json_object(text, key_hint):
     return None
 
 
-def _parse_clarification(raw_response):
+def _parse_clarification(raw_response, force_multiple=False):
     if not raw_response:
         return None
     text = raw_response.strip()
@@ -900,10 +924,14 @@ def _parse_clarification(raw_response):
                     if not has_restricted_pricing_offer(str(option))
                 ]
 
+            # force_multiple is a backstop for AMBIGUOUS_SCOPE_PROMPT — a broad/time-bound
+            # request shouldn't lock the user into one answer for any question, even if the
+            # model didn't fully comply with the prompt's "type": "multiple" instruction.
+            resolved_type = question.get('type') if question.get('type') in ('single', 'multiple') else 'multiple'
             cleaned = {
                 **question,
                 'options': options if isinstance(options, list) else question.get('options'),
-                'type': question.get('type') if question.get('type') in ('single', 'multiple') else 'multiple',
+                'type': 'multiple' if force_multiple else resolved_type,
             }
             if not isinstance(options, list) or options or cleaned.get('allow_custom'):
                 cleaned_questions.append(cleaned)
@@ -1340,6 +1368,9 @@ def chat():
     # A follow-up carrying answers from a prior clarifying round — skip asking again,
     # regardless of path, per each format prompt's "ANSWERING A FOLLOW-UP" rule.
     is_followup_answer = message.strip().lower().startswith('original request:')
+    # Only relevant on the non-campaign path — CAMPAIGN_INTENT_PATTERN already routes true
+    # campaign requests elsewhere, so this only fires for broad/time-bound single requests.
+    is_ambiguous_scope = not is_campaign and bool(AMBIGUOUS_SCOPE_PATTERN.search(message))
 
     persona_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS['self-employed'])
     shared_system_prompt = (
@@ -1381,6 +1412,8 @@ def chat():
             system_prompt = system_prompt.replace('{today}', date.today().strftime('%A, %B %d, %Y'))
         else:
             system_prompt += '\n\n' + NON_CAMPAIGN_FORMAT_PROMPT
+            if is_ambiguous_scope:
+                system_prompt += '\n\n' + AMBIGUOUS_SCOPE_PROMPT
         system_prompt = system_prompt.replace('{nmls}', nmls)
 
         request_kwargs = {
@@ -1450,7 +1483,7 @@ def chat():
                 # rather than failing the request.
                 pass
         else:
-            clarification = _parse_clarification(raw_response)
+            clarification = _parse_clarification(raw_response, force_multiple=is_ambiguous_scope)
             if clarification:
                 with get_db() as db:
                     db.execute(
