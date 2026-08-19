@@ -27,11 +27,28 @@ def build_system(stable_text, *variable_parts):
     # part with cache_control lets Anthropic reuse it instead of reprocessing it as fresh
     # input tokens on every single call. The variable parts are appended as separate,
     # uncached blocks after the cache breakpoint.
-    blocks = [{'type': 'text', 'text': stable_text, 'cache_control': {'type': 'ephemeral'}}]
+    # ttl '1h' (vs. the 5-minute default) trades a higher cache-write cost for surviving the
+    # gaps typical of this single-broker usage pattern (a burst of requests, then idle) —
+    # a 5-minute cache is likely to expire between sessions and never get read from.
+    blocks = [{'type': 'text', 'text': stable_text, 'cache_control': {'type': 'ephemeral', 'ttl': '1h'}}]
     for part in variable_parts:
         if part:
             blocks.append({'type': 'text', 'text': part})
     return blocks
+
+
+def log_usage(label, result):
+    # Prints real cache/token counts from the API's own usage object (Render captures stdout
+    # in its log stream) so cache-hit-rate and cost assumptions can be checked against fact
+    # instead of estimated — see the char-count-based estimates in the token audit, which are
+    # only approximate and were wrong once already about which model/limits actually apply.
+    u = result.usage
+    cache_write = getattr(u, 'cache_creation_input_tokens', None) or 0
+    cache_read = getattr(u, 'cache_read_input_tokens', None) or 0
+    print(
+        f'[usage] {label} input={u.input_tokens} cache_write={cache_write} '
+        f'cache_read={cache_read} output={u.output_tokens}'
+    )
 
 
 BASE_PROMPT = (
@@ -1293,6 +1310,7 @@ def social_image():
             max_tokens=1200,
             thinking={'type': 'disabled'},
         )
+        log_usage('social_image', result)
         raw_response = next((b.text for b in result.content if b.type == 'text'), '')
         social_image_data = _parse_social_image(raw_response)
         if not social_image_data:
@@ -1337,6 +1355,7 @@ def video_brief():
             thinking={'type': 'disabled'},
             output_config={'format': {'type': 'json_schema', 'schema': VIDEO_BRIEF_JSON_SCHEMA}},
         )
+        log_usage('video_brief', result)
         raw_response = next((b.text for b in result.content if b.type == 'text'), '')
         try:
             video = json.loads(raw_response)
@@ -1395,6 +1414,7 @@ def chat():
                 max_tokens=1500,
                 thinking={'type': 'disabled'},
             )
+            log_usage('campaign_clarification_check', check_result)
             check_raw = next((b.text for b in check_result.content if b.type == 'text'), '')
             clarification = _parse_clarification(check_raw)
             if clarification:
@@ -1439,6 +1459,7 @@ def chat():
             request_kwargs['max_tokens'] = 4096
 
         result = anthropic_client.messages.create(**request_kwargs)
+        log_usage('chat_campaign' if is_campaign else 'chat_non_campaign', result)
         raw_response = next((b.text for b in result.content if b.type == 'text'), '')
 
         if is_campaign:
@@ -1448,27 +1469,13 @@ def chat():
 
                 shortfalls = _campaign_post_count_shortfalls(campaign)
                 if shortfalls:
-                    # One bounded retry, not a loop: spell out exactly which platforms came
-                    # up short against their own stated total_posts and by how much. If the
-                    # retry still doesn't fully fix it, we keep its result anyway rather than
-                    # retrying indefinitely — verified this single retry meaningfully closes
-                    # the gap in practice.
-                    shortfall_note = (
-                        'YOUR PREVIOUS ATTEMPT UNDER-DELIVERED ON POST COUNT — FIX THIS: ' + '; '.join(
-                            f'{platform} needed {target} entries but you only wrote {actual}'
-                            for platform, actual, target in shortfalls
-                        ) + '. Recount every platform in content_calendar against its platform_breakdown '
-                        'total_posts value and make sure every platform has exactly that many entries, '
-                        'distributed evenly across every week of the requested duration, before responding.'
-                    )
-                    retry_kwargs = dict(request_kwargs)
-                    retry_kwargs['system'] = build_system(system_prompt, recent_idea_context, shortfall_note)
-                    retry_result = anthropic_client.messages.create(**retry_kwargs)
-                    retry_raw = next((b.text for b in retry_result.content if b.type == 'text'), '')
-                    try:
-                        campaign = strip_markdown_deep(json.loads(retry_raw))
-                    except json.JSONDecodeError:
-                        pass  # keep the original (short) campaign rather than failing outright
+                    # Previously fired a full second (potentially call-doubling) generation
+                    # here to correct the count. Removed per product decision: a calendar
+                    # that's slightly short on some platforms is an acceptable outcome, but
+                    # paying double output tokens for a retry that doesn't even guarantee a
+                    # full fix is not. Kept as a log line (not a fix) so real shortfall
+                    # frequency/severity can still be tracked from production traffic.
+                    print(f'[campaign_shortfall] {shortfalls}')
 
                 campaign, compliance_flags = enforce_campaign_compliance(campaign, nmls)
                 with get_db() as db:
