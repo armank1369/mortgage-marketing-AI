@@ -1,4 +1,4 @@
-# Lucie: AI Social Media Assistant for Mortgage Brokers
+# Lucie: Lucent's AI Social Media Assistant
 
 Lucie is a compliance-aware social media drafting and planning assistant built for Lucent Brokerage. The prototype pairs a React/Vite frontend with a Flask backend, powered by the Anthropic Claude API (`claude-sonnet-5`), to automate content generation while enforcing mortgage industry fair-housing guidelines and RESPA regulations.
 
