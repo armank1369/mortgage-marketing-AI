@@ -23,6 +23,7 @@ Example:
 
 ```text
 server/.env
+```
 
 ## Preview / Staging
 
