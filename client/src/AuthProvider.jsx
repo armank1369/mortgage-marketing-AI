@@ -1,6 +1,6 @@
 import { NeonAuthUIProvider } from '@neondatabase/neon-js/auth/react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authClient } from './lib/neon'
+import { authClient } from './lib/neon/neon.js'
 import '@neondatabase/neon-js/ui/css'
 
 export default function AuthProvider({ children }) {
