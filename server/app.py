@@ -8,6 +8,7 @@ from collections import Counter
 from datetime import date
 import anthropic
 from dotenv import load_dotenv
+from auth_utils import get_authenticated_user, require_auth
 
 load_dotenv()
 
@@ -1205,6 +1206,12 @@ init_db()
 @app.route('/api/hello')
 def hello():
     return jsonify({'message': 'Flask backend is running!'})
+
+
+@app.route('/api/auth/me')
+@require_auth
+def auth_me():
+    return jsonify({'user': get_authenticated_user()})
 
 
 @app.route('/api/preferences', methods=['GET'])

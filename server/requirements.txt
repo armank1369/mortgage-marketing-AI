@@ -4,3 +4,4 @@ anthropic==0.120.2
 python-dotenv>=1.0.0
 gunicorn==23.0.0
 psycopg[binary]
+PyJWT[crypto]>=2.10,<3

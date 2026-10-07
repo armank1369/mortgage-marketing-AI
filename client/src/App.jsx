@@ -10,6 +10,7 @@ import { CalendarProvider } from './context/CalendarContext'
 import PreferenceSetup from './pages/PreferenceSetup'
 import ChatPage from './pages/ChatPage'
 import AuthPage from './pages/AuthPage'
+import AuthDebugPage from './pages/AuthDebugPage'
 
 function AppContent() {
   const { preferences } = usePreferences()
@@ -51,6 +52,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/auth/:pathname" element={<AuthPage />} />
+      {import.meta.env.DEV && (
+        <Route path="/debug/auth" element={<AuthDebugPage />} />
+      )}
       <Route path="/*" element={<ProtectedLucie />} />
     </Routes>
   )
