@@ -40,3 +40,20 @@ Production should use a separate Neon production database branch and production 
 Production credentials and secrets must not be stored in the repository or in local development `.env` files.
 
 Production configuration should be provided through the production deployment environment.
+
+## Environment Separation Rules
+
+- Local development must use the Neon `development` branch.
+- Preview/staging should use an isolated non-production Neon branch.
+- Production should use the Neon `production` branch.
+- Development, preview/staging, and production credentials should remain separate.
+- Never commit real `.env` files, database credentials, API keys, or other secrets to Git.
+- `server/.env.example` contains variable names and placeholders only.
+- `DATABASE_URL` is a server-side variable and must not be exposed to the React frontend.
+- Deployment environment variables should be configured in the appropriate hosting environment rather than committed to the repository.
+
+## Neon Auth
+
+Neon Auth configuration is separate from the PostgreSQL `DATABASE_URL`.
+
+The Neon Auth URL and JWKS information are intended for authentication and will be used in the later authentication implementation.
