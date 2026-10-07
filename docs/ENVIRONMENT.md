@@ -23,3 +23,23 @@ Example:
 
 ```text
 server/.env
+
+## Preview / Staging
+
+Preview or staging deployments are intended to use a separate Neon database branch and separate environment variables from production.
+
+The purpose of this environment is to provide an isolated environment for testing deployed application changes before they are released to production.
+
+Preview/staging configuration should use deployment environment variables rather than a local `.env` file.
+
+No preview/staging deployment or environment configuration is being created as part of Step D.
+
+## Production
+
+Production should use a separate Neon production database branch and production deployment secrets.
+
+Production credentials and secrets must not be stored in the repository or in local development `.env` files.
+
+Production configuration should be provided through the production deployment environment.
+
+No production database, deployment, or environment configuration is being changed as part of Step D.
