@@ -90,3 +90,17 @@ The frontend runs on `http://localhost:3000` and proxies `/api` requests to the 
 ├── .gitignore
 └── README.md
 ```
+
+
+## Guide to Quick Start: 
+
+- Scope to mortgage-marketing-AI
+Start backend:
+cd server
+python app.py
+
+--------------------------------------------------
+- Scope to mortgage-marketing-AI
+Start Frontend:
+cd client
+npm run dev

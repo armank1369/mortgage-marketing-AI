@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import CalendarPage from './CalendarPage'
 import PreferenceSetup from './PreferenceSetup'
@@ -382,6 +383,7 @@ function contentTypeLabel(type) {
 
 export default function ChatPage() {
   const { preferences } = usePreferences()
+  const navigate = useNavigate()
   const [activeNav, setActiveNav] = useState('chat')
   const storedChats = useRef(loadChatsFromStorage()).current
   const initialChats = useRef(null)
@@ -843,6 +845,18 @@ export default function ChatPage() {
           >
             <span className="text-base">➕</span>
             New Chat
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/settings')
+              setSidebarOpen(false)
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-slate-400 md:text-slate-500 hover:text-slate-200 md:hover:text-slate-900 hover:bg-slate-800 md:hover:bg-slate-100"
+          >
+            <span className="text-base">⚙️</span>
+            Settings
           </button>
 
           <div className="pt-3 space-y-1.5">
