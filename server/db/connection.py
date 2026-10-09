@@ -1,7 +1,7 @@
 """
-server/db.py
-Centralized PostgreSQL connection module using Psycopg and psycopg_pool.
-Reads DATABASE_URL from the local environment and ensures safe query handling.
+server/db/connection.py
+Centralized PostgreSQL connection pooling and transaction boundary module.
+Uses Psycopg 3 with automatic connection recovery and atomic transactions.
 """
 
 import os
@@ -20,7 +20,6 @@ if not DATABASE_URL:
         "DATABASE_URL is not set. Ensure server/.env contains your Neon development connection string."
     )
 
-# Initialize thread-safe connection pool for Psycopg 3
 try:
     _connection_pool = ConnectionPool(
         conninfo=DATABASE_URL,
@@ -28,7 +27,7 @@ try:
         max_size=10,
         kwargs={"row_factory": dict_row}
     )
-    logger.info("Psycopg 3 database connection pool initialized successfully.")
+    logger.info("Psycopg 3 connection pool initialized.")
 except Exception as e:
     logger.error("Failed to initialize database connection pool: %s", str(e))
     raise
@@ -36,7 +35,7 @@ except Exception as e:
 
 @contextmanager
 def get_db_connection():
-    """Acquires a connection from the pool and returns it upon completion."""
+    """Yields an active connection from the pool and returns it upon completion."""
     with _connection_pool.connection() as conn:
         yield conn
 
@@ -44,9 +43,8 @@ def get_db_connection():
 @contextmanager
 def get_db_cursor(commit: bool = False):
     """
-    Yields a dictionary cursor (dict_row).
-    Commits automatically if commit=True and the block succeeds.
-    Rolls back automatically on unhandled exception.
+    Yields a dict_row cursor for simple single-statement reads or isolated writes.
+    If commit=True, commits automatically when exiting the block without error.
     """
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
@@ -57,3 +55,20 @@ def get_db_cursor(commit: bool = False):
             except Exception:
                 conn.rollback()
                 raise
+
+
+@contextmanager
+def get_db_transaction():
+    """
+    Formal Transaction Boundary (Step F.6).
+    Yields a cursor within an explicit atomic transaction block.
+    
+    Guarantees:
+    - If all statements in the caller's block succeed -> conn.commit() is called once.
+    - If any error or exception occurs -> conn.rollback() cancels all intermediate changes.
+    - Connection is returned cleanly to the pool in both cases.
+    """
+    with get_db_connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cursor:
+                yield cursor
