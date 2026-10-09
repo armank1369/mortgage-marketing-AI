@@ -1,7 +1,7 @@
 """
 server/repositories/brand_profile_repository.py
 Data access operations for public.brand_profile.
-Implements minimal Step F.4 operations: get and update.
+Enforces workspace scoping and 100% parameterized SQL execution.
 """
 
 from typing import Optional, Dict, Any
@@ -11,7 +11,7 @@ from db.connection import get_db_cursor
 def get_brand_profile(workspace_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch the brand profile for a specific workspace.
-    Returns the record dictionary or None if no record exists.
+    Parameterized with %s to prevent SQL injection.
     """
     query = """
         SELECT id, workspace_id, business_name, nmls_id, dre_number,
@@ -37,7 +37,7 @@ def update_brand_profile(
 ) -> Optional[Dict[str, Any]]:
     """
     Update core identity and compliance fields for the workspace brand profile.
-    Uses COALESCE to preserve unmodified fields.
+    Values are passed as a parameterized parameter tuple.
     """
     query = """
         UPDATE public.brand_profile
@@ -55,7 +55,7 @@ def update_brand_profile(
     with get_db_cursor(commit=True) as cursor:
         cursor.execute(
             query,
-            (business_name, nmls_id, dre_number, compliance_footer, equal_housing_text, workspace_id)
+            (business_name, nmls_id, dre_number, compliance_footer, equal_housing_text, workspace_id),
         )
         row = cursor.fetchone()
         return dict(row) if row else None
