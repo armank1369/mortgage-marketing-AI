@@ -1,25 +1,20 @@
 """
 server/repositories/brand_profile_repository.py
 Data access operations for public.brand_profile.
-Enforces workspace scoping, parameterization, and sanitized domain errors.
+Enforces workspace scoping, parameterization, and sanitized logging.
 """
 
-import logging
 from typing import Optional, Dict, Any
 import psycopg
 from psycopg.errors import UniqueViolation, ForeignKeyViolation, CheckViolation
 
 from db.connection import get_db_cursor
 from errors import ConflictError, ValidationError, DatabaseUnavailableError
-
-logger = logging.getLogger(__name__)
+from logging_utils import log_db_operation, log_db_error
 
 
 def get_brand_profile(workspace_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Fetch the brand profile for a specific workspace.
-    Logs low-level database errors and raises sanitized domain exceptions.
-    """
+    """Fetch the brand profile for a specific workspace with safe logging."""
     query = """
         SELECT id, workspace_id, business_name, nmls_id, dre_number,
                compliance_footer, equal_housing_text, tone, values,
@@ -32,12 +27,13 @@ def get_brand_profile(workspace_id: str) -> Optional[Dict[str, Any]]:
         with get_db_cursor() as cursor:
             cursor.execute(query, (workspace_id,))
             row = cursor.fetchone()
+            log_db_operation("get_brand_profile", workspace_id=workspace_id, status="success" if row else "not_found")
             return dict(row) if row else None
     except psycopg.OperationalError as e:
-        logger.error("DB operational error in get_brand_profile: %s", str(e))
+        log_db_error("get_brand_profile", e, workspace_id=workspace_id)
         raise DatabaseUnavailableError() from e
     except Exception as e:
-        logger.error("Unexpected error in get_brand_profile for workspace %s: %s", workspace_id, str(e))
+        log_db_error("get_brand_profile", e, workspace_id=workspace_id)
         raise
 
 
@@ -49,10 +45,7 @@ def update_brand_profile(
     compliance_footer: Optional[str] = None,
     equal_housing_text: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
-    """
-    Update core identity and compliance fields for the workspace brand profile.
-    Safely captures constraint violations without exposing database internals.
-    """
+    """Update core identity and compliance fields without leaking sensitive inputs to logs."""
     query = """
         UPDATE public.brand_profile
         SET
@@ -73,16 +66,17 @@ def update_brand_profile(
                 (business_name, nmls_id, dre_number, compliance_footer, equal_housing_text, workspace_id),
             )
             row = cursor.fetchone()
+            log_db_operation("update_brand_profile", workspace_id=workspace_id, status="success")
             return dict(row) if row else None
     except UniqueViolation as e:
-        logger.warning("Unique constraint violated updating brand_profile for workspace %s: %s", workspace_id, str(e))
-        raise ConflictError("A brand profile setting with this unique identifier already exists.") from e
+        log_db_error("update_brand_profile", e, workspace_id=workspace_id)
+        raise ConflictError("A brand profile with this identifier already exists.") from e
     except (ForeignKeyViolation, CheckViolation) as e:
-        logger.warning("Validation violation updating brand_profile for workspace %s: %s", workspace_id, str(e))
+        log_db_error("update_brand_profile", e, workspace_id=workspace_id)
         raise ValidationError("Invalid brand profile data provided.") from e
     except psycopg.OperationalError as e:
-        logger.error("DB operational error in update_brand_profile: %s", str(e))
+        log_db_error("update_brand_profile", e, workspace_id=workspace_id)
         raise DatabaseUnavailableError() from e
     except Exception as e:
-        logger.error("Unexpected error updating brand_profile for workspace %s: %s", workspace_id, str(e))
+        log_db_error("update_brand_profile", e, workspace_id=workspace_id)
         raise

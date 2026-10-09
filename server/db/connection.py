@@ -1,7 +1,6 @@
 """
 server/db/connection.py
-Centralized PostgreSQL connection pooling and transaction boundary module.
-Encapsulates low-level driver connection faults into DatabaseUnavailableError.
+Centralized PostgreSQL connection pooling with safe diagnostic logging.
 """
 
 import os
@@ -12,6 +11,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool, PoolTimeout
 
 from errors import DatabaseUnavailableError
+from logging_utils import mask_connection_string
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,9 @@ try:
         max_size=10,
         kwargs={"row_factory": dict_row}
     )
-    logger.info("Psycopg 3 connection pool initialized.")
+    logger.info("Psycopg 3 connection pool initialized for %s", mask_connection_string(DATABASE_URL))
 except Exception as e:
-    logger.error("Failed to initialize database connection pool: %s", str(e))
+    logger.error("Failed to initialize database pool for %s: %s", mask_connection_string(DATABASE_URL), str(e))
     raise
 
 
