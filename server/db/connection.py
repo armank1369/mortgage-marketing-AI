@@ -27,6 +27,7 @@ try:
         conninfo=DATABASE_URL,
         min_size=1,
         max_size=10,
+        open=True,
         kwargs={"row_factory": dict_row}
     )
     logger.info("Psycopg 3 connection pool initialized for %s", mask_connection_string(DATABASE_URL))
