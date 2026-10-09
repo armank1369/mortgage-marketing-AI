@@ -1,17 +1,17 @@
 """
 server/repositories/brand_profile_repository.py
 Data access operations for public.brand_profile.
-All operations mandate explicit workspace scoping.
+MANDATORY: Every function strictly enforces workspace isolation via workspace_id.
 """
 
 from typing import Optional, Dict, Any
-from db import get_db_cursor
+from db.connection import get_db_cursor
 
 
 def get_brand_profile(workspace_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch the brand profile for a specific workspace.
-    Returns None if no profile exists for that workspace.
+    Guarantees no cross-workspace data leakage.
     """
     query = """
         SELECT id, workspace_id, business_name, nmls_id, dre_number,
@@ -36,7 +36,8 @@ def update_brand_profile(
     equal_housing_text: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Update core compliance and identity fields on the workspace brand profile.
+    Update brand profile attributes for a specific workspace.
+    Restricted by workspace_id to prevent modifying another tenant's profile.
     """
     query = """
         UPDATE public.brand_profile
