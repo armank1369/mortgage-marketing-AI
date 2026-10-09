@@ -1,7 +1,7 @@
 """
 server/db/connection.py
 Centralized PostgreSQL connection pooling and transaction boundary module.
-Uses Psycopg 3 with automatic connection recovery and atomic transactions.
+Encapsulates low-level driver connection faults into DatabaseUnavailableError.
 """
 
 import os
@@ -9,7 +9,9 @@ import logging
 from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool
+from psycopg_pool import ConnectionPool, PoolTimeout
+
+from errors import DatabaseUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +37,20 @@ except Exception as e:
 
 @contextmanager
 def get_db_connection():
-    """Yields an active connection from the pool and returns it upon completion."""
-    with _connection_pool.connection() as conn:
-        yield conn
+    """Yields an active connection from the pool; maps connection failures to DatabaseUnavailableError."""
+    try:
+        with _connection_pool.connection() as conn:
+            yield conn
+    except (psycopg.OperationalError, PoolTimeout) as e:
+        logger.error("Database connection failed or timed out: %s", str(e))
+        raise DatabaseUnavailableError("Database is currently unreachable. Please try again shortly.") from e
 
 
 @contextmanager
 def get_db_cursor(commit: bool = False):
     """
-    Yields a dict_row cursor for simple single-statement reads or isolated writes.
-    If commit=True, commits automatically when exiting the block without error.
+    Yields a dict_row cursor for single-statement reads or isolated writes.
+    Translates connection drops and manages transaction commit/rollback.
     """
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
@@ -62,11 +68,6 @@ def get_db_transaction():
     """
     Formal Transaction Boundary (Step F.6).
     Yields a cursor within an explicit atomic transaction block.
-    
-    Guarantees:
-    - If all statements in the caller's block succeed -> conn.commit() is called once.
-    - If any error or exception occurs -> conn.rollback() cancels all intermediate changes.
-    - Connection is returned cleanly to the pool in both cases.
     """
     with get_db_connection() as conn:
         with conn.transaction():
