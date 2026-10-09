@@ -211,3 +211,29 @@ export function loadCalendarEntriesFromStorage() {
     return null
   }
 }
+
+// Lets Joseph download everything that currently lives only in this browser's localStorage
+// as one JSON file — the stopgap for not having a server-side database yet. Keeping the full
+// chat/message objects (not a flattened transcript) means this file can be fed straight into
+// the eventual database migration/re-embedding step without reconstructing anything.
+export function exportChatHistoryToFile() {
+  const storedChats = loadChatsFromStorage()
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    exportVersion: CHAT_STORAGE_VERSION,
+    preferences: loadPreferencesFromStorage(),
+    chats: storedChats?.chats || [],
+  }
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const dateStamp = new Date().toISOString().slice(0, 10)
+
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `lucie-chat-history-${dateStamp}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}

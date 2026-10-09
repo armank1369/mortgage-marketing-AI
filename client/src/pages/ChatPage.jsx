@@ -7,7 +7,7 @@ import ClarificationResponse from '../components/ClarificationResponse'
 import PostsResponse from '../components/PostsResponse'
 import Section from '../components/Section'
 import { usePreferences } from '../context/PreferencesContext'
-import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
+import { loadChatsFromStorage, saveChatsToStorage, exportChatHistoryToFile } from '../utils/storage'
 import { NMLS_NUMBER } from '../constants'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
@@ -200,6 +200,14 @@ function MenuIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" />
     </svg>
   )
 }
@@ -419,10 +427,17 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [editingChatId, setEditingChatId] = useState(null)
   const [draftChatTitle, setDraftChatTitle] = useState('')
+  const [justExported, setJustExported] = useState(false)
   const endRef = useRef(null)
   const abortControllerRef = useRef(null)
 
   const nmls = NMLS_NUMBER
+
+  const handleExportHistory = () => {
+    exportChatHistoryToFile()
+    setJustExported(true)
+    setTimeout(() => setJustExported(false), 2000)
+  }
 
   const activeChat = chats.find((c) => c.id === activeChatId) || chats[0]
   const messages = activeChat?.messages || []
@@ -979,6 +994,27 @@ export default function ChatPage() {
               })}
           </div>
         </nav>
+
+        <div className="p-3 border-t border-slate-800 md:border-slate-100">
+          <button
+            type="button"
+            onClick={handleExportHistory}
+            title="Download all chat history as a JSON file"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-slate-400 md:text-slate-500 hover:text-slate-200 md:hover:text-slate-900 hover:bg-slate-800 md:hover:bg-slate-100 border border-slate-800 md:border-slate-200"
+          >
+            {justExported ? (
+              <>
+                <EditIcon done />
+                Saved to file
+              </>
+            ) : (
+              <>
+                <DownloadIcon />
+                Export Chat History
+              </>
+            )}
+          </button>
+        </div>
 
         <div className="p-4 border-t border-slate-800 md:border-slate-100 text-xs text-slate-500 md:text-slate-400">
           {preferences.name} | NMLS #{nmls}
