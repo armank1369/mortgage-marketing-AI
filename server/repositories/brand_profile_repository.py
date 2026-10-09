@@ -1,7 +1,7 @@
 """
 server/repositories/brand_profile_repository.py
 Data access operations for public.brand_profile.
-MANDATORY: Every function strictly enforces workspace isolation via workspace_id.
+Implements minimal Step F.4 operations: get and update.
 """
 
 from typing import Optional, Dict, Any
@@ -11,7 +11,7 @@ from db.connection import get_db_cursor
 def get_brand_profile(workspace_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch the brand profile for a specific workspace.
-    Guarantees no cross-workspace data leakage.
+    Returns the record dictionary or None if no record exists.
     """
     query = """
         SELECT id, workspace_id, business_name, nmls_id, dre_number,
@@ -36,8 +36,8 @@ def update_brand_profile(
     equal_housing_text: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Update brand profile attributes for a specific workspace.
-    Restricted by workspace_id to prevent modifying another tenant's profile.
+    Update core identity and compliance fields for the workspace brand profile.
+    Uses COALESCE to preserve unmodified fields.
     """
     query = """
         UPDATE public.brand_profile

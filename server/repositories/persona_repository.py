@@ -1,7 +1,7 @@
 """
 server/repositories/persona_repository.py
 Data access operations for public.persona.
-MANDATORY: Every function strictly enforces workspace isolation via workspace_id.
+Implements minimal Step F.4 operations: list, get, and update.
 """
 
 from typing import List, Optional, Dict, Any
@@ -10,7 +10,7 @@ from db.connection import get_db_cursor
 
 def list_personas(workspace_id: str) -> List[Dict[str, Any]]:
     """
-    List all active personas belonging strictly to the provided workspace_id.
+    List all active marketing personas belonging to the designated workspace.
     """
     query = """
         SELECT id, workspace_id, slug, name, description,
@@ -29,8 +29,7 @@ def list_personas(workspace_id: str) -> List[Dict[str, Any]]:
 
 def get_persona(workspace_id: str, persona_id: str) -> Optional[Dict[str, Any]]:
     """
-    Fetch a persona by ID, strictly constrained to workspace_id.
-    Prevents Workspace A from viewing Workspace B's persona even if persona_id is known.
+    Fetch a single persona by ID, strictly constrained to workspace_id.
     """
     query = """
         SELECT id, workspace_id, slug, name, description,
@@ -47,34 +46,6 @@ def get_persona(workspace_id: str, persona_id: str) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def create_persona(
-    workspace_id: str,
-    name: str,
-    slug: str,
-    description: Optional[str] = None,
-    prompt_guidance: Optional[str] = None,
-    is_starter: bool = False
-) -> Dict[str, Any]:
-    """
-    Create a new marketing persona explicitly linked to workspace_id.
-    """
-    query = """
-        INSERT INTO public.persona (
-            workspace_id, name, slug, description, prompt_guidance, is_starter
-        )
-        VALUES (%s, %s, %s, %s, %s, %s)
-        RETURNING id, workspace_id, slug, name, description,
-                  prompt_guidance, is_starter, created_at, updated_at;
-    """
-    with get_db_cursor(commit=True) as cursor:
-        cursor.execute(
-            query,
-            (workspace_id, name, slug, description, prompt_guidance, is_starter)
-        )
-        row = cursor.fetchone()
-        return dict(row)
-
-
 def update_persona(
     workspace_id: str,
     persona_id: str,
@@ -83,8 +54,7 @@ def update_persona(
     prompt_guidance: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Update persona attributes strictly scoped to workspace_id.
-    Returns None if the persona does not exist or belongs to another workspace.
+    Update core editable fields of a persona belonging strictly to workspace_id.
     """
     query = """
         UPDATE public.persona
@@ -106,21 +76,3 @@ def update_persona(
         )
         row = cursor.fetchone()
         return dict(row) if row else None
-
-
-def delete_persona(workspace_id: str, persona_id: str) -> bool:
-    """
-    Soft-delete a persona strictly scoped to workspace_id by setting deleted_at = now().
-    Returns True if a row was updated, False if not found or unauthorized.
-    """
-    query = """
-        UPDATE public.persona
-        SET deleted_at = now(),
-            updated_at = now()
-        WHERE id = %s
-          AND workspace_id = %s
-          AND deleted_at IS NULL;
-    """
-    with get_db_cursor(commit=True) as cursor:
-        cursor.execute(query, (persona_id, workspace_id))
-        return cursor.rowcount > 0

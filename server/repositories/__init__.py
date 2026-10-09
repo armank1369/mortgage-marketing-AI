@@ -1,6 +1,6 @@
 """
 server/repositories/__init__.py
-Centralized exports for tenant-scoped repository modules.
+Centralized exports for Step F.4 minimal repository operations.
 """
 
 from .brand_profile_repository import (
@@ -10,9 +10,7 @@ from .brand_profile_repository import (
 from .persona_repository import (
     list_personas,
     get_persona,
-    create_persona,
     update_persona,
-    delete_persona,
 )
 
 __all__ = [
@@ -20,7 +18,5 @@ __all__ = [
     "update_brand_profile",
     "list_personas",
     "get_persona",
-    "create_persona",
     "update_persona",
-    "delete_persona",
 ]
