@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 import sqlite3
 import os
@@ -9,11 +9,64 @@ from datetime import date
 import anthropic
 from dotenv import load_dotenv
 from auth_utils import get_authenticated_user, require_auth
+from auth.workspace_context import require_workspace
+from repositories import (
+    get_brand_profile,
+    update_brand_profile,
+    list_personas,
+    list_chat_sessions,
+    get_chat_session_messages,
+    create_chat_session_with_message,
+)
+from errors import NotFoundError, ValidationError
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+@app.route("/api/brand-profile", methods=["GET"])
+@require_workspace
+def api_get_brand_profile():
+    profile = get_brand_profile(g.workspace_id)
+    if not profile:
+        raise NotFoundError("Brand profile not found for workspace.")
+    return jsonify(profile), 200
+
+
+@app.route("/api/chat/sessions", methods=["GET"])
+@require_workspace
+def api_list_chat_sessions():
+    sessions = list_chat_sessions(g.workspace_id)
+    return jsonify(sessions), 200
+
+
+@app.route("/api/chat/sessions", methods=["POST"])
+@require_workspace
+def api_create_chat_session():
+    data = request.get_json() or {}
+    title = data.get("title")
+    initial_content = data.get("content")
+
+    if not title or not initial_content:
+        raise ValidationError("Both 'title' and 'content' are required.")
+
+    session = create_chat_session_with_message(
+        workspace_id=g.workspace_id,
+        title=title,
+        initial_content=initial_content,
+        persona_id=data.get("persona_id")
+    )
+    return jsonify(session), 201
+
+
+@app.route("/api/chat/sessions/<session_id>", methods=["GET"])
+@require_workspace
+def api_get_chat_session(session_id):
+    session = get_chat_session_messages(g.workspace_id, session_id)
+    if not session:
+        raise NotFoundError("Chat session not found in this workspace.")
+    return jsonify(session), 200
 
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-4-5')
 anthropic_client = anthropic.Anthropic()
