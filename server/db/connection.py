@@ -5,13 +5,13 @@ Centralized PostgreSQL connection pooling with safe diagnostic logging.
 
 import os
 import logging
+import atexit
 from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool, PoolTimeout
 
 from errors import DatabaseUnavailableError
-from logging_utils import mask_connection_string
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,12 @@ try:
         open=True,
         kwargs={"row_factory": dict_row}
     )
-    logger.info("Psycopg 3 connection pool initialized for %s", mask_connection_string(DATABASE_URL))
+    logger.info("Psycopg 3 connection pool initialized")
+    # Short-lived Python 3.14 tools must close worker threads before shutdown.
+    # Explicitly closing in standalone scripts remains preferable.
+    atexit.register(_connection_pool.close)
 except Exception as e:
-    logger.error("Failed to initialize database pool for %s: %s", mask_connection_string(DATABASE_URL), str(e))
+    logger.error("Failed to initialize database pool (%s)", type(e).__name__)
     raise
 
 
@@ -43,7 +46,7 @@ def get_db_connection():
         with _connection_pool.connection() as conn:
             yield conn
     except (psycopg.OperationalError, PoolTimeout) as e:
-        logger.error("Database connection failed or timed out: %s", str(e))
+        logger.error("Database connection failed or timed out (%s)", type(e).__name__)
         raise DatabaseUnavailableError("Database is currently unreachable. Please try again shortly.") from e
 
 

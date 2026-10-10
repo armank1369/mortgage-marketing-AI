@@ -4,6 +4,8 @@ Lucie is a compliance-aware social media drafting and planning assistant built f
 
 ## 📊 Project Documentation (Start Here)
 
+- **[Step F Data Layer & Test Guide](docs/STEP_F_DATA_LAYER_AND_TESTING.md)** — current V2 Neon Auth / workspace integration, Windows setup, safe tests, and known limits. Use this for Step F rather than the older prototype setup below.
+
 - **[Technical Audit & Risk Assessment](docs/Lucie_Technical_Audit_Whitepaper.pdf)** — a live-measured breakdown of system architecture, prompt-caching economics (~39% cost reduction over a realistic session), and the bias/fairness/privacy guardrails, verified against the running production API and codebase.
 - **[End-User Manual](docs/Lucie_User_Manual.pdf)** — a plain-language guide translating the tool's capabilities and safety requirements for non-technical mortgage staff.
 - **[Prototype UI Changes](docs/PROTOTYPE_UI_CHANGES.md)** — a log of prototype cleanup work, chat-metadata design, and migration considerations.
@@ -13,7 +15,7 @@ Lucie is a compliance-aware social media drafting and planning assistant built f
 
 This repository is a fast-paced V1 prototype built during the Titan Applied AI and Entrepreneurship Summer Fellowship. The Technical Audit above documents these in full; the headline items slated for V2 are:
 
-- **State management:** Brand preferences and chat sessions live entirely in the browser's `localStorage`, and the backend's own SQLite `chat_history` exists only for duplicate-content prevention — there is no server-side database of record, no authentication, and no cross-device sync. The chat-session data is structured so it can move into database-backed tables without a UI redesign, but that migration hasn't happened yet.
+- **State management:** Step E added Neon Auth sign-in and server-side JWT verification. Step F added Neon PostgreSQL repositories for brand profiles, personas and chat sessions. However, the existing chat UI still uses browser `localStorage` and the old SQLite anti-repeat history remains; full cross-device chat sync/migration is not implemented.
 - **Privacy hardening:** There is no filtering on chat input today, so sensitive client details typed into the assistant are sent as-is to the API and stored unencrypted client-side. V2 adds input redaction and a secure datastore.
 - **Deterministic routing:** Whether a message is treated as a single post, a full campaign, or an ambiguous request is currently decided by two hardcoded regex patterns rather than a model-based classifier — reliable in testing, but brittle outside the patterns it covers.
 - **Campaign accuracy:** Multi-platform/multi-week campaign generation doesn't always hit its own stated post-count target (documented as a live-tested edge case in the audit). A corrective-retry mechanism was tried and removed because it doubled cost without fully closing the gap.

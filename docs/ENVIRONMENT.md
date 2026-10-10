@@ -52,8 +52,22 @@ Production configuration should be provided through the production deployment en
 - `DATABASE_URL` is a server-side variable and must not be exposed to the React frontend.
 - Deployment environment variables should be configured in the appropriate hosting environment rather than committed to the repository.
 
-## Neon Auth
+## Neon Auth and workspace authorization (Steps E/F)
 
-Neon Auth configuration is separate from the PostgreSQL `DATABASE_URL`.
+Neon Auth is implemented, not merely planned. `client/.env` contains
+`VITE_NEON_AUTH_URL` for browser sessions; `server/.env` contains
+`NEON_AUTH_BASE_URL` and optional `NEON_AUTH_JWKS_URL` for Flask JWT verification.
+`DATABASE_URL` is the **separate** PostgreSQL connection string. Select the
+Neon `development` branch explicitly before copying it; two databases named
+`neondb` on different Neon branches do **not** share a schema.
 
-The Neon Auth URL and JWKS information are intended for authentication and will be used in the later authentication implementation.
+The backend loads `server/.env` relative to `server/app.py`. Use `python app.py`
+from `server/`, not a special `runpy` command. Never commit either `.env` file.
+
+A valid JWT proves identity but does not automatically grant workspace access.
+`public.workspace_member` must contain an explicit membership for the Neon Auth
+user ID, linked to the target `public.workspace`. Development header bypasses
+and automatic admin fallback are no longer supported by the Step F patch.
+
+For setup, branch verification, safe testing, and troubleshooting see
+[Step F Data Layer and Test Guide](STEP_F_DATA_LAYER_AND_TESTING.md).

@@ -1,153 +1,136 @@
-"""
-server/tests/test_workspace_context.py
-Step F.10: Integration & security regression tests for workspace authorization.
-Verifies verified membership resolution, gated development fallbacks,
-rejection of foreign/unauthorized workspaces, and bypass denial in production.
-"""
+"""Step F.10 tests: bearer-JWT verification followed by membership authorization.
 
-import os
-import uuid
+JWKS and the DB cursor are mocked here. The human test guide separately
+requires a live Neon Auth / Flask / development database smoke test.
+"""
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 import pytest
-from flask import Flask, jsonify, g
+from flask import Flask, g, jsonify
+from jwt.exceptions import InvalidTokenError
 
-from auth.workspace_context import resolve_user_workspace, require_workspace
-from errors import WorkspaceAccessDeniedError, AppError
+import auth_utils
+import auth.workspace_context as workspace
+from errors import AppError, WorkspaceAccessDeniedError
+
+USER = "neon-auth-user-1"
+WORKSPACE = "11111111-1111-4111-8111-111111111111"
+FOREIGN_WORKSPACE = "22222222-2222-4222-8222-222222222222"
+
+
+@pytest.fixture
+def membership_db(monkeypatch):
+    """Mock membership results without granting automatic dev workspace access."""
+    class Cursor:
+        def execute(self, query, params=None):
+            self.params = params
+            self.query = query
+
+        def fetchone(self):
+            assert "public.workspace_member" in self.query
+            if self.params[0] != USER:
+                return None
+            if len(self.params) > 1 and str(self.params[1]) != WORKSPACE:
+                return None
+            return {"workspace_id": WORKSPACE, "workspace_name": "Test", "role": "member"}
+
+    @contextmanager
+    def cursor():
+        yield Cursor()
+
+    monkeypatch.setattr(workspace, "get_db_cursor", cursor)
 
 
 @pytest.fixture
 def test_app():
-    """Isolated Flask test application with AppError handling registered."""
-    app = Flask("workspace_test_app")
-    app.config["TESTING"] = True
+    app = Flask(__name__)
+    app.config.update(TESTING=True)
 
     @app.errorhandler(AppError)
-    def handle_app_error(err):
-        return jsonify({"error": err.message}), err.status_code
+    def handle_error(error):
+        body, status = error.to_response()
+        return jsonify(body), status
 
-    @app.route("/api/test-protected", methods=["GET"])
-    @require_workspace
-    def test_protected_route():
-        return jsonify({
-            "workspace_id": g.workspace_id,
-            "auth_user_id": g.auth_user_id,
-            "role": g.workspace_context.get("role")
-        }), 200
-
+    @app.get("/api/test-protected")
+    @workspace.require_workspace
+    def protected():
+        return jsonify({"user": g.auth_user_id, "workspace": g.workspace_id})
     return app
 
 
-# =====================================================================
-# 1. POSITIVE MEMBERSHIP & RESOLUTION TESTS
-# =====================================================================
+@pytest.fixture
+def jwks_stub(monkeypatch):
+    """Exercise *real* authenticate_request, with cryptographic IO stubbed."""
+    monkeypatch.setattr(auth_utils, "_auth_config", lambda: ("https://auth.example", "https://auth.example/jwks"))
+    key = SimpleNamespace(key="test-public-key")
+    monkeypatch.setattr(auth_utils, "_jwks_client", lambda url: SimpleNamespace(
+        get_signing_key_from_jwt=lambda token: key
+    ))
 
-def test_resolve_user_workspace_development_fallback(dev_workspace_id):
-    """
-    In development mode with fallback enabled, an unregistered identity
-    resolves to the lucie-development workspace.
-    """
-    random_user_id = f"test-user-{uuid.uuid4().hex[:8]}"
-    context = resolve_user_workspace(random_user_id)
+    def verified_decode(token, key, **kwargs):
+        assert kwargs["algorithms"] == ["EdDSA"]
+        assert kwargs["issuer"] == kwargs["audience"] == "https://auth.example"
+        if token != "valid-test-token":
+            raise InvalidTokenError("invalid token")
+        return {"sub": USER, "exp": 9999999999, "iss": "https://auth.example", "aud": "https://auth.example"}
 
-    assert context is not None
-    assert context["workspace_id"] == dev_workspace_id
-    assert context["role"] == "admin"
-    assert context["auth_user_id"] == random_user_id
-
-
-def test_require_workspace_decorator_injects_context(test_app, dev_workspace_id):
-    """
-    Verifies that @require_workspace populates g.workspace_id and g.auth_user_id
-    when running with allowed development headers.
-    """
-    test_user_id = f"dev-user-{uuid.uuid4().hex[:8]}"
-
-    with test_app.test_client() as client:
-        response = client.get(
-            "/api/test-protected",
-            headers={"X-Dev-Auth-User-Id": test_user_id}
-        )
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["workspace_id"] == dev_workspace_id
-        assert data["auth_user_id"] == test_user_id
+    monkeypatch.setattr(auth_utils.jwt, "decode", verified_decode)
 
 
-# =====================================================================
-# 2. CROSS-WORKSPACE & FOREIGN WORKSPACE REJECTION TESTS
-# =====================================================================
+def test_workspace_membership_only(membership_db):
+    assert workspace.resolve_user_workspace(USER)["workspace_id"] == WORKSPACE
+    assert workspace.resolve_user_workspace(USER, WORKSPACE)["role"] == "member"
 
-def test_resolve_user_workspace_rejects_unauthorized_foreign_workspace(alternate_workspace_id):
-    """
-    Attempts to access an explicit foreign workspace ID where the user
-    holds no membership must raise WorkspaceAccessDeniedError.
-    """
-    random_user_id = f"foreign-user-{uuid.uuid4().hex[:8]}"
 
+def test_foreign_workspace_denied(membership_db):
     with pytest.raises(WorkspaceAccessDeniedError):
-        resolve_user_workspace(
-            auth_user_id=random_user_id,
-            requested_workspace_id=alternate_workspace_id
-        )
+        workspace.resolve_user_workspace(USER, FOREIGN_WORKSPACE)
 
 
-def test_require_workspace_rejects_foreign_workspace_header(test_app, alternate_workspace_id):
-    """
-    HTTP route must return HTTP 403 Forbidden when client supplies an
-    unauthorized foreign workspace in the X-Workspace-Id header.
-    """
-    test_user_id = f"test-user-{uuid.uuid4().hex[:8]}"
-
-    with test_app.test_client() as client:
-        response = client.get(
-            "/api/test-protected",
-            headers={
-                "X-Dev-Auth-User-Id": test_user_id,
-                "X-Workspace-Id": alternate_workspace_id
-            }
-        )
-
-        assert response.status_code == 403
-        data = response.get_json()
-        assert "forbidden" in data["error"].lower() or "denied" in data["error"].lower()
-
-
-# =====================================================================
-# 3. SECURITY HARDENING & PRODUCTION ENVIRONMENT GATES
-# =====================================================================
-
-def test_production_environment_rejects_unregistered_user(monkeypatch):
-    """
-    SECURITY INVARIANT:
-    When running in production, the development fallback to lucie-development
-    must be completely disabled and reject unmapped identities.
-    """
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("FLASK_ENV", "production")
-    monkeypatch.delenv("ALLOW_DEV_WORKSPACE_FALLBACK", raising=False)
-
-    random_user_id = f"prod-unregistered-{uuid.uuid4().hex[:8]}"
-
+def test_unknown_user_denied_even_when_dev_flags_set(membership_db, monkeypatch):
+    monkeypatch.setenv("ALLOW_DEV_WORKSPACE_FALLBACK", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
     with pytest.raises(WorkspaceAccessDeniedError):
-        resolve_user_workspace(random_user_id)
+        workspace.resolve_user_workspace("unknown-neon-auth-user")
 
 
-def test_require_workspace_rejects_unauthenticated_request_when_bypass_disabled(test_app, monkeypatch):
-    """
-    SECURITY INVARIANT:
-    When ALLOW_DEV_AUTH_BYPASS is disabled or in production, request header
-    X-Dev-Auth-User-Id must be rejected and return 403.
-    """
-    monkeypatch.delenv("ALLOW_DEV_AUTH_BYPASS", raising=False)
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("FLASK_ENV", "production")
+def test_no_token_returns_401(test_app, membership_db):
+    response = test_app.test_client().get("/api/test-protected")
+    assert response.status_code == 401
+    assert response.get_json()["error"] == "unauthenticated"
 
-    with test_app.test_client() as client:
-        response = client.get(
-            "/api/test-protected",
-            headers={"X-Dev-Auth-User-Id": "attacker_identity_header"}
-        )
 
-        assert response.status_code == 403
-        data = response.get_json()
-        assert "unauthenticated" in data["error"].lower() or "denied" in data["error"].lower()
+def test_valid_token_resolves_workspace(test_app, membership_db, jwks_stub):
+    response = test_app.test_client().get(
+        "/api/test-protected", headers={"Authorization": "Bearer valid-test-token"}
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {"user": USER, "workspace": WORKSPACE}
+
+
+def test_invalid_token_returns_401(test_app, membership_db, jwks_stub):
+    response = test_app.test_client().get(
+        "/api/test-protected", headers={"Authorization": "Bearer invalid-test-token"}
+    )
+    assert response.status_code == 401
+
+
+def test_dev_header_cannot_bypass_jwt(test_app, membership_db, monkeypatch):
+    monkeypatch.setenv("ALLOW_DEV_AUTH_BYPASS", "true")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    response = test_app.test_client().get(
+        "/api/test-protected", headers={"X-Dev-Auth-User-Id": USER}
+    )
+    assert response.status_code == 401
+
+
+def test_verified_user_foreign_workspace_rejected(test_app, membership_db, jwks_stub):
+    response = test_app.test_client().get(
+        "/api/test-protected", headers={
+            "Authorization": "Bearer valid-test-token",
+            "X-Workspace-Id": FOREIGN_WORKSPACE,
+        }
+    )
+    assert response.status_code == 403
+    assert response.get_json()["error"] == "workspace_access_denied"

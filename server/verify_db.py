@@ -1,8 +1,10 @@
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv("server/.env")
-sys.path.append("server")
+SERVER_DIR = Path(__file__).resolve().parent
+load_dotenv(SERVER_DIR / ".env")
+sys.path.insert(0, str(SERVER_DIR))
 
 from db import get_db_cursor
 

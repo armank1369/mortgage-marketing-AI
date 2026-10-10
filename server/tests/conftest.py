@@ -9,10 +9,8 @@ import uuid
 import pytest
 from dotenv import load_dotenv
 
-os.environ["ENVIRONMENT"] = "development"
-os.environ["FLASK_ENV"] = "development"
-os.environ["ALLOW_DEV_AUTH_BYPASS"] = "true"
-os.environ["ALLOW_DEV_WORKSPACE_FALLBACK"] = "true"
+# Never switch on identity bypasses in the shared test environment.
+# Test modules mock token verification when needed; live JWT checks use Neon.
 
 # Ensure server module imports resolve cleanly
 server_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

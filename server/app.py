@@ -26,10 +26,11 @@ from errors import AppError, NotFoundError, ValidationError, WorkspaceAccessDeni
 app = Flask(__name__)
 CORS(app)
 
-# Centralized error handler for domain exceptions
+# Return stable machine-readable codes and safe human-readable messages.
 @app.errorhandler(AppError)
 def handle_app_error(err):
-    return jsonify({"error": err.message}), err.status_code
+    body, status = err.to_response()
+    return jsonify(body), status
 
 @app.route("/api/brand-profile", methods=["GET"])
 @require_workspace
