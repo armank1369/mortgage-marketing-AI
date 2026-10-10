@@ -7,7 +7,7 @@ from datetime import date
 import anthropic
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
