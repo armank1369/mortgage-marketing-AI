@@ -9,6 +9,11 @@ import uuid
 import pytest
 from dotenv import load_dotenv
 
+os.environ["ENVIRONMENT"] = "development"
+os.environ["FLASK_ENV"] = "development"
+os.environ["ALLOW_DEV_AUTH_BYPASS"] = "true"
+os.environ["ALLOW_DEV_WORKSPACE_FALLBACK"] = "true"
+
 # Ensure server module imports resolve cleanly
 server_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if server_dir not in sys.path:

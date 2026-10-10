@@ -1,13 +1,16 @@
-from flask import Flask, jsonify, request, g
-from flask_cors import CORS
-import sqlite3
 import os
 import re
 import json
+import sqlite3
 from collections import Counter
 from datetime import date
 import anthropic
 from dotenv import load_dotenv
+
+load_dotenv()
+
+from flask import Flask, jsonify, request, g
+from flask_cors import CORS
 from auth_utils import get_authenticated_user, require_auth
 from auth.workspace_context import require_workspace
 from repositories import (
@@ -18,12 +21,15 @@ from repositories import (
     get_chat_session_messages,
     create_chat_session_with_message,
 )
-from errors import NotFoundError, ValidationError
-
-load_dotenv()
+from errors import AppError, NotFoundError, ValidationError, WorkspaceAccessDeniedError
 
 app = Flask(__name__)
 CORS(app)
+
+# Centralized error handler for domain exceptions
+@app.errorhandler(AppError)
+def handle_app_error(err):
+    return jsonify({"error": err.message}), err.status_code
 
 @app.route("/api/brand-profile", methods=["GET"])
 @require_workspace
