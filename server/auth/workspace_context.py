@@ -83,24 +83,32 @@ def resolve_user_workspace(auth_user_id: str, requested_workspace_id: Optional[s
 
 
 def require_workspace(f):
-    """Verify the Neon Auth bearer JWT, then authorize workspace membership.
+    """Verify Neon Auth identity before authorizing workspace access."""
 
-    The identity must come from Step E's signature/claims verification, never
-    a caller-provided user-id header or an unverified Flask request context.
-    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Import here to preserve the existing lazy-import startup behavior.
         from auth_utils import authenticate_request
 
         failure = authenticate_request()
         if failure is not None:
-            return failure  # Same 401 / 500 / 503 response as Step E.
+            return failure
 
-        requested_ws = request.headers.get("X-Workspace-Id") or request.args.get("workspace_id")
-        context = resolve_user_workspace(auth_user_id, requested_workspace_id=requested_ws)
+        # Identity comes only from the verified JWT.
+        auth_user_id = g.auth_user_id
+
+        requested_ws = (
+            request.headers.get("X-Workspace-Id")
+            or request.args.get("workspace_id")
+        )
+
+        context = resolve_user_workspace(
+            auth_user_id,
+            requested_workspace_id=requested_ws
+        )
+
         g.workspace_id = context["workspace_id"]
         g.workspace_context = context
+
         return f(*args, **kwargs)
+
     return decorated_function
-        auth_user_id = g.auth_user_id  # Set only after verified JWT claims.
