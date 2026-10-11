@@ -1,5 +1,6 @@
 
 import sys
+import argparse
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -28,23 +29,31 @@ def get_workspace_id():
     return str(row["id"])
 
 
-action = sys.argv[1] if len(sys.argv) > 1 else ""
+parser = argparse.ArgumentParser(description="Explicit synthetic development chat check; requires approved database access")
+parser.add_argument("action", choices=["create", "read", "delete"])
+parser.add_argument("session_id", nargs="?")
+parser.add_argument("--member-id", required=True, help="Approved development membership UUID; never inferred")
+parser.add_argument("--allow-write", action="store_true", help="Confirm authorization for synthetic writes on this database")
+args = parser.parse_args()
+action = args.action
+if action in {"create", "delete"} and not args.allow_write:
+    parser.error("Writes require --allow-write and approval for this development database")
+if action in {"read", "delete"} and not args.session_id:
+    parser.error("Provide the session ID")
 workspace_id = get_workspace_id()
 
 if action == "create":
     session = create_chat_session_with_message(
         workspace_id=workspace_id,
         title=TEST_TITLE,
-        initial_content="Synthetic Step F persistence test message."
+        initial_content="Synthetic Step F persistence test message.",
+        author_member_id=args.member_id
     )
     print("Created session ID:", session["id"])
 
 elif action in ("read", "delete"):
-    if len(sys.argv) < 3:
-        raise SystemExit("Provide the session ID")
-
-    session_id = sys.argv[2]
-    session = get_chat_session_messages(workspace_id, session_id)
+    session_id = args.session_id
+    session = get_chat_session_messages(workspace_id, session_id, args.member_id)
 
     if not session or session["title"] != TEST_TITLE:
         raise SystemExit("Synthetic test session not found; no changes made")
@@ -64,9 +73,9 @@ elif action in ("read", "delete"):
             cur.execute(
                 """
                 DELETE FROM public.chat_session
-                WHERE id = %s AND workspace_id = %s AND title = %s
+                WHERE id = %s AND workspace_id = %s AND title = %s AND created_by_member_id = %s
                 """,
-                (session_id, workspace_id, TEST_TITLE)
+                (session_id, workspace_id, TEST_TITLE, args.member_id)
             )
         print("Synthetic test session deleted")
 

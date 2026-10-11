@@ -1,5 +1,7 @@
+import { useBrowserScope } from '../context/BrowserScope'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { authenticatedPost, apiErrorMessage } from '../lib/api'
 import axios from 'axios'
 import CalendarPage from './CalendarPage'
 import PreferenceSetup from './PreferenceSetup'
@@ -382,10 +384,11 @@ function contentTypeLabel(type) {
 }
 
 export default function ChatPage() {
+  const scope = useBrowserScope()
   const { preferences } = usePreferences()
   const navigate = useNavigate()
   const [activeNav, setActiveNav] = useState('chat')
-  const storedChats = useRef(loadChatsFromStorage()).current
+  const storedChats = useRef(loadChatsFromStorage(scope)).current
   const initialChats = useRef(null)
   if (!initialChats.current) {
     initialChats.current =
@@ -423,6 +426,7 @@ export default function ChatPage() {
   const [draftChatTitle, setDraftChatTitle] = useState('')
   const endRef = useRef(null)
   const abortControllerRef = useRef(null)
+  useEffect(() => () => abortControllerRef.current?.abort(), [])
 
   const nmls = NMLS_NUMBER
 
@@ -446,8 +450,8 @@ export default function ChatPage() {
   }, [activeChat?.messages, isTyping])
 
   useEffect(() => {
-    saveChatsToStorage(chats, activeChatId)
-  }, [chats, activeChatId])
+    saveChatsToStorage(chats, activeChatId, scope)
+  }, [chats, activeChatId, scope])
 
   const updateActiveChatMessages = (updater, metadataUpdater = null) => {
     const now = new Date().toISOString()
@@ -512,7 +516,7 @@ export default function ChatPage() {
     const controller = new AbortController()
     abortControllerRef.current = controller
     try {
-      const { data } = await axios.post(
+      const { data } = await authenticatedPost(
         '/api/chat',
         { message, persona, nmls_number: nmls },
         { signal: controller.signal }
@@ -576,7 +580,7 @@ export default function ChatPage() {
           id: makeId(),
           role: 'assistant',
           type: 'text',
-          text: 'Sorry, I could not generate a response. Please check that the server is running and try again.',
+          text: apiErrorMessage(err, 'Sorry, I could not generate a response. Please try again.'),
           prompt: message,
           createdAt: new Date().toISOString(),
         },

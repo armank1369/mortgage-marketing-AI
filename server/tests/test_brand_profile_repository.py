@@ -5,6 +5,8 @@ parameterization, and workspace isolation.
 """
 
 import pytest
+
+pytestmark = pytest.mark.integration
 from repositories.brand_profile_repository import get_brand_profile, update_brand_profile
 from errors import DatabaseUnavailableError
 from psycopg_pool import ConnectionPool

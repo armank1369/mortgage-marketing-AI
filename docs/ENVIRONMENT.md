@@ -1,4 +1,6 @@
 
+
+> Step G update: [Current implementation and testing](STEP_G_IMPLEMENTATION_AND_TESTING.md) and [authorization matrix](AUTHORIZATION_MATRIX.md) supersede Step F security/test status below. Default tests now block database access; live tests require explicit opt-in and an approved isolated URL. Live Step G validation remains pending.
 # Lucie Environment Configuration
 
 ## Purpose
@@ -126,7 +128,7 @@ Production secrets must not be committed to GitHub or reused in local developmen
 
 The current Step F branch should not be considered production-ready solely because local repository and API tests passed.
 
-The legacy Flask routes require additional security review before public exposure.
+Step G protects generation and retires global SQLite endpoints; real Auth/database and deployment acceptance remain required.
 
 ---
 
@@ -238,9 +240,9 @@ However:
 
 - The normal ChatPage still uses browser localStorage.
 - Existing historical chats have not been migrated.
-- Several legacy Flask endpoints have not yet received the new workspace authorization protections.
+- Step G protects generation endpoints and retires global SQLite history/preferences without deleting their data.
 - Automatic workspace onboarding is not implemented.
-- Fine-grained role permissions are not implemented.
+- Step G implements explicit capabilities; live integration acceptance remains pending.
 - Cross-device synchronization is not implemented.
 
 These are future integration and security-hardening tasks, not completed features.

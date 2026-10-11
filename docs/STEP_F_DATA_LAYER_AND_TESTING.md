@@ -1,4 +1,6 @@
 
+
+> Step G update: [Current implementation and testing](STEP_G_IMPLEMENTATION_AND_TESTING.md) and [authorization matrix](AUTHORIZATION_MATRIX.md) supersede Step F security/test status below. Default tests now block database access; live tests require explicit opt-in and an approved isolated URL. Live Step G validation remains pending.
 # Lucie — Step F Data Layer, Testing, and Handoff Guide
 
 **Project:** Lucie Mortgage Marketing AI  

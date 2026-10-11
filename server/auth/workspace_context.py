@@ -1,114 +1,85 @@
-"""
-server/auth/workspace_context.py
-Step F.10: Connects Step E authenticated identity to authorized workspace scope.
-Enforces multi-tenant authorization using public.workspace_member with strict environment gates.
-"""
-
+"""Verified JWT -> current membership -> authorized workspace, without cached grants."""
 import logging
 from functools import wraps
-from typing import Optional, Dict, Any
+
 from flask import request, g
 
 from db.connection import get_db_cursor
-from errors import WorkspaceAccessDeniedError, DatabaseUnavailableError
-from logging_utils import log_db_operation
+from errors import (WorkspaceAccessDeniedError, DatabaseUnavailableError,
+                    WorkspaceSelectionRequiredError, ValidationError)
+from validation import uuid_string
+from auth.permissions import ROLE_CAPABILITIES
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_user_workspace(auth_user_id: str, requested_workspace_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Resolves a verified auth_user_id into an authorized workspace.
-    Uses public.workspace_member(auth_user_id, workspace_id, role).
+def list_user_workspaces(auth_user_id):
+    """Return zero or more memberships; never assign a default membership.
+
+    Removed memberships are denied immediately. The approved optional revoked_at
+    design is read through to_jsonb: no column is assumed to exist and no schema
+    change is performed. Deployment readiness still requires live verification.
     """
     if not auth_user_id:
         raise WorkspaceAccessDeniedError("Missing authenticated user identity.")
-
     try:
         with get_db_cursor() as cursor:
-            # 1. Look up explicit membership in public.workspace_member
-            if requested_workspace_id:
-                query = """
-                    SELECT wm.workspace_id, w.name AS workspace_name, wm.role
-                    FROM public.workspace_member wm
-                    JOIN public.workspace w ON w.id = wm.workspace_id
-                    WHERE wm.auth_user_id = %s
-                      AND wm.workspace_id = %s
-                    LIMIT 1;
-                """
-                cursor.execute(query, (auth_user_id, requested_workspace_id))
-            else:
-                query = """
-                    SELECT wm.workspace_id, w.name AS workspace_name, wm.role
-                    FROM public.workspace_member wm
-                    JOIN public.workspace w ON w.id = wm.workspace_id
-                    WHERE wm.auth_user_id = %s
-                    ORDER BY wm.created_at ASC
-                    LIMIT 1;
-                """
-                cursor.execute(query, (auth_user_id,))
-
-            member_row = cursor.fetchone()
-
-            if member_row:
-                ws_id = str(member_row["workspace_id"])
-                log_db_operation(
-                    "resolve_user_workspace",
-                    workspace_id=ws_id,
-                    status="success_membership",
-                    extra={"role": member_row["role"]}
-                )
-                return {
-                    "workspace_id": ws_id,
-                    "workspace_name": member_row["workspace_name"],
-                    "role": member_row["role"],
-                    "auth_user_id": auth_user_id
-                }
-
-            # Only actual workspace membership grants access. No implicit admin
-            # access to the development workspace for otherwise unknown users.
-            # Reject unauthorized foreign workspace or users with no membership
-            if requested_workspace_id:
-                logger.warning("Unauthorized workspace selection denied")
-                raise WorkspaceAccessDeniedError("Access to the requested workspace is forbidden.")
-
-    except WorkspaceAccessDeniedError:
-        raise
-    except Exception as e:
-        # Do not log user identifiers, query arguments, or raw DB exception text.
-        logger.error("Workspace membership lookup failed: %s", type(e).__name__)
-        raise DatabaseUnavailableError("Failed to resolve workspace membership.") from e
-
-    raise WorkspaceAccessDeniedError("User does not have an active membership in any workspace.")
+            cursor.execute("""
+                SELECT wm.id AS workspace_member_id, wm.workspace_id,
+                       w.name AS workspace_name, w.environment, wm.role,
+                       to_jsonb(wm)->>'revoked_at' AS revoked_at
+                FROM public.workspace_member wm
+                JOIN public.workspace w ON w.id = wm.workspace_id
+                WHERE wm.auth_user_id = %s
+                ORDER BY wm.created_at, wm.id;
+            """, (auth_user_id,))
+            return [dict(row, workspace_id=str(row["workspace_id"]),
+                         workspace_member_id=str(row["workspace_member_id"]),
+                         auth_user_id=auth_user_id)
+                    for row in cursor.fetchall()
+                    if row["role"] in ROLE_CAPABILITIES and row.get("revoked_at") is None]
+    except Exception as exc:
+        logger.error("Workspace membership lookup failed: %s", type(exc).__name__)
+        raise DatabaseUnavailableError("Failed to resolve workspace membership.") from exc
 
 
-def require_workspace(f):
-    """Verify Neon Auth identity before authorizing workspace access."""
+def resolve_user_workspace(auth_user_id, requested_workspace_id=None):
+    if requested_workspace_id is not None:
+        requested_workspace_id = uuid_string(requested_workspace_id, "workspace_id")
+    memberships = list_user_workspaces(auth_user_id)
+    if requested_workspace_id is not None:
+        for context in memberships:
+            if context["workspace_id"] == requested_workspace_id:
+                return context
+        raise WorkspaceAccessDeniedError()
+    if not memberships:
+        raise WorkspaceAccessDeniedError("No workspace membership is available.")
+    if len(memberships) != 1:
+        raise WorkspaceSelectionRequiredError()
+    return memberships[0]
 
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
+
+def requested_workspace():
+    values = request.args.getlist("workspace_id")
+    header = request.headers.get("X-Workspace-Id")
+    if header is not None:
+        values.append(header)
+    normalized = [uuid_string(value, "workspace_id") for value in values]
+    if len(set(normalized)) > 1 or len(request.args.getlist("workspace_id")) > 1:
+        raise ValidationError("Conflicting or duplicate workspace selections.")
+    return normalized[0] if normalized else None
+
+
+def require_workspace(view):
+    """Reuse Step E authentication; recheck membership for every request."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
         from auth_utils import authenticate_request
-
         failure = authenticate_request()
         if failure is not None:
             return failure
-
-        # Identity comes only from the verified JWT.
-        auth_user_id = g.auth_user_id
-
-        requested_ws = (
-            request.headers.get("X-Workspace-Id")
-            or request.args.get("workspace_id")
-        )
-
-        context = resolve_user_workspace(
-            auth_user_id,
-            requested_workspace_id=requested_ws
-        )
-
+        context = resolve_user_workspace(g.auth_user_id, requested_workspace())
         g.workspace_id = context["workspace_id"]
         g.workspace_context = context
-
-        return f(*args, **kwargs)
-
-    return decorated_function
+        return view(*args, **kwargs)
+    return wrapped

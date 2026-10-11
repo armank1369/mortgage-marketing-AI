@@ -15,28 +15,37 @@ from errors import DatabaseUnavailableError
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Importing repositories or collecting tests must not connect to a live database.
+# Preserve the existing pool interface for diagnostic scripts.
+from threading import Lock
 
-if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL is not set. Ensure server/.env contains your Neon development connection string."
-    )
 
-try:
-    _connection_pool = ConnectionPool(
-        conninfo=DATABASE_URL,
-        min_size=1,
-        max_size=10,
-        open=True,
-        kwargs={"row_factory": dict_row}
-    )
-    logger.info("Psycopg 3 connection pool initialized")
-    # Short-lived Python 3.14 tools must close worker threads before shutdown.
-    # Explicitly closing in standalone scripts remains preferable.
-    atexit.register(_connection_pool.close)
-except Exception as e:
-    logger.error("Failed to initialize database pool (%s)", type(e).__name__)
-    raise
+class LazyPool:
+    def __init__(self):
+        self._pool = None
+        self._lock = Lock()
+
+    def connection(self):
+        with self._lock:
+            if self._pool is None:
+                url = os.getenv("DATABASE_URL")
+                if not url:
+                    raise DatabaseUnavailableError("Database is not configured.")
+                self._pool = ConnectionPool(
+                    conninfo=url, min_size=1, max_size=10, open=True,
+                    kwargs={"row_factory": dict_row},
+                )
+            return self._pool.connection()
+
+    def close(self):
+        with self._lock:
+            if self._pool is not None:
+                self._pool.close()
+                self._pool = None
+
+
+_connection_pool = LazyPool()
+atexit.register(_connection_pool.close)
 
 
 @contextmanager

@@ -1,199 +1,68 @@
-
 # Lucie Authorization Matrix
 
-**Status:** Step E and Step F backend foundation implemented; full application authorization remains incomplete.
+Status: Step G implemented locally; real Neon Auth and database acceptance remains pending.
+See [implementation and testing](STEP_G_IMPLEMENTATION_AND_TESTING.md).
 
-This document distinguishes implemented authorization behavior from planned functionality.
+## Request boundaries
 
-For environment setup, membership provisioning, and tests, see [Step F Data Layer and Testing](STEP_F_DATA_LAYER_AND_TESTING.md).
+Flask reuses the existing JWT verifier and resolves current membership on each workspace
+request. Client identity, role, creator, and author fields cannot establish authority.
+Stored workspace selection is a preference, not permission.
 
----
-
-## 1. Authentication and Authorization
-
-### Authentication
-
-Neon Auth verifies who the user is.
-
-Flask validates bearer JWTs through the Step E authentication utilities.
-
-### Workspace Authorization
-
-Step F uses `public.workspace_member` to determine which workspace an authenticated identity may access.
-
-A valid Neon Auth account does not automatically receive workspace membership.
-
-The identity used for workspace authorization comes from the verified JWT, not a client-supplied user ID.
-
-### Role-Based Authorization
-
-The membership table includes a `role` field.
-
-The current backend reads this role, but detailed permissions for different roles are not yet enforced across the application.
-
-Do not assume that a `viewer` account is currently read-only or that an `admin` account has a completed administrative interface.
-
----
-
-## 2. Current Backend Authorization Matrix
-
-| Operation | No JWT | Valid JWT without membership | Valid JWT with membership |
+| Route | Authentication | Required capability | Additional boundary |
 |---|---|---|---|
-| `GET /api/auth/me` | 401 | Allowed | Allowed |
-| `GET /api/brand-profile` | 401 | 403 | Allowed in authorized workspace |
-| `GET /api/chat/sessions` | 401 | 403 | Allowed in authorized workspace |
-| `POST /api/chat/sessions` | 401 | 403 | Allowed in authorized workspace |
-| `GET /api/chat/sessions/<id>` | 401 | 403 | Allowed only for session in authorized workspace |
-| Request an unauthorized foreign workspace | 401 without JWT | 403 | 403 unless explicitly a member of that workspace |
+| GET /api/auth/me | JWT | None | Authenticated identity only |
+| GET /api/workspaces | JWT | None | Current recognized memberships; zero returns an empty list |
+| GET /api/brand-profile | JWT + membership | workspace:read | Selected authorized workspace |
+| GET /api/chat/sessions | JWT + membership | chat:read | Creator's unarchived sessions only |
+| GET /api/chat/sessions/<id> | JWT + membership | chat:read | Selected workspace and creator; otherwise 404 |
+| POST /api/chat/sessions | JWT + membership | chat:create | Trusted member attribution; persona must belong to workspace |
+| POST /api/chat | JWT + membership | ai:generate | No global SQLite history or preferences |
+| POST /api/video-brief | JWT + membership | ai:generate | Same generation boundary |
+| POST /api/social-image | JWT + membership | ai:generate | Same generation boundary |
+| GET /api/history; GET/POST /api/preferences | JWT + membership | workspace:read | Retired: 410 after authorization |
 
-Additional notes:
+Missing/invalid JWT returns 401; missing or unauthorized membership returns 403.
+Multiple memberships without selection return 409. One membership resolves automatically.
+Malformed UUIDs, conflicting header/query selections, and duplicate workspace query
+parameters return 400. Missing brand profiles return 404. Database failures return a
+sanitized 503. Unknown roles are excluded from authorized membership discovery.
 
-- An authorized brand-profile request can return 404 if the profile does not exist.
-- A chat-session request can return 404 if the session is not in the selected workspace.
-- Malformed or invalid requests may produce additional 4xx errors.
-- Service/configuration failures may produce 5xx responses.
-- These guarantees apply to the listed new Step F workspace-protected routes, not automatically to legacy Flask routes.
+## Step C Policy v1 capabilities
 
----
+| Role | Workspace/private chat read | Create own chat | AI generation | Configuration write policy |
+|---|---|---|---|---|
+| owner | Yes | Yes | Yes | Yes |
+| admin | Yes | Yes | Yes | Yes |
+| developer | Yes | Yes | Yes | Development/test only |
+| member | Yes | Yes | Yes | No |
+| viewer | Yes | No | No | No |
 
-## 3. Role Definitions
+Configuration capability is defined and tested for later integration; Step G does not
+add a configuration-write endpoint or administrative UI. No role bypasses chat ownership.
 
-The current database schema accepts these role values:
+## Privacy and revocation
 
-| Role | Intended purpose | Detailed authorization implemented? |
-|---|---|---|
-| `owner` | Workspace ownership | No |
-| `admin` | Administrative access | No |
-| `member` | Standard workspace participation | No |
-| `developer` | Development-related membership | No |
-| `viewer` | Read-oriented membership | No |
+Session queries require both workspace ID and the authenticated member's creator ID.
+Message reads first authorize that parent session. Unattributed and archived sessions
+remain stored and hidden. New session/message authors come from verified backend context.
+No historical ownership backfill occurs.
 
-The current new chat endpoints generally check for workspace membership rather than enforcing separate read/write permissions by role.
+Deleted memberships cannot authorize subsequent requests. If `revoked_at` exists, a
+non-null value excludes membership from discovery, resolution, and chat creation checks.
+The optional JSONB lookup tolerates the historical schema without that field; it does
+not provide soft revocation when no lifecycle mechanism exists. Live inspection and any
+migration execution remain outstanding. See [approved design](STEP_G_REVOCATION_PROPOSAL.md).
+Already-authorized in-flight requests are not automatically canceled.
 
-For example, do not describe the present `viewer` role as enforcing read-only access.
+The normal React chat UI still persists locally, now under user/workspace-scoped keys.
+Old unscoped browser records remain untouched and hidden pending an approved migration.
+Browser namespacing is not encryption or protection from someone controlling the device.
 
-Fine-grained authorization must be designed and tested separately.
+## Remaining acceptance
 
----
-
-## 4. Features Implemented Versus Planned
-
-| Capability | Current status |
-|---|---|
-| Neon Auth sign-in | Implemented |
-| JWT verification in Flask | Implemented |
-| Authorized workspace resolution | Implemented for Step F routes |
-| Rejection of missing JWTs on Step F routes | Implemented |
-| Rejection of unauthorized workspace selection | Implemented |
-| Workspace-scoped brand profile retrieval | Implemented |
-| Workspace-scoped chat session creation and retrieval | Implemented |
-| Persona repository operations | Implemented at backend repository level |
-| Frontend chat persistence in Neon | Not implemented |
-| Per-user private chat access | Not implemented |
-| Fine-grained workspace role permissions | Not implemented |
-| Workspace invitations and approval | Not implemented |
-| Automatic approved workspace provisioning | Not implemented |
-| Admin interface for managing users | Not implemented |
-| Complete legacy API authorization | Not implemented |
-| Joseph's historical chat migration | Not implemented |
-| Cross-device chat synchronization | Not implemented |
-
----
-
-## 5. Known Security Boundary — Legacy Endpoints
-
-The normal React ChatPage still uses legacy application routes.
-
-At the reviewed Step F commit, selected older routes, including:
-
-- `/api/chat`
-- `/api/history`
-- `/api/preferences`
-
-do not consistently use the new Flask authentication and workspace authorization decorators.
-
-Other legacy routes also require review.
-
-Do not treat a React sign-in screen as sufficient protection for backend endpoints.
-
-Before public production deployment:
-
-1. Inventory every Flask API endpoint.
-2. Identify which endpoints access sensitive data or consume paid services.
-3. Apply verified authentication where required.
-4. Apply workspace and user-level authorization where required.
-5. Add negative security tests.
-6. Review CORS, rate limits, debugging configuration, and deployment settings.
-
-Step F validated selected new endpoints. It was not a complete security audit of Lucie's legacy backend.
-
----
-
-## 6. Workspace Membership Provisioning
-
-Neon Auth registration and workspace membership are separate operations.
-
-### Current Development Process
-
-An authorized developer can manually assign an approved development account to `lucie-development` using the database schema and procedure documented in the Step F guide.
-
-This is intended for controlled testing and bootstrap configuration.
-
-### Recommended Future Process
-
-Production should use an approved user invitation, account onboarding, or administrator-controlled provisioning mechanism.
-
-A newly registered user should not receive automatic access to Joseph's workspace merely because their Neon Auth account exists.
-
-Users with no membership should receive a clear access-pending or invitation experience.
-
----
-
-## 7. Chat Privacy Decision Required
-
-The new chat repository primarily scopes sessions by `workspace_id`.
-
-It does not yet enforce private conversation visibility per individual user.
-
-If several users belong to the same workspace, current API behavior may permit those members to retrieve the same workspace's chat sessions.
-
-Before enabling additional users or migrating Joseph's private conversations, decide whether chats should be:
-
-- Shared across all workspace members.
-- Private to the chat creator.
-- Shared only through explicit access rules.
-
-The final design must be implemented and tested at the backend, not only hidden in the UI.
-
----
-
-## 8. Required Security Acceptance Tests
-
-For the new Step F workspace routes:
-
-- [ ] Missing JWT receives 401.
-- [ ] Invalid JWT receives 401.
-- [ ] Valid JWT resolves the correct authenticated identity.
-- [ ] Authenticated account without membership receives 403.
-- [ ] Authorized member can read their workspace's brand profile.
-- [ ] Authorized member can list and create workspace chat sessions.
-- [ ] Foreign workspace selection is rejected.
-- [ ] Client-supplied development identity headers cannot bypass JWT verification.
-- [ ] Requests for another workspace's sessions do not disclose records.
-- [ ] Real Neon Auth integration is tested separately from mocked unit tests.
-
-For overall production readiness:
-
-- [ ] Legacy endpoint authorization is reviewed and corrected.
-- [ ] Role permissions are designed and implemented.
-- [ ] User versus workspace chat privacy is defined and enforced.
-- [ ] Secure onboarding and membership provisioning are implemented.
-- [ ] End-to-end and deployment-environment security tests are completed.
-
----
-
-## Related Documentation
-
-- [Step F Data Layer and Testing Guide](STEP_F_DATA_LAYER_AND_TESTING.md)
-- [Environment Configuration](ENVIRONMENT.md)
-- [Step E Neon Auth Recap](Lucie_Step_E_Neon_Auth_and_Session_Identity_Recap.md)
+Local synthetic tests cover route guards, signed JWT rejection, capabilities, selection,
+private repository predicates, attribution, generation response compatibility, and browser
+storage isolation. They do not establish live database schema or real Auth integration.
+Live multi-account tests, schema/lifecycle verification, deployment review, invitations,
+historical migration, and cross-device persistence remain separate work.

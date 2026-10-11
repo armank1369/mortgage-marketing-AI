@@ -6,24 +6,26 @@ Enforces multi-step atomic transactions for session creation and message logging
 
 from typing import List, Optional, Dict, Any
 from db.connection import get_db_cursor, get_db_transaction
-from errors import NotFoundError, DatabaseUnavailableError
+from errors import NotFoundError, WorkspaceAccessDeniedError
+from validation import uuid_string
 from logging_utils import log_db_operation, log_db_error
 
 
-def list_chat_sessions(workspace_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+def list_chat_sessions(workspace_id: str, member_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """List recent chat sessions scoped strictly to workspace_id."""
     query = """
         SELECT id, workspace_id, created_by_member_id, default_persona_id,
                title, summary_status, started_at, updated_at
         FROM public.chat_session
         WHERE workspace_id = %s
+          AND created_by_member_id = %s
           AND archived_at IS NULL
         ORDER BY updated_at DESC
         LIMIT %s;
     """
     try:
         with get_db_cursor() as cur:
-            cur.execute(query, (workspace_id, limit))
+            cur.execute(query, (workspace_id, uuid_string(member_id, "member_id"), limit))
             rows = cur.fetchall()
             log_db_operation(
                 "list_chat_sessions",
@@ -43,7 +45,7 @@ def list_chat_sessions(workspace_id: str, limit: int = 50) -> List[Dict[str, Any
         raise
 
 
-def get_chat_session_messages(workspace_id: str, session_id: str) -> Optional[Dict[str, Any]]:
+def get_chat_session_messages(workspace_id: str, session_id: str, member_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch a chat session and all linked chat_messages.
     Guarantees session belongs strictly to the requested workspace_id.
@@ -52,7 +54,8 @@ def get_chat_session_messages(workspace_id: str, session_id: str) -> Optional[Di
         SELECT id, workspace_id, created_by_member_id, default_persona_id,
                title, summary_status, started_at, updated_at
         FROM public.chat_session
-        WHERE id = %s AND workspace_id = %s;
+        WHERE id = %s AND workspace_id = %s
+          AND created_by_member_id = %s AND archived_at IS NULL;
     """
     message_query = """
         SELECT id, session_id, author_member_id, persona_id, role, kind,
@@ -63,7 +66,7 @@ def get_chat_session_messages(workspace_id: str, session_id: str) -> Optional[Di
     """
     try:
         with get_db_cursor() as cur:
-            cur.execute(session_query, (session_id, workspace_id))
+            cur.execute(session_query, (uuid_string(session_id, "session_id"), workspace_id, uuid_string(member_id, "member_id")))
             session_row = cur.fetchone()
             if not session_row:
                 return None
@@ -99,8 +102,9 @@ def create_chat_session_with_message(
     workspace_id: str,
     title: str,
     initial_content: str,
-    persona_id: Optional[str] = None,
-    author_member_id: Optional[str] = None
+    *,
+    author_member_id: str,
+    persona_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Atomic transaction:
@@ -108,6 +112,21 @@ def create_chat_session_with_message(
     """
     try:
         with get_db_transaction() as cur:
+            author_member_id = uuid_string(author_member_id, "author_member_id")
+            cur.execute(
+                "SELECT id FROM public.workspace_member wm WHERE id = %s AND workspace_id = %s AND (to_jsonb(wm)->>'revoked_at') IS NULL FOR SHARE",
+                (author_member_id, workspace_id),
+            )
+            if not cur.fetchone():
+                raise WorkspaceAccessDeniedError()
+            if persona_id is not None:
+                persona_id = uuid_string(persona_id, "persona_id")
+                cur.execute(
+                    "SELECT id FROM public.persona WHERE id = %s AND workspace_id = %s AND deleted_at IS NULL FOR SHARE",
+                    (persona_id, workspace_id),
+                )
+                if not cur.fetchone():
+                    raise NotFoundError("Persona not found in this workspace.")
             # 1. Insert parent chat_session
             cur.execute(
                 """

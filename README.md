@@ -11,7 +11,9 @@ The project is being upgraded from a browser-focused prototype into an applicati
 
 If you are joining the project or testing the recent backend changes, read:
 
-**[Step F — Data Layer, Testing, and Handoff Guide](docs/STEP_F_DATA_LAYER_AND_TESTING.md)**
+**[Step G — Current Implementation and Testing](docs/STEP_G_IMPLEMENTATION_AND_TESTING.md)**
+
+For historical setup and the Step F foundation, see [Step F guide](docs/STEP_F_DATA_LAYER_AND_TESTING.md). The following guide contents describe that historical foundation:
 
 This document includes:
 
@@ -84,15 +86,19 @@ Implemented:
 
 A successful development test does not mean the entire application is ready for production.
 
+### Step G — Authorization and Creator Privacy
+
+Implemented locally on `codex/step-g-workspace-authorization`: explicit role capabilities, refreshed workspace membership checks, creator-private chat APIs, authenticated React generation, and scoped browser storage. Global SQLite history/preferences access is retired without deleting data. Cross-chat duplicate-idea suppression is temporarily unavailable. Real Neon Auth/database acceptance remains pending; no migration or deployment occurred.
+
 ### Current Limitations
 
 - The normal ChatPage still uses browser localStorage.
 - Existing chats do not automatically synchronize between devices.
 - Joseph's historical data has not yet been migrated.
-- The legacy SQLite history mechanism remains.
-- Some older Flask endpoints still require server-side authorization.
+- Existing SQLite data remains stored; authenticated V2 no longer uses it.
+- Live integration acceptance for the new authorization boundaries remains pending.
 - User invitation and automatic workspace provisioning are not implemented.
-- Fine-grained role permissions are not implemented.
+- Explicit role capabilities are implemented locally; invitations and administrative UI remain deferred.
 - Long-term AI memory and RAG are not implemented.
 
 ---
@@ -106,9 +112,9 @@ The normal application currently has two different data paths.
 ```text
 React ChatPage
     |
-    +-- Browser localStorage for chat history
+    +-- User/workspace-scoped browser localStorage for chat history
     |
-    +-- Legacy Flask /api/chat for AI generation
+    +-- Authenticated, capability-protected Flask /api/chat for AI generation
 ```
 
 ### New Step F Backend Data Layer
@@ -193,7 +199,7 @@ Python 3.11 or 3.12 is recommended for a consistent local backend environment.
 git clone https://github.com/armank1369/mortgage-marketing-AI.git
 cd mortgage-marketing-AI
 git fetch origin
-git switch --track origin/fix/step-f10-finalization
+git switch --track origin/luciev2_newteam
 ```
 
 If the repository or local branch already exists, update the correct branch instead of cloning again.
@@ -290,7 +296,7 @@ From `server/`, using the installed Python environment:
 .\.venv\Scripts\python.exe -m pytest tests/test_chat_repository.py -v
 ```
 
-Some tests create or modify development database records.
+Default tests block live database access and skip integration tests. Live repository tests require `--run-integration` and an explicit `LUCIE_TEST_DATABASE_URL` for an approved disposable database. Those tests create and delete synthetic records.
 
 Do not run database write tests against production, and avoid modifying shared development data without coordination.
 
@@ -322,13 +328,13 @@ Signing in on another browser does not automatically synchronize existing chat d
 
 Step F introduced verified workspace authorization for selected new database endpoints.
 
-It did not secure every legacy Flask endpoint.
+Step G now protects all generation routes and retires the global SQLite endpoints. Its local tests passed, but live acceptance is still outstanding.
 
 Before public production deployment, the team must:
 
 - Review authentication on existing API routes.
 - Enforce proper authorization on sensitive operations.
-- Define workspace versus per-user chat visibility.
+- Verify the implemented creator-private policy with real accounts.
 - Implement safe workspace onboarding/provisioning.
 - Review deployment secrets, CORS, debug settings, rate limits, and access controls.
 - Test privacy boundaries using multiple accounts.
@@ -342,8 +348,8 @@ Sensitive client and mortgage-related information should not be used as syntheti
 
 Recommended next phases:
 
-1. Secure and standardize remaining backend authentication and authorization.
-2. Design workspace invitation/onboarding and user data privacy.
+1. Complete Step G live schema, revocation, Auth, and browser acceptance.
+2. Plan workspace invitation/onboarding under the approved creator-private policy.
 3. Connect the React UI to authenticated Neon database APIs.
 4. Prepare and validate Joseph's existing-data migration.
 5. Test cross-device access and synchronization.
@@ -388,3 +394,5 @@ The current backend database foundation has been demonstrated in local developme
 That is an important technical milestone, but it is distinct from finishing the user-facing migration to Neon.
 
 For team handoff and acceptance testing, follow the Step F testing guide rather than relying only on this README.
+
+Step G current handoff: [implementation, behavior changes, and live acceptance gates](docs/STEP_G_IMPLEMENTATION_AND_TESTING.md). Older Step F validation does not establish Step G live acceptance.

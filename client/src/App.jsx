@@ -12,6 +12,7 @@ import ChatPage from './pages/ChatPage'
 import AuthPage from './pages/AuthPage'
 import AuthDebugPage from './pages/AuthDebugPage'
 import SettingsPage from './pages/SettingsPage'
+import WorkspaceGate from './components/WorkspaceGate'
 
 function AppContent() {
   const { preferences } = usePreferences()
@@ -43,7 +44,7 @@ function ProtectedLucie() {
       <RedirectToSignIn />
 
       <SignedIn>
-        <LucieApp />
+        <WorkspaceGate><LucieApp /></WorkspaceGate>
       </SignedIn>
     </>
   )

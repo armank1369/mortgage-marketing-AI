@@ -27,13 +27,13 @@ def membership_db(monkeypatch):
             self.params = params
             self.query = query
 
-        def fetchone(self):
+        def fetchall(self):
             assert "public.workspace_member" in self.query
             if self.params[0] != USER:
-                return None
-            if len(self.params) > 1 and str(self.params[1]) != WORKSPACE:
-                return None
-            return {"workspace_id": WORKSPACE, "workspace_name": "Test", "role": "member"}
+                return []
+            return [{"workspace_id": WORKSPACE, "workspace_member_id": "33333333-3333-4333-8333-333333333333",
+                     "workspace_name": "Test", "environment": "test", "role": "member"}]
+
 
     @contextmanager
     def cursor():

@@ -5,6 +5,8 @@ Integration tests verifying atomic chat transactions and multi-tenant isolation.
 
 import uuid
 import pytest
+
+pytestmark = pytest.mark.integration
 from repositories.chat_repository import (
     create_chat_session_with_message,
     get_chat_session_messages,
@@ -14,10 +16,11 @@ from db.connection import get_db_cursor
 
 
 @pytest.fixture
-def temp_chat_session(dev_workspace_id):
+def temp_chat_session(dev_workspace_id, member_id):
     """Creates a temporary chat session and cleans it up after test execution."""
     session = create_chat_session_with_message(
         workspace_id=dev_workspace_id,
+        author_member_id=member_id,
         title=f"Test Chat {uuid.uuid4().hex[:6]}",
         initial_content="Inquiry about conventional mortgage loan options."
     )
@@ -37,7 +40,7 @@ def test_atomic_chat_session_creation(dev_workspace_id, temp_chat_session):
     assert "conventional mortgage" in temp_chat_session["messages"][0]["content"]
 
 
-def test_cross_workspace_chat_isolation(temp_chat_session, alternate_workspace_id):
+def test_cross_workspace_chat_isolation(temp_chat_session, alternate_workspace_id, member_id):
     """
     CRITICAL SECURITY INVARIANT:
     Chat session exists in dev_workspace, but querying with alternate_workspace_id must return None.
@@ -45,6 +48,6 @@ def test_cross_workspace_chat_isolation(temp_chat_session, alternate_workspace_i
     session_id = str(temp_chat_session["id"])
     leaked_record = get_chat_session_messages(
         workspace_id=alternate_workspace_id,
-        session_id=session_id
+        session_id=session_id, member_id=member_id
     )
     assert leaked_record is None, "SECURITY FAILURE: Cross-workspace chat session leak detected!"

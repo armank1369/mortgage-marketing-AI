@@ -71,3 +71,27 @@ class WorkspaceAccessDeniedError(AppError):
 
     def __init__(self, message: str = "Access to the requested workspace is forbidden."):
         super().__init__(message)
+
+
+class PermissionDeniedError(AppError):
+    status_code = 403
+    error_code = "permission_denied"
+
+    def __init__(self):
+        super().__init__("You do not have permission for this operation.")
+
+
+class WorkspaceSelectionRequiredError(AppError):
+    status_code = 409
+    error_code = "workspace_selection_required"
+
+    def __init__(self):
+        super().__init__("Select a workspace before continuing.")
+
+
+class LegacyEndpointRetiredError(AppError):
+    status_code = 410
+    error_code = "legacy_endpoint_retired"
+
+    def __init__(self):
+        super().__init__("This legacy endpoint is no longer available in Lucie V2.")

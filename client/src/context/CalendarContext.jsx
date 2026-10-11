@@ -1,3 +1,4 @@
+import { useBrowserScope } from './BrowserScope'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { loadCalendarEntriesFromStorage, saveCalendarEntriesToStorage } from '../utils/storage'
 
@@ -25,11 +26,12 @@ function seedEntries() {
 }
 
 export function CalendarProvider({ children }) {
-  const [entries, setEntries] = useState(() => loadCalendarEntriesFromStorage() || seedEntries())
+  const scope = useBrowserScope()
+  const [entries, setEntries] = useState(() => loadCalendarEntriesFromStorage(scope) || seedEntries())
 
   useEffect(() => {
-    saveCalendarEntriesToStorage(entries)
-  }, [entries])
+    saveCalendarEntriesToStorage(entries, scope)
+  }, [entries, scope])
 
   const addEntry = (entry) => {
     setEntries((prev) => [

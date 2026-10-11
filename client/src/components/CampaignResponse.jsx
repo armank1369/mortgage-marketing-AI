@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
+import { authenticatedPost, apiErrorMessage } from '../lib/api'
 import Section from './Section'
 import platformBadge from './platformBadge'
 import { ScriptLine, SlideCarousel, CreativeDirectionGrid, FORMAT_BADGES } from './ContentBriefCard'
@@ -211,7 +211,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
     setGenerating(true)
     setGenError('')
     try {
-      const { data } = await axios.post('/api/video-brief', {
+      const { data } = await authenticatedPost('/api/video-brief', {
         caption: entry.caption,
         platform: entry.platform,
         category: entry.category,
@@ -219,8 +219,8 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
         nmls_number: nmls,
       })
       onVideoGenerated(data.video)
-    } catch {
-      setGenError('Could not generate a video script. Please try again.')
+    } catch (err) {
+      setGenError(apiErrorMessage(err, 'Could not generate a video script. Please try again.'))
     } finally {
       setGenerating(false)
     }

@@ -1,3 +1,9 @@
+// Legacy unscoped keys are preserved, never read or reassigned by authenticated V2.
+function scopedKey(key, scope) {
+  if (typeof scope !== 'string' || !scope) throw new Error('Storage scope is required')
+  return `${key}:v2:${encodeURIComponent(scope)}`
+}
+
 const PREFERENCES_KEY = 'lucent_preferences'
 const CHATS_KEY = 'lucent_chats'
 const CHAT_STORAGE_VERSION = 2
@@ -96,21 +102,21 @@ function normalizeChat(chat, now) {
 
 // Brand voice (core values, tone, target audience) now lives on the persona itself rather
 // than as one global set shared by every persona, so the persona object is stored whole.
-export function savePreferencesToStorage(preferences) {
+export function savePreferencesToStorage(preferences, scope) {
   try {
     const payload = {
       persona: preferences.persona || null,
       nmls_number: preferences.nmls || '',
     }
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(payload))
+    localStorage.setItem(scopedKey(PREFERENCES_KEY, scope), JSON.stringify(payload))
   } catch {
     // silent
   }
 }
 
-export function loadPreferencesFromStorage() {
+export function loadPreferencesFromStorage(scope) {
   try {
-    const raw = localStorage.getItem(PREFERENCES_KEY)
+    const raw = localStorage.getItem(scopedKey(PREFERENCES_KEY, scope))
     if (!raw) return null
     const stored = JSON.parse(raw)
     let persona = stored.persona || null
@@ -146,10 +152,10 @@ export function loadPreferencesFromStorage() {
   }
 }
 
-export function saveChatsToStorage(chats, activeChatId) {
+export function saveChatsToStorage(chats, activeChatId, scope) {
   try {
     localStorage.setItem(
-      CHATS_KEY,
+      scopedKey(CHATS_KEY, scope),
       JSON.stringify({ version: CHAT_STORAGE_VERSION, chats, activeChatId })
     )
   } catch {
@@ -157,9 +163,9 @@ export function saveChatsToStorage(chats, activeChatId) {
   }
 }
 
-export function loadChatsFromStorage() {
+export function loadChatsFromStorage(scope) {
   try {
-    const raw = localStorage.getItem(CHATS_KEY)
+    const raw = localStorage.getItem(scopedKey(CHATS_KEY, scope))
     if (!raw) return null
 
     const stored = JSON.parse(raw)
@@ -191,18 +197,18 @@ export function loadChatsFromStorage() {
 
 // Calendar entries store `date` as a Date object in memory, so it has to be serialized to
 // an ISO string on the way into localStorage and revived back into a Date on the way out.
-export function saveCalendarEntriesToStorage(entries) {
+export function saveCalendarEntriesToStorage(entries, scope) {
   try {
     const payload = entries.map((entry) => ({ ...entry, date: entry.date.toISOString() }))
-    localStorage.setItem(CALENDAR_KEY, JSON.stringify(payload))
+    localStorage.setItem(scopedKey(CALENDAR_KEY, scope), JSON.stringify(payload))
   } catch {
     // silent
   }
 }
 
-export function loadCalendarEntriesFromStorage() {
+export function loadCalendarEntriesFromStorage(scope) {
   try {
-    const raw = localStorage.getItem(CALENDAR_KEY)
+    const raw = localStorage.getItem(scopedKey(CALENDAR_KEY, scope))
     if (!raw) return null
     const stored = JSON.parse(raw)
     if (!Array.isArray(stored)) return null

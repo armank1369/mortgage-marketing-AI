@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import sqlite3
 from collections import Counter
 from datetime import date
 import anthropic
@@ -11,8 +10,11 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 from auth_utils import get_authenticated_user, require_auth
-from auth.workspace_context import require_workspace
+from auth.workspace_context import require_workspace, list_user_workspaces
+from auth.permissions import require_capability
+from validation import json_object, required_text, uuid_string
 from repositories import (
     get_brand_profile,
     update_brand_profile,
@@ -21,7 +23,7 @@ from repositories import (
     get_chat_session_messages,
     create_chat_session_with_message,
 )
-from errors import AppError, NotFoundError, ValidationError, WorkspaceAccessDeniedError
+from errors import AppError, NotFoundError, ValidationError, LegacyEndpointRetiredError
 
 app = Flask(__name__)
 CORS(app)
@@ -32,8 +34,28 @@ def handle_app_error(err):
     body, status = err.to_response()
     return jsonify(body), status
 
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    if isinstance(error, HTTPException):
+        return jsonify({"error": error.name.lower().replace(" ", "_"), "message": error.description}), error.code
+    app.logger.error("Request failed: %s", type(error).__name__)
+    return jsonify({"error": "internal_server_error", "message": "The request could not be completed."}), 500
+
+
+@app.route("/api/workspaces", methods=["GET"])
+@require_auth
+def api_workspaces():
+    # Authenticated accounts with zero memberships get an empty list, not 403.
+    memberships = list_user_workspaces(g.auth_user_id)
+    return jsonify({"workspaces": [
+        {key: row[key] for key in ("workspace_id", "workspace_name", "role", "environment")}
+        for row in memberships
+    ]})
+
+
 @app.route("/api/brand-profile", methods=["GET"])
 @require_workspace
+@require_capability("workspace:read")
 def api_get_brand_profile():
     profile = get_brand_profile(g.workspace_id)
     if not profile:
@@ -43,42 +65,50 @@ def api_get_brand_profile():
 
 @app.route("/api/chat/sessions", methods=["GET"])
 @require_workspace
+@require_capability("chat:read")
 def api_list_chat_sessions():
-    sessions = list_chat_sessions(g.workspace_id)
+    sessions = list_chat_sessions(g.workspace_id, g.workspace_context["workspace_member_id"])
     return jsonify(sessions), 200
 
 
 @app.route("/api/chat/sessions", methods=["POST"])
 @require_workspace
+@require_capability("chat:create")
 def api_create_chat_session():
-    data = request.get_json() or {}
-    title = data.get("title")
-    initial_content = data.get("content")
-
-    if not title or not initial_content:
-        raise ValidationError("Both 'title' and 'content' are required.")
+    data = json_object()
+    title = required_text(data, "title")
+    initial_content = required_text(data, "content")
 
     session = create_chat_session_with_message(
         workspace_id=g.workspace_id,
         title=title,
         initial_content=initial_content,
-        persona_id=data.get("persona_id")
+        persona_id=data.get("persona_id"),
+        author_member_id=g.workspace_context["workspace_member_id"]
     )
     return jsonify(session), 201
 
 
 @app.route("/api/chat/sessions/<session_id>", methods=["GET"])
 @require_workspace
+@require_capability("chat:read")
 def api_get_chat_session(session_id):
-    session = get_chat_session_messages(g.workspace_id, session_id)
+    session = get_chat_session_messages(g.workspace_id, uuid_string(session_id, "session_id"), g.workspace_context["workspace_member_id"])
     if not session:
         raise NotFoundError("Chat session not found in this workspace.")
     return jsonify(session), 200
 
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-4-5')
-anthropic_client = anthropic.Anthropic()
+anthropic_client = None
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
+
+def get_anthropic_client():
+    global anthropic_client
+    if anthropic_client is None:
+        anthropic_client = anthropic.Anthropic()
+    return anthropic_client
+
+
 
 
 def build_system(stable_text, *variable_parts):
@@ -908,10 +938,6 @@ def enforce_video_brief_compliance(brief, nmls):
     return brief, flags
 
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 # How far back to look for prior ideas, and how many idea lines to surface —
@@ -1189,78 +1215,12 @@ def _extract_idea_lines(response_text):
     return [idea] if idea else []
 
 
-def get_recent_idea_context():
-    # Ideas are tracked brand-wide (across personas and chats), not per-persona — a
-    # concept reused for a different persona still reads as repetitive to Joseph.
-    with get_db() as db:
-        rows = db.execute(
-            'SELECT response FROM chat_history ORDER BY id DESC LIMIT ?', (RECENT_IDEA_ROWS,)
-        ).fetchall()
-
-    ideas = []
-    for row in rows:
-        ideas.extend(_extract_idea_lines(row['response']))
-        if len(ideas) >= RECENT_IDEA_MAX_LINES:
-            break
-    ideas = ideas[:RECENT_IDEA_MAX_LINES]
-
-    if not ideas:
-        return ''
-
-    bullet_list = '\n'.join(f'- {line}' for line in ideas)
-    return (
-        'RECENTLY USED CONTENT IDEAS — DO NOT REPEAT. These hooks, concepts, or video/post formats (e.g. a specific '
-        '"whiteboard video explaining X") were already used in recent content for this brand. Generate a genuinely '
-        'different angle or topic instead of reusing or lightly rewording any of these:\n' + bullet_list
-    )
 
 
-def get_latest_preference():
-    with get_db() as db:
-        row = db.execute(
-            'SELECT name, nmls_number, brand_tone, persona FROM preferences ORDER BY id DESC LIMIT 1'
-        ).fetchone()
-        return dict(row) if row else None
 
 
-def init_db():
-    with get_db() as db:
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS preferences (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                nmls_number TEXT,
-                brand_tone TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        columns = [col[1] for col in db.execute('PRAGMA table_info(preferences)').fetchall()]
-        if 'persona' not in columns:
-            db.execute('ALTER TABLE preferences ADD COLUMN persona TEXT')
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS personas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                persona_name TEXT NOT NULL,
-                description TEXT
-            )
-        ''')
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT,
-                response TEXT,
-                persona TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        db.execute(
-            'INSERT OR IGNORE INTO personas (persona_name, description) VALUES (?, ?)',
-            ('self-employed', 'Age 35-60, self-employed or entrepreneur, complex finances, needs Non-QM options')
-        )
-        db.commit()
 
 
-init_db()
 
 
 @app.route('/api/hello')
@@ -1275,32 +1235,24 @@ def auth_me():
 
 
 @app.route('/api/preferences', methods=['GET'])
+@require_workspace
+@require_capability("workspace:read")
 def get_preferences():
-    prefs = get_latest_preference()
-    return jsonify({'preference': prefs})
+    raise LegacyEndpointRetiredError()
 
 
 @app.route('/api/preferences', methods=['POST'])
+@require_workspace
+@require_capability("workspace:read")
 def save_preferences():
-    data = request.get_json()
-    if not data.get('name'):
-        return jsonify({'error': 'name is required'}), 400
-    with get_db() as db:
-        db.execute(
-            'INSERT INTO preferences (name, nmls_number, brand_tone, persona) VALUES (?, ?, ?, ?)',
-            (data['name'], data.get('nmls_number'), data.get('brand_tone'), data.get('persona'))
-        )
-        db.commit()
-    return jsonify({'status': 'ok'}), 201
+    raise LegacyEndpointRetiredError()
 
 
 @app.route('/api/history', methods=['GET'])
+@require_workspace
+@require_capability("workspace:read")
 def get_history():
-    with get_db() as db:
-        rows = db.execute(
-            'SELECT message, response, persona, timestamp FROM chat_history ORDER BY id DESC LIMIT 20'
-        ).fetchall()
-    return jsonify({'history': [dict(row) for row in rows]})
+    raise LegacyEndpointRetiredError()
 
 
 def _campaign_post_count_shortfalls(campaign):
@@ -1332,12 +1284,20 @@ def enforce_campaign_compliance(campaign, nmls):
 
 
 @app.route('/api/social-image', methods=['POST'])
+@require_workspace
+@require_capability("ai:generate")
 def social_image():
-    data = request.get_json()
+    data = json_object()
     title = data.get('title', '')
+    if not isinstance(title, str):
+        raise ValidationError('title must be text.')
     script = data.get('script') or {}
+    if not isinstance(script, dict):
+        raise ValidationError('script must be an object.')
     platform = data.get('platform', '')
     persona = data.get('persona', '')
+    if not isinstance(persona, str):
+        raise ValidationError('persona must be text.')
     nmls = data.get('nmls_number') or '000000'
 
     hook = script.get('hook', '')
@@ -1370,7 +1330,7 @@ def social_image():
     ).replace('{nmls}', nmls)
 
     try:
-        result = anthropic_client.messages.create(
+        result = get_anthropic_client().messages.create(
             model=ANTHROPIC_MODEL,
             system=build_system(system_prompt),
             messages=[{'role': 'user', 'content': source_text}],
@@ -1390,19 +1350,24 @@ def social_image():
     except anthropic.APIConnectionError:
         return jsonify({'error': 'Could not connect to the Anthropic API.'}), 503
     except anthropic.APIStatusError as e:
-        return jsonify({'error': f'Anthropic API request failed: {e.message}'}), e.status_code
+        app.logger.warning('AI provider request failed: %s', type(e).__name__)
+        return jsonify({'error': 'AI provider request failed. Please try again.'}), 502
 
 
 @app.route('/api/video-brief', methods=['POST'])
+@require_workspace
+@require_capability("ai:generate")
 def video_brief():
-    data = request.get_json()
-    caption = (data.get('caption') or '').strip()
+    data = json_object()
+    caption = required_text(data, 'caption')
     if not caption:
         return jsonify({'error': 'caption is required'}), 400
 
     platform = data.get('platform', '')
     category = data.get('category', '')
     persona = data.get('persona', '')
+    if not isinstance(persona, str):
+        raise ValidationError('persona must be text.')
     nmls = data.get('nmls_number') or '000000'
 
     persona_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS['self-employed'])
@@ -1414,7 +1379,7 @@ def video_brief():
     source_text = f'Platform: {platform}\nCategory/pillar: {category}\nCaption:\n{caption}'
 
     try:
-        result = anthropic_client.messages.create(
+        result = get_anthropic_client().messages.create(
             model=ANTHROPIC_MODEL,
             system=build_system(system_prompt),
             messages=[{'role': 'user', 'content': source_text}],
@@ -1438,14 +1403,19 @@ def video_brief():
     except anthropic.APIConnectionError:
         return jsonify({'error': 'Could not connect to the Anthropic API.'}), 503
     except anthropic.APIStatusError as e:
-        return jsonify({'error': f'Anthropic API request failed: {e.message}'}), e.status_code
+        app.logger.warning('AI provider request failed: %s', type(e).__name__)
+        return jsonify({'error': 'AI provider request failed. Please try again.'}), 502
 
 
 @app.route('/api/chat', methods=['POST'])
+@require_workspace
+@require_capability("ai:generate")
 def chat():
-    data = request.get_json()
-    message = data.get('message', '')
+    data = json_object()
+    message = required_text(data, 'message')
     persona = data.get('persona', '')
+    if not isinstance(persona, str):
+        raise ValidationError('persona must be text.')
 
     if not message:
         return jsonify({'error': 'message is required'}), 400
@@ -1463,7 +1433,8 @@ def chat():
         BASE_PROMPT + '\n\n' + COMPLIANCE_PROMPT + '\n\n' + PLATFORM_PROMPT + '\n\n'
         + NO_MARKDOWN_PROMPT + '\n\n' + persona_prompt
     )
-    recent_idea_context = get_recent_idea_context()
+    # Step G: global SQLite history is not a safe source of workspace context.
+    recent_idea_context = ""
     nmls = data.get('nmls_number') or '000000'
 
     try:
@@ -1474,7 +1445,7 @@ def chat():
             # on to the full (expensive) structured campaign generation below.
             check_system_prompt = (shared_system_prompt + '\n\n' + CAMPAIGN_CLARIFICATION_PROMPT).replace('{nmls}', nmls)
 
-            check_result = anthropic_client.messages.create(
+            check_result = get_anthropic_client().messages.create(
                 model=ANTHROPIC_MODEL,
                 system=build_system(check_system_prompt, recent_idea_context),
                 messages=[{'role': 'user', 'content': message}],
@@ -1485,12 +1456,6 @@ def chat():
             check_raw = next((b.text for b in check_result.content if b.type == 'text'), '')
             clarification = _parse_clarification(check_raw)
             if clarification:
-                with get_db() as db:
-                    db.execute(
-                        'INSERT INTO chat_history (message, response, persona) VALUES (?, ?, ?)',
-                        (message, json.dumps(clarification), persona)
-                    )
-                    db.commit()
                 return jsonify({'type': 'clarification', 'clarification': clarification})
 
         system_prompt = shared_system_prompt
@@ -1525,7 +1490,7 @@ def chat():
         else:
             request_kwargs['max_tokens'] = 4096
 
-        result = anthropic_client.messages.create(**request_kwargs)
+        result = get_anthropic_client().messages.create(**request_kwargs)
         log_usage('chat_campaign' if is_campaign else 'chat_non_campaign', result)
         raw_response = next((b.text for b in result.content if b.type == 'text'), '')
 
@@ -1545,12 +1510,6 @@ def chat():
                     print(f'[campaign_shortfall] {shortfalls}')
 
                 campaign, compliance_flags = enforce_campaign_compliance(campaign, nmls)
-                with get_db() as db:
-                    db.execute(
-                        'INSERT INTO chat_history (message, response, persona) VALUES (?, ?, ?)',
-                        (message, json.dumps(campaign), persona)
-                    )
-                    db.commit()
                 return jsonify({'type': 'campaign', 'campaign': campaign, 'compliance_flags': compliance_flags})
             except (json.JSONDecodeError, AttributeError):
                 # Model didn't return valid/expected JSON shape — fall back to showing it as plain text
@@ -1559,33 +1518,15 @@ def chat():
         else:
             clarification = _parse_clarification(raw_response, force_multiple=is_ambiguous_scope)
             if clarification:
-                with get_db() as db:
-                    db.execute(
-                        'INSERT INTO chat_history (message, response, persona) VALUES (?, ?, ?)',
-                        (message, json.dumps(clarification), persona)
-                    )
-                    db.commit()
                 return jsonify({'type': 'clarification', 'clarification': clarification})
 
             posts_data = _parse_posts(raw_response)
             if posts_data:
                 posts_data, compliance_flags = enforce_posts_compliance(posts_data, nmls)
-                with get_db() as db:
-                    db.execute(
-                        'INSERT INTO chat_history (message, response, persona) VALUES (?, ?, ?)',
-                        (message, json.dumps(posts_data), persona)
-                    )
-                    db.commit()
                 return jsonify({'type': 'posts', 'posts': posts_data, 'compliance_flags': compliance_flags})
 
         raw_response = _strip_stray_empty_posts_envelope(raw_response)
         response, compliance_flags = enforce_compliance(strip_markdown(raw_response), nmls)
-        with get_db() as db:
-            db.execute(
-                'INSERT INTO chat_history (message, response, persona) VALUES (?, ?, ?)',
-                (message, response, persona)
-            )
-            db.commit()
         return jsonify({'type': 'text', 'response': response, 'compliance_flags': compliance_flags})
     except anthropic.AuthenticationError:
         return jsonify({'error': 'Invalid Anthropic API key. Check ANTHROPIC_API_KEY in .env.'}), 401
@@ -1594,7 +1535,8 @@ def chat():
     except anthropic.APIConnectionError:
         return jsonify({'error': 'Could not connect to the Anthropic API.'}), 503
     except anthropic.APIStatusError as e:
-        return jsonify({'error': f'Anthropic API request failed: {e.message}'}), e.status_code
+        app.logger.warning('AI provider request failed: %s', type(e).__name__)
+        return jsonify({'error': 'AI provider request failed. Please try again.'}), 502
 
 
 if __name__ == '__main__':

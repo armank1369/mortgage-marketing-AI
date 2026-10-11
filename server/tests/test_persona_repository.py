@@ -6,6 +6,8 @@ cross-workspace access defense, and parameter safety.
 
 import uuid
 import pytest
+
+pytestmark = pytest.mark.integration
 from repositories.persona_repository import (
     list_personas,
     get_persona,

@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import axios from 'axios'
+import { authenticatedPost, apiErrorMessage } from '../../lib/api'
 import { toPng } from 'html-to-image'
 import TEMPLATE_COMPONENTS, { TEMPLATE_DIMENSIONS } from './templates'
 
@@ -47,7 +47,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
     setLoading(true)
     setError('')
     try {
-      const { data } = await axios.post('/api/social-image', {
+      const { data } = await authenticatedPost('/api/social-image', {
         title,
         script,
         platform: platformLabel,
@@ -57,7 +57,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
       })
       setResult(data)
     } catch (err) {
-      setError(err?.response?.data?.error || 'Could not generate a graphic. Please try again.')
+      setError(apiErrorMessage(err, 'Could not generate a graphic. Please try again.'))
     } finally {
       setLoading(false)
     }
