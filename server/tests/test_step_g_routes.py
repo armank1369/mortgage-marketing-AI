@@ -17,6 +17,7 @@ M = "22222222-2222-4222-8222-222222222222"
 S = "33333333-3333-4333-8333-333333333333"
 ORIGIN = "https://auth.example"
 ROUTES = [
+    ("PUT", "/api/brand-profile"),
     ("GET", "/api/brand-profile"), ("GET", "/api/chat/sessions"),
     ("POST", "/api/chat/sessions"), ("GET", "/api/chat/sessions/" + S),
     ("GET", "/api/preferences"), ("POST", "/api/preferences"),

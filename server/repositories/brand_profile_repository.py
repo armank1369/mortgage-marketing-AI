@@ -66,8 +66,9 @@ def update_brand_profile(
                 (business_name, nmls_id, dre_number, compliance_footer, equal_housing_text, workspace_id),
             )
             row = cursor.fetchone()
-            log_db_operation("update_brand_profile", workspace_id=workspace_id, status="success")
-            return dict(row) if row else None
+        # Cursor context has committed before reporting success.
+        log_db_operation("update_brand_profile", workspace_id=workspace_id, status="success" if row else "not_found")
+        return dict(row) if row else None
     except UniqueViolation as e:
         log_db_error("update_brand_profile", e, workspace_id=workspace_id)
         raise ConflictError("A brand profile with this identifier already exists.") from e

@@ -13,7 +13,7 @@ export default function WorkspaceGate({ children }) {
   useEffect(() => {
     if (!userId) return
     const controller = new AbortController()
-    getWorkspaces(controller.signal).then(({ data }) => {
+    getWorkspaces(controller.signal, userId).then(({ data }) => {
       if (controller.signal.aborted) return
       const workspaces = data.workspaces
       const stored = workspaceApi.getWorkspace(userId)

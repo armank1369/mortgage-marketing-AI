@@ -14,6 +14,7 @@ Stored workspace selection is a preference, not permission.
 | GET /api/auth/me | JWT | None | Authenticated identity only |
 | GET /api/workspaces | JWT | None | Current recognized memberships; zero returns an empty list |
 | GET /api/brand-profile | JWT + membership | workspace:read | Selected authorized workspace |
+| PUT /api/brand-profile | JWT + membership | config:write | Selected workspace; existing profile only; business_name only |
 | GET /api/chat/sessions | JWT + membership | chat:read | Creator's unarchived sessions only |
 | GET /api/chat/sessions/<id> | JWT + membership | chat:read | Selected workspace and creator; otherwise 404 |
 | POST /api/chat/sessions | JWT + membership | chat:create | Trusted member attribution; persona must belong to workspace |
@@ -25,7 +26,8 @@ Stored workspace selection is a preference, not permission.
 Missing/invalid JWT returns 401; missing or unauthorized membership returns 403.
 Multiple memberships without selection return 409. One membership resolves automatically.
 Malformed UUIDs, conflicting header/query selections, and duplicate workspace query
-parameters return 400. Missing brand profiles return 404. Database failures return a
+parameters return 400. A missing brand profile GET returns 200 with an empty business
+name (Step H compatibility); PUT returns 404 and cannot create a profile. Database failures return a
 sanitized 503. Unknown roles are excluded from authorized membership discovery.
 
 ## Step C Policy v1 capabilities
@@ -38,8 +40,8 @@ sanitized 503. Unknown roles are excluded from authorized membership discovery.
 | member | Yes | Yes | Yes | No |
 | viewer | Yes | No | No | No |
 
-Configuration capability is defined and tested for later integration; Step G does not
-add a configuration-write endpoint or administrative UI. No role bypasses chat ownership.
+Step H's business-name PUT enforces the configuration capability. Workspace creation,
+invitations, and other configuration UI remain outside this slice. No role bypasses chat ownership.
 
 ## Privacy and revocation
 

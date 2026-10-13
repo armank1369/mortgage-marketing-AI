@@ -16,7 +16,7 @@ export function createAuthenticatedApi({ getSession, request, storage, onAccessE
       else storage?.removeItem(keyFor(userId))
     } catch { /* In-memory selection still works when storage is unavailable. */ }
   }
-  async function send(config, { workspace = true } = {}) {
+  async function send(config, { workspace = true, expectedScope, expectedUserId } = {}) {
     const startedRevision = selectionRevision
     const { data, error } = await getSession()
     if (config.signal?.aborted || (workspace && startedRevision !== selectionRevision)) {
@@ -37,12 +37,19 @@ export function createAuthenticatedApi({ getSession, request, storage, onAccessE
     }
     headers.Authorization = `Bearer ${data.session.token}`
     const selected = workspace ? getWorkspace(userId) : null
+    if ((expectedUserId && expectedUserId !== userId) ||
+        (expectedScope && (!selected || expectedScope !== JSON.stringify([userId, selected])))) {
+      const canceled = new Error('Workspace access changed. Please submit the request again.')
+      canceled.code = 'ERR_CANCELED'
+      throw canceled
+    }
     if (selected) headers['X-Workspace-Id'] = selected
     try {
       return await request({ ...config, headers })
     } catch (err) {
       const code = err?.response?.data?.error
-      if (['unauthenticated', 'workspace_access_denied', 'workspace_selection_required'].includes(code)) {
+      if (!config.signal?.aborted && (!workspace || startedRevision === selectionRevision) &&
+          ['unauthenticated', 'workspace_access_denied', 'workspace_selection_required'].includes(code)) {
         // Never retry a paid operation in a different workspace.
         onAccessError(err, userId)
       }

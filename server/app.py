@@ -44,9 +44,9 @@ def handle_unexpected_error(error):
 
 @app.route('/api/brand-profile', methods=['GET'])
 @require_workspace
-def api_get_brand_profile(*args, **kwargs):
-    # Retrieve workspace_id from positional arguments, kwargs, or Flask's g context
-    workspace_id = kwargs.get('workspace_id') or (args[0] if args else getattr(g, 'workspace_id', None))
+@require_capability("workspace:read")
+def api_get_brand_profile():
+    workspace_id = g.workspace_id
 
     profile = get_brand_profile(workspace_id)
     if not profile:
@@ -63,44 +63,19 @@ def api_get_brand_profile(*args, **kwargs):
 
 @app.route('/api/brand-profile', methods=['PUT'])
 @require_workspace
-def api_update_brand_profile(*args, **kwargs):
-    workspace_id = kwargs.get('workspace_id') or (args[0] if args else getattr(g, 'workspace_id', None))
-    data = request.get_json(silent=True) or {}
-    business_name = data.get("business_name")
-
-    # 1. Validation: Reject None, non-string, or pure whitespace (HTTP 400)
-    if business_name is None or not isinstance(business_name, str) or not business_name.strip():
-        return jsonify({
-            "error": "validation_error",
-            "message": "Business name is required and cannot be blank."
-        }), 400
-
-    sanitized_name = business_name.strip()
-
-    # 2. Validation: Length <= 100 characters (HTTP 400)
+@require_capability("config:write")
+def api_update_brand_profile():
+    workspace_id = g.workspace_id
+    sanitized_name = required_text(json_object(), "business_name")
     if len(sanitized_name) > 100:
-        return jsonify({
-            "error": "validation_error",
-            "message": "Business name cannot exceed 100 characters."
-        }), 400
-
-    try:
-        updated = update_brand_profile(workspace_id, business_name=sanitized_name)
-        if isinstance(updated, dict):
-            resp_name = updated.get("business_name", sanitized_name)
-        else:
-            resp_name = sanitized_name
-
-        return jsonify({
-            "workspace_id": str(workspace_id),
-            "business_name": resp_name
-        }), 200
-    except Exception as exc:
-        app.logger.error("update_brand_profile failed: %s", exc, exc_info=True)
-        return jsonify({
-            "error": "database_error",
-            "message": f"Failed to save: {str(exc)}"
-        }), 500
+        raise ValidationError("Business name cannot exceed 100 characters.")
+    updated = update_brand_profile(workspace_id, business_name=sanitized_name)
+    if updated is None:
+        raise NotFoundError("No brand profile exists for this workspace. Contact your workspace administrator.")
+    return jsonify({
+        "workspace_id": str(updated["workspace_id"]),
+        "business_name": updated["business_name"],
+    }), 200
 
 
 @app.route("/api/workspaces", methods=["GET"])

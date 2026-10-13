@@ -22,6 +22,6 @@ export const authenticatedPost = (url, data, config = {}) =>
   workspaceApi.send({ ...config, method: 'POST', url, data })
 export const getBackendIdentity = () =>
   workspaceApi.send({ method: 'GET', url: '/api/auth/me' }, { workspace: false })
-export const getWorkspaces = (signal) =>
-  workspaceApi.send({ method: 'GET', url: '/api/workspaces', signal }, { workspace: false })
+export const getWorkspaces = (signal, expectedUserId) =>
+  workspaceApi.send({ method: 'GET', url: '/api/workspaces', signal }, { workspace: false, expectedUserId })
 export { apiErrorMessage } from './authenticatedApi.js'

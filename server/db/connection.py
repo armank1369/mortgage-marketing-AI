@@ -33,6 +33,9 @@ class LazyPool:
                     raise DatabaseUnavailableError("Database is not configured.")
                 self._pool = ConnectionPool(
                     conninfo=url, min_size=1, max_size=10, open=True,
+                    # Validate idle connections before handing them to application code.
+                    # This replaces broken connections without replaying any writes.
+                    check=ConnectionPool.check_connection,
                     kwargs={"row_factory": dict_row},
                 )
             return self._pool.connection()
