@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authClient } from '../lib/neon/neon.js'
 
@@ -26,6 +26,78 @@ export default function SettingsPage() {
       setActionError(err?.message || 'Could not sign out. Please try again.')
     } finally {
       setSigningOut(false)
+    }
+  }
+
+  const [businessName, setBusinessName] = useState('')
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSuccess, setProfileSuccess] = useState('')
+  const [profileError, setProfileError] = useState('')
+
+  const activeWorkspaceId = '8bab9643-a7a2-4b5c-989c-d7358393ac6e'
+
+  useEffect(() => {
+    async function loadBrandProfile() {
+      if (!session) return
+      setProfileLoading(true)
+      setProfileError('')
+      try {
+        const token = session?.session?.token
+        const res = await fetch('/api/brand-profile', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Workspace-Id': activeWorkspaceId
+          }
+        })
+        if (!res.ok) throw new Error('Failed to load brand profile')
+        const data = await res.json()
+        setBusinessName(data.business_name || '')
+      } catch (err) {
+        setProfileError(err.message || 'Error loading brand profile')
+      } finally {
+        setProfileLoading(false)
+      }
+    }
+
+    loadBrandProfile()
+  }, [session])
+
+  const handleSaveBrandProfile = async (e) => {
+    e.preventDefault()
+    setProfileSaving(true)
+    setProfileSuccess('')
+    setProfileError('')
+
+    if (!businessName.trim()) {
+      setProfileError('Business name cannot be blank.')
+      setProfileSaving(false)
+      return
+    }
+
+    try {
+      const token = session?.session?.token
+      const res = await fetch('/api/brand-profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Workspace-Id': activeWorkspaceId
+        },
+        body: JSON.stringify({ business_name: businessName })
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to update brand profile.')
+      }
+
+      setBusinessName(data.business_name)
+      setProfileSuccess('Demo value saved to database')
+    } catch (err) {
+      setProfileError(err.message || 'Could not save brand profile')
+    } finally {
+      setProfileSaving(false)
     }
   }
 
@@ -155,6 +227,48 @@ export default function SettingsPage() {
             </div>
           )}
         </section>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-base font-semibold text-slate-900 mb-1">Edit Brand Profile</h2>
+          <p className="text-xs text-slate-500 mb-4">Step H Vertical Slice: Persist and edit business name in Neon PostgreSQL.</p>
+
+          {profileLoading ? (
+            <div className="text-sm text-slate-500">Loading brand profile...</div>
+          ) : (
+            <form onSubmit={handleSaveBrandProfile} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Business name</label>
+                <input
+                  type="text"
+                  maxLength={100}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Enter business name"
+                />
+                <div className="mt-1 text-xs text-slate-500">
+                  {businessName.length}/100 characters
+                </div>
+              </div>
+
+              {profileError && (
+                <div className="text-xs font-medium text-red-600">{profileError}</div>
+              )}
+              {profileSuccess && (
+                <div className="text-xs font-medium text-emerald-600 flex items-center gap-1">
+                  <span>✓</span> {profileSuccess}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={profileSaving}
+                className="rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                {profileSaving ? 'Saving...' : 'Save'}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </main>
   )
