@@ -21,6 +21,7 @@ const { WorkspaceDataContext } = await server.ssrLoadModule('/src/context/Worksp
 const { default: BrandEditor } = await server.ssrLoadModule('/src/components/BrandProfileEditor.jsx')
 const { default: PersonaManager } = await server.ssrLoadModule('/src/components/PersonaManager.jsx')
 const { default: templates } = await server.ssrLoadModule('/src/components/socialImage/templates.jsx')
+const { default: ComplianceNotice } = await server.ssrLoadModule('/src/components/ComplianceNotice.jsx')
 const brand = { exists: true, business_name: 'Synthetic Brokerage', licensed_person_name: 'Synthetic Licensee', nmls_id: '123456', dre_number: '00123456',
   tone: { voice: 'Warm' }, values: ['Accuracy'], keywords: [], catchphrases: [], banned_words: [], blog_examples: [], compliance_footer: '', equal_housing_text: '' }
 const personas = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Education', slug: 'education', description: 'Clear process' }]
@@ -43,6 +44,17 @@ test('actual Settings editor renders all approved fields and blocks read-only sa
   assert.match(editable, /Synthetic Licensee/)
   assert.match(editable, /00123456/)
   assert.match(editable, /Save brand profile/)
+})
+
+test('review notices render separately as UI metadata, omitting mechanical footer repairs', () => {
+  const html = renderToStaticMarkup(React.createElement(ComplianceNotice, { flags: [
+    'possible_fair_housing_language', 'possible_fair_housing_language', 'possible_respa_review', 'missing_or_altered_footer'] }))
+  assert.match(html, /role="note"/)
+  assert.match(html, /Human review required/)
+  assert.match(html, /RESPA/)
+  assert.equal((html.match(/fair-housing-sensitive/g) || []).length, 1)
+  assert.doesNotMatch(html, /missing_or_altered_footer/)
+  assert.equal(renderToStaticMarkup(React.createElement(ComplianceNotice, { flags: ['missing_or_altered_footer'] })), '')
 })
 
 test('missing brand profile offers an actionable error without a false usable save', () => {

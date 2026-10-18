@@ -124,8 +124,20 @@ by any bounded supplemental disclosure and equal-housing text. Chat/posts/campai
 validators and video end cards use it. Social-image JSON preserves `template` and
 `slots`, adding server `compliance_footer`, `business_name` and `compliance_flags`;
 all six React templates render that footer. The model cannot choose image attribution
-in place of the configured broker. Prompt and output checks retain human-review
-notes; no legal certification is claimed.
+in place of the configured broker. Human-review warnings are `compliance_flags`
+metadata rendered separately; they are not appended to publication copy. No
+legal certification is claimed.
+
+The [focused compliance patch](STEP_I_COMPLIANCE_PATCH.md) fixes independent review
+issues 1 and 2. It checks campaign captions, slides and hashtags, adds final-slide
+disclosure, and withholds an entry's entire publication packet if restricted pricing
+appears in any of those fields. Sensitive/forbidden-language hits remain review
+flags. Complete disclosure blocks finish captions/post CTAs; video CTAs finish
+with their end-card cue. Recognized inline review-note paragraphs are separated
+into `embedded_compliance_note_removed`; referral content can carry
+`possible_respa_review`. Existing response types and provider schemas are preserved.
+Chat/calendar warning metadata is persisted separately from publishable fields;
+copy helpers exclude it, retain carousel slides and leave full disclosure last.
 
 ## Configuration API and frontend compatibility
 

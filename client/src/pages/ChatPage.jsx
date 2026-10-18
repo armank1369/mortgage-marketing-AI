@@ -9,6 +9,8 @@ import CampaignResponse from '../components/CampaignResponse'
 import ClarificationResponse from '../components/ClarificationResponse'
 import PostsResponse from '../components/PostsResponse'
 import Section from '../components/Section'
+import ComplianceNotice from '../components/ComplianceNotice.jsx'
+import { stripReviewNotes } from '../lib/publicationCopy.js'
 import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
@@ -556,6 +558,7 @@ export default function ChatPage() {
       }
 
       assistantMessage.persona_id = persona
+      assistantMessage.compliance_flags = data.compliance_flags || []
       updateActiveChatMessages(
         (msgs) => [...msgs, assistantMessage],
         (chat) => ({
@@ -694,7 +697,7 @@ export default function ChatPage() {
 
   const copyText = async (text) => {
     try {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(stripReviewNotes(text))
     } catch {
       // fallback
     }
@@ -1092,10 +1095,12 @@ export default function ChatPage() {
 
           {messages.map((msg, i) => (
             <div key={msg.id ?? i}>
+              {msg.role === 'assistant' && <ComplianceNotice flags={msg.compliance_flags} />}
               {msg.role === 'assistant' && msg.type === 'campaign' ? (
                 <div className="flex justify-start">
                   <CampaignResponse
                     data={msg.campaign}
+                    complianceFlags={msg.compliance_flags}
                     nmls={nmls}
                     persona={msg.persona_id || persona}
                     onVideoGenerated={(entryIndex, video) => setCalendarEntryVideo(i, entryIndex, video)}
@@ -1112,7 +1117,7 @@ export default function ChatPage() {
                 </div>
               ) : msg.role === 'assistant' && msg.type === 'posts' ? (
                 <div className="flex justify-start">
-                  <PostsResponse data={msg.posts} nmls={nmls} persona={msg.persona_id || persona} batchId={msg.id} />
+                  <PostsResponse data={msg.posts} nmls={nmls} persona={msg.persona_id || persona} batchId={msg.id} complianceFlags={msg.compliance_flags} />
                 </div>
               ) : msg.role === 'assistant' ? (
                 // Same card chrome as CampaignResponse's Section component — every AI

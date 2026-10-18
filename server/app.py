@@ -254,9 +254,9 @@ COMPLIANCE_PROMPT = (
     'broker-specific promotional rate, rate discount, teaser/special rate, temporary pricing offer, or other mortgage '
     'pricing promotion. Never frame "refer a friend" language as compensation for referring other consumer business — '
     'keep it a customer-appreciation gesture and flag it for review. Whenever '
-    'content touches co-marketing, partnerships, sponsorships, or "refer and earn" programs, append this note after '
-    'the draft (never inside the post copy itself): "⚠️ Compliance note: This type of content may involve a business '
-    'relationship that should be reviewed for RESPA Section 8 compliance before publishing."\n\n'
+    'content touches co-marketing, partnerships, sponsorships, or "refer and earn" programs, be conservative and '
+    'use neutral educational wording. Human RESPA review is required before publishing. Never embed compliance '
+    'review commentary in publishable copy; the application displays review notices separately.\n\n'
 
     'NO FABRICATED FACTS: Never invent interest rates, APRs, loan terms, fees, closing costs, pre-approval odds, '
     'timelines, or "as low as" figures. Do not create, request, or fill placeholders for a broker-specific rate, APR, '
@@ -281,7 +281,8 @@ COMPLIANCE_PROMPT = (
     'placeholder. Never request a specific rate, discount, or promotion to feature. (2) Draft the content. (3) Run '
     'the fair-housing self-check silently. (4) Append the mandatory footer exactly as specified. (5) Flag anything '
     'needing human/legal/compliance review (co-marketing, referral-adjacent language, state-specific protected '
-    'classes, ambiguous claims) as a short note appended after the draft, never inside the post copy. (6) Never '
+    'classes, ambiguous claims) for separate human review. Never append review notes to captions, slides, '
+    'hashtags, scripts or text replies; keep publishable fields free of advisory commentary. (6) Never '
     'present multiple draft variants where any variant is non-compliant, even as a "more aggressive" option. (7) When '
     'in doubt, be conservative — favor blander, safer copy over punchier copy that risks a fair housing, RESPA, or '
     'truth-in-advertising violation.'
@@ -881,89 +882,105 @@ def strip_markdown_deep(value):
     return value
 
 
-def enforce_compliance(response_text, context):
-    flags = []
+_INLINE_COMPLIANCE_NOTE = re.compile(
+    r'^[ \t]*(?:⚠\ufe0f?[ \t]*)?(?:\*\*)?Compliance note'
+    r'(?:[ \t]*\([^\n)]*\))?(?:\*\*)?[ \t]*:', re.IGNORECASE)
+
+
+def _separate_compliance_notes(value):
+    """Remove recognized review-note paragraphs, retaining only a metadata flag.
+
+    This is a backstop for model-inserted notes, not a classifier of arbitrary
+    prose. Original saved chats are untouched; only new generation is processed.
+    """
+    flags = set()
+    if isinstance(value, str):
+        lines, skipping = [], False
+        for line in value.splitlines():
+            if _INLINE_COMPLIANCE_NOTE.match(line):
+                flags.add('embedded_compliance_note_removed')
+                skipping = True
+                continue
+            if skipping:
+                if not line.strip() or ' | NMLS #' in line:
+                    skipping = False
+                else:
+                    continue
+            lines.append(line)
+        return '\n'.join(lines).strip(), flags
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            item, item_flags = _separate_compliance_notes(item)
+            cleaned.append(item)
+            flags.update(item_flags)
+        return cleaned, flags
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            cleaned[key], item_flags = _separate_compliance_notes(item)
+            flags.update(item_flags)
+        return cleaned, flags
+    return value, flags
+
+
+def _copy_review_flags(text, context):
+    # Expand CamelCase/underscore hashtags too: #YoungProfessionals and
+    # #Special_Rate must not evade the same caption/slide checks.
+    expanded = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', text).replace('_', ' ').replace('#', ' ')
+    lowered = _normalize(text) + '\n' + _normalize(expanded)
+    flags = set()
+    if has_restricted_pricing_offer(text) or has_restricted_pricing_offer(expanded):
+        flags.add('restricted_pricing_offer_removed')
+    if any(phrase in lowered for phrase in FLAGGED_STEERING_PHRASES):
+        flags.add('possible_fair_housing_language')
+    if any(word in lowered for word in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)]):
+        flags.add('forbidden_word_used')
+    if any(phrase in lowered for phrase in (
+            'co marketing', 'partnership', 'partner spotlight', 'refer a friend',
+            'refer and earn', 'referral', 'sponsorship', 'marketing services agreement')):
+        flags.add('possible_respa_review')
+    return flags
+
+
+def _finish_disclosure(text, context, flags, *, video=False):
+    """Move the complete trusted footer to the end; never append an advisory."""
     footer = build_footer(context)
-    if has_restricted_pricing_offer(response_text):
-        flags.append('restricted_pricing_offer_removed')
+    target = f'[END CARD: {footer}]' if video else footer
+    text = text.strip()
+    if text.endswith(target) and text.count(target) == 1:
+        return text
+    flags.add('missing_or_altered_footer')
+    text = text.replace(f'[END CARD: {footer}]', '').replace(footer, '').strip()
+    return (text + '\n\n' if text else '') + target
+
+
+def enforce_compliance(response_text, context):
+    response_text, flags = _separate_compliance_notes(response_text)
+    flags.update(_copy_review_flags(response_text, context))
+    if 'restricted_pricing_offer_removed' in flags:
         response_text = RESTRICTED_PRICING_FALLBACK
-    if footer not in response_text:
-        flags.append('missing_or_altered_footer')
-        response_text = response_text.rstrip() + '\n\n' + footer
-
-    lowered = _normalize(response_text)
-    hit_phrases = [p for p in FLAGGED_STEERING_PHRASES if p in lowered]
-    hit_words = [w for w in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)] if w in lowered]
-
-    if hit_phrases or hit_words:
-        note_bits = []
-        if hit_phrases:
-            flags.append('possible_fair_housing_language')
-            note_bits.append(f'possible fair-housing-sensitive language ({", ".join(hit_phrases)})')
-        if hit_words:
-            flags.append('forbidden_word_used')
-            note_bits.append(f'forbidden word(s) used ({", ".join(hit_words)})')
-        response_text += (
-            '\n\n⚠️ Compliance note (auto-flagged, human review required): '
-            + '; '.join(note_bits) + '. Please review before publishing.'
-        )
-
-    return response_text, flags
+    response_text = _finish_disclosure(response_text, context, flags)
+    return response_text, sorted(flags)
 
 
 def enforce_video_brief_compliance(brief, context):
-    # Mirrors enforce_compliance, but a video script isn't caption text — the footer belongs
-    # on-screen as an end-card cue, never appended as if it were spoken dialogue.
-    footer = build_footer(context)
-    end_card = f'[END CARD: {footer}]'
-    flags = []
-
+    # Review notices stay outside both spoken copy and on-screen end-card text.
+    brief, flags = _separate_compliance_notes(brief)
     script = brief.get('script') or {}
-    intro_text = (script.get('intro') or {}).get('text', '') or ''
-    body_text = (script.get('body') or {}).get('text', '') or ''
+    intro = script.get('intro') or {}
+    body = script.get('body') or {}
     cta = script.get('cta') or {}
-    cta_text = cta.get('text', '') or ''
-
-    full_text = '\n'.join([intro_text, body_text, cta_text])
-    if has_restricted_pricing_offer(full_text):
-        flags.append('restricted_pricing_offer_removed')
-        intro = script.get('intro') or {}
-        body = script.get('body') or {}
+    full_text = '\n'.join(section.get('text', '') or '' for section in (intro, body, cta))
+    flags.update(_copy_review_flags(full_text, context))
+    if 'restricted_pricing_offer_removed' in flags:
         intro['text'] = RESTRICTED_PRICING_FALLBACK
         body['text'] = ''
-        cta_text = ''
-        script['intro'] = intro
-        script['body'] = body
-        full_text = RESTRICTED_PRICING_FALLBACK
-    if end_card not in cta_text:
-        flags.append('missing_or_altered_footer')
-        cta_text = cta_text.replace(footer, '').rstrip()
-        cta_text = (cta_text + '\n\n' if cta_text else '') + end_card
-        full_text = '\n'.join([intro_text, body_text, cta_text])
-
-    lowered = _normalize(full_text)
-    hit_phrases = [p for p in FLAGGED_STEERING_PHRASES if p in lowered]
-    hit_words = [w for w in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)] if w in lowered]
-
-    if hit_phrases or hit_words:
-        note_bits = []
-        if hit_phrases:
-            flags.append('possible_fair_housing_language')
-            note_bits.append(f'possible fair-housing-sensitive language ({", ".join(hit_phrases)})')
-        if hit_words:
-            flags.append('forbidden_word_used')
-            note_bits.append(f'forbidden word(s) used ({", ".join(hit_words)})')
-        cta_text = cta_text.rstrip() + (
-            '\n\n⚠️ Compliance note (auto-flagged, human review required): '
-            + '; '.join(note_bits) + '. Please review before publishing.'
-        )
-
-    cta['text'] = cta_text
-    script['cta'] = cta
+        cta['text'] = ''
+    cta['text'] = _finish_disclosure(cta.get('text', '') or '', context, flags, video=True)
+    script.update(intro=intro, body=body, cta=cta)
     brief['script'] = script
-    return brief, flags
-
-
+    return brief, sorted(flags)
 
 
 # How far back to look for prior ideas, and how many idea lines to surface —
@@ -1114,61 +1131,27 @@ def _parse_posts(raw_response):
 
 
 def enforce_posts_compliance(data, context):
-    # Mirrors enforce_video_brief_compliance — the footer belongs at the end of the script's
-    # cta line, not appended to a flat caption (posts no longer have one; the assembled
-    # caption is rebuilt client-side from hook + body + cta for the Copy button).
-    flags = set()
-    if data.get('intro'):
-        data['intro'] = strip_markdown(data['intro'])
-    footer = build_footer(context)
+    data, flags = _separate_compliance_notes(strip_markdown_deep(data))
     for post in data.get('posts', []):
         script = post.get('script') or {}
-        hook = strip_markdown(script.get('hook', '') or '')
-        cta = strip_markdown(script.get('cta', '') or '')
-        post_flags = []
-
-        # Carousel posts use an array of slide strings for body; every other format keeps a
-        # single string. body_text is the flattened form used for footer/compliance scanning.
-        raw_body = script.get('body')
-        if isinstance(raw_body, list):
-            body = [strip_markdown(slide or '') for slide in raw_body]
-            body_text = '\n\n'.join(body)
-        else:
-            body = strip_markdown(raw_body or '')
-            body_text = body
-
-        full_text = '\n'.join([hook, body_text, cta])
-        if has_restricted_pricing_offer(full_text):
-            post_flags.append('restricted_pricing_offer_removed')
+        hook = script.get('hook', '') or ''
+        cta = script.get('cta', '') or ''
+        body = script.get('body') or ''
+        body_text = '\n'.join(body) if isinstance(body, list) else body
+        hashtags = post.get('hashtags') or []
+        post_flags = _copy_review_flags('\n'.join([
+            post.get('title', '') or '', hook, body_text, cta, ' '.join(hashtags)]), context)
+        if 'restricted_pricing_offer_removed' in post_flags:
+            post['title'] = 'Mortgage education'
             hook = RESTRICTED_PRICING_FALLBACK
-            body = [] if isinstance(raw_body, list) else ''
-            body_text = ''
-            cta = ''
-            full_text = hook
-        if footer not in cta:
-            post_flags.append('missing_or_altered_footer')
-            cta = (cta.rstrip() + '\n\n' if cta.strip() else '') + footer
-            full_text = '\n'.join([hook, body_text, cta])
-
-        lowered = _normalize(full_text)
-        hit_phrases = [p for p in FLAGGED_STEERING_PHRASES if p in lowered]
-        hit_words = [w for w in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)] if w in lowered]
-        if hit_phrases or hit_words:
-            note_bits = []
-            if hit_phrases:
-                post_flags.append('possible_fair_housing_language')
-                note_bits.append(f'possible fair-housing-sensitive language ({", ".join(hit_phrases)})')
-            if hit_words:
-                post_flags.append('forbidden_word_used')
-                note_bits.append(f'forbidden word(s) used ({", ".join(hit_words)})')
-            cta = cta.rstrip() + (
-                '\n\n⚠️ Compliance note (auto-flagged, human review required): '
-                + '; '.join(note_bits) + '. Please review before publishing.'
-            )
-
+            body = [RESTRICTED_PRICING_FALLBACK] if isinstance(body, list) else ''
+            cta, hashtags = '', []
+        if isinstance(body, list) and body:
+            body[-1] = _finish_disclosure(body[-1], context, post_flags)
+        cta = _finish_disclosure(cta, context, post_flags)
         post['script'] = {'hook': hook, 'body': body, 'cta': cta}
-        if isinstance(post.get('hashtags'), list):
-            post['hashtags'] = [strip_markdown(h) for h in post['hashtags']]
+        if 'hashtags' in post:
+            post['hashtags'] = hashtags
         flags.update(post_flags)
     return data, sorted(flags)
 
@@ -1302,9 +1285,28 @@ def _campaign_post_count_shortfalls(campaign):
 def enforce_campaign_compliance(campaign, context):
     flags = set()
     for entry in campaign.get('content_calendar', []):
-        caption = entry.get('caption', '')
-        fixed_caption, entry_flags = enforce_compliance(caption, context)
-        entry['caption'] = fixed_caption
+        # Review the entire publication packet, not only its accompanying caption.
+        packet, entry_flags = _separate_compliance_notes({
+            'caption': entry.get('caption', '') or '',
+            'slides': entry.get('slides') or [],
+            'hashtags': entry.get('hashtags') or [],
+        })
+        text = '\n'.join([packet['caption'], *packet['slides'], *packet['hashtags']])
+        entry_flags.update(_copy_review_flags(text, context))
+        if 'restricted_pricing_offer_removed' in entry_flags:
+            # Withhold every publishable field if any field contains an offer.
+            # Preserve scheduling/strategy metadata and JSON field types.
+            packet = {'caption': RESTRICTED_PRICING_FALLBACK,
+                      'slides': [RESTRICTED_PRICING_FALLBACK] if packet['slides'] else [],
+                      'hashtags': []}
+        packet['caption'] = _finish_disclosure(packet['caption'], context, entry_flags)
+        if packet['slides']:
+            packet['slides'][-1] = _finish_disclosure(packet['slides'][-1], context, entry_flags)
+        entry['caption'] = packet['caption']
+        if 'slides' in entry or packet['slides']:
+            entry['slides'] = packet['slides']
+        if 'hashtags' in entry:
+            entry['hashtags'] = packet['hashtags']
         flags.update(entry_flags)
     return campaign, sorted(flags)
 

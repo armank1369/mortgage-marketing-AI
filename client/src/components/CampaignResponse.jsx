@@ -1,3 +1,5 @@
+import ComplianceNotice from './ComplianceNotice.jsx'
+import { buildCampaignEntryCopy } from '../lib/publicationCopy.js'
 import { useState, useRef, useEffect } from 'react'
 import { workspaceApi, apiErrorMessage } from '../lib/api'
 import { scopedRequest } from '../lib/workspaceConfiguration.js'
@@ -53,7 +55,8 @@ function distributeCalendarDates(calendar) {
 // Builds the same `details` shape ContentBriefCard/the calendar detail modal expect, from
 // whatever this specific entry actually has: a generated video script, carousel slides, or
 // just a plain caption — matches how PostsResponse builds `details` for a single post.
-function calendarEntryDetails(entry) {
+function calendarEntryDetails(entry, complianceFlags = []) {
+  const flags = [...new Set([...complianceFlags, ...(entry.video?.compliance_flags || [])])]
   if (entry.video) {
     const script = entry.video.script || {}
     return {
@@ -65,6 +68,7 @@ function calendarEntryDetails(entry) {
       direction: entry.video.creative_direction,
       quickDetails: entry.video.quick_details,
       hashtags: entry.hashtags,
+      compliance_flags: flags,
     }
   }
   if (Array.isArray(entry.slides) && entry.slides.length > 0) {
@@ -74,15 +78,17 @@ function calendarEntryDetails(entry) {
         { label: 'Caption', text: entry.caption },
       ],
       hashtags: entry.hashtags,
+      compliance_flags: flags,
     }
   }
   return {
     script: [{ label: 'Post Copy', text: entry.caption }],
     hashtags: entry.hashtags,
+    compliance_flags: flags,
   }
 }
 
-function SaveCalendarButton({ calendar, batchId }) {
+function SaveCalendarButton({ calendar, batchId, complianceFlags }) {
   const { upsertEntries, isBatchSaved } = useCalendar()
   // Derived from the calendar's own persisted entries (via batchId) rather than local
   // component state — a reload or chat switch used to reset a plain useState flag back to
@@ -99,7 +105,7 @@ function SaveCalendarButton({ calendar, batchId }) {
         format: entry.format,
         time: entry.time,
         date: dates[i],
-        details: calendarEntryDetails(entry),
+        details: calendarEntryDetails(entry, complianceFlags),
       }))
     )
   }
@@ -233,28 +239,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
     }
   }
 
-  const buildCopyText = () =>
-    [
-      entry.caption,
-      Array.isArray(entry.hashtags) && entry.hashtags.length > 0 ? entry.hashtags.join(' ') : '',
-      video ? 'SCRIPT' : '',
-      script.intro?.text ? `Intro (${script.intro.time || ''}): ${script.intro.text}` : '',
-      script.body?.text ? `Body (${script.body.time || ''}): ${script.body.text}` : '',
-      script.cta?.text ? `CTA (${script.cta.time || ''}): ${script.cta.text}` : '',
-      video ? 'CREATIVE DIRECTION' : '',
-      direction.setting ? `Setting: ${direction.setting}` : '',
-      direction.camera ? `Camera: ${direction.camera}` : '',
-      direction.lighting ? `Lighting: ${direction.lighting}` : '',
-      direction.energy ? `Energy: ${direction.energy}` : '',
-      direction.background ? `Background: ${direction.background}` : '',
-      direction.clothing ? `Clothing: ${direction.clothing}` : '',
-      video ? 'QUICK DETAILS' : '',
-      details.duration ? `Duration: ${details.duration}` : '',
-      details.tone ? `Tone: ${details.tone}` : '',
-      details.call_to_action ? `Call-to-Action: ${details.call_to_action}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
+  const buildCopyText = () => buildCampaignEntryCopy(entry)
 
   const handleCopy = async () => {
     try {
@@ -301,6 +286,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
             <span className="text-[11px] text-slate-400 shrink-0">🕐 {entry.time}</span>
           )}
         </div>
+        <ComplianceNotice flags={video?.compliance_flags} />
         {entry.caption && (
           <p className="text-xs text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">{entry.caption}</p>
         )}
@@ -426,7 +412,7 @@ function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
   )
 }
 
-export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId }) {
+export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId, complianceFlags = [] }) {
   if (!data) return null
   const { content_strategy, platform_breakdown, content_calendar } = data
   const scriptedCount = (content_calendar || []).filter((entry) => entry.video).length
@@ -452,7 +438,7 @@ export default function CampaignResponse({ data, nmls, persona, onVideoGenerated
         subtitle={`${content_calendar?.length || 0} scheduled posts${scriptedCount ? ` · ${scriptedCount} with a video script` : ''}`}
         defaultOpen={false}
         headerAction={
-          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} batchId={batchId} /> : null
+          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} batchId={batchId} complianceFlags={complianceFlags} /> : null
         }
       >
         <ContentCalendarBody

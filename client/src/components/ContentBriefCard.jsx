@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
+import { stripReviewNotes } from '../lib/publicationCopy.js'
 import platformBadge, { platformGradient } from './platformBadge'
 import { recommendedPostingTimes } from '../utils/postingTimes'
 
@@ -151,7 +152,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(onCopyText())
+      await navigator.clipboard.writeText(stripReviewNotes(onCopyText()))
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {

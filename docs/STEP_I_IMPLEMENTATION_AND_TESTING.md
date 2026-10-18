@@ -2,6 +2,30 @@
 
 Updated 2026-10-18 (America/Los_Angeles).
 
+## Independent-review compliance follow-up — issues 1 and 2
+
+The targeted [compliance patch report](STEP_I_COMPLIANCE_PATCH.md) supersedes older
+descriptions of inline warning behavior. Starting from clean local HEAD `f4eed93`
+(`Final step I checkup`), the agent reviewed the relevant context/prompt/output
+and frontend copy/calendar systems, then fixed both requested issues:
+
+- Human-review notices remain in `compliance_flags` and separate UI advisories,
+  not caption/script/CTA text. Known generated note paragraphs are separated;
+  full disclosures/end cards stay last. Flags persist on chat messages and new
+  saved calendar details, where notices remain visible outside clipboard copy.
+- Campaign checks now cover captions, every slide and hashtags. Restricted pricing
+  in any of them withholds the entry's whole publication packet, preserving
+  scheduling/strategy metadata. Sensitive-language flags and final-slide disclosure
+  are enforced even when the caption itself is clean.
+
+Focused checks: **81 backend tests passed**, **11 frontend tests passed**, Oxlint
+and production build passed with existing warnings. This does not replace the
+historical full-suite results below with an unexecuted new full-suite claim.
+See the focused report for exact commands, patch application and pending manual
+clipboard/export acceptance. No paid calls, live DB writes, migrations, commits,
+pushes or merges were performed. The review's low-priority branding issue 3 and
+unverified long-disclosure image layout remain outside the requested patch.
+
 ## 2026-10-18 final review and current acceptance record
 
 This section supersedes the original implementation-time “NOT RUN” entries for
