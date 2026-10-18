@@ -12,6 +12,10 @@ export async function scopedRequest(api, scope, signal, url, method = 'GET', dat
 export const isDatabasePersona = (persona) => typeof persona?.id === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(persona.id)
 
+// Tone is extensible JSON, so a legacy/structured voice value is not necessarily
+// renderable React text. Display only text without rewriting the stored object.
+export const brandVoiceText = (tone) => typeof tone?.voice === 'string' ? tone.voice : ''
+
 export function selectDatabasePersona(preferences, persona) {
   if (!isDatabasePersona(persona)) throw new Error('Select a saved workspace persona.')
   const previous = preferences?.persona

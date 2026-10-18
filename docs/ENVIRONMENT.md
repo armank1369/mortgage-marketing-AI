@@ -1,3 +1,5 @@
+> Step I update (2026-10-18): [Current implementation and acceptance](STEP_I_IMPLEMENTATION_AND_TESTING.md) and [context contract](STEP_I_CONTEXT_CONTRACT.md) describe database-backed brand/persona configuration, server-side identity, the browser-local chat selection hotfix and developer-reported cross-browser persistence. No new environment variable or schema migration is required. Confirm the existing development database target privately before manual writes. Earlier setup notes below remain historical; Step G revocation/role gates are separate.
+
 
 
 > Step G update: [Current implementation and testing](STEP_G_IMPLEMENTATION_AND_TESTING.md) and [authorization matrix](AUTHORIZATION_MATRIX.md) supersede Step F security/test status below. Default tests now block database access; live tests require explicit opt-in and an approved isolated URL. Live Step G validation remains pending.
@@ -243,13 +245,16 @@ However:
 - Step G protects generation endpoints and retires global SQLite history/preferences without deleting their data.
 - Automatic workspace onboarding is not implemented.
 - Step G implements explicit capabilities; live integration acceptance remains pending.
-- Cross-device synchronization is not implemented.
+- Brand/persona configuration is shared through Neon and was confirmed across browsers by the developer. Chat history and per-chat generation selection are browser-local until Step J.
 
-These are future integration and security-hardening tasks, not completed features.
+Remaining chat integration, provisioning and security-hardening items are future work. Brand/persona UI and generation-context integration are implemented in Step I.
 
 ---
 
 ## Related Documentation
+
+- [Step I implementation, acceptance and remaining gates](STEP_I_IMPLEMENTATION_AND_TESTING.md)
+- [Step I context/API contract](STEP_I_CONTEXT_CONTRACT.md)
 
 - [Step F Data Layer and Testing Guide](STEP_F_DATA_LAYER_AND_TESTING.md)
 - [Authorization Matrix](AUTHORIZATION_MATRIX.md)

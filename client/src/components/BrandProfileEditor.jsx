@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useBrowserScope } from '../context/BrowserScope.js'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
 import { workspaceApi, apiErrorMessage } from '../lib/api.js'
-import { validateBrandFields } from '../lib/workspaceConfiguration.js'
+import { brandVoiceText, validateBrandFields } from '../lib/workspaceConfiguration.js'
 import { brandProfileRequest } from '../lib/brandProfile.js'
 
 const fields = [
@@ -66,7 +66,7 @@ export default function BrandProfileEditor() {
         {fields.map(([key, label, limit, kind]) => <label key={key} className="block text-sm text-slate-700">{label}
           {kind ? <textarea rows={kind === 'json' ? 4 : 3} aria-label={label} maxLength={limit}
             className="mt-1 w-full rounded-lg border border-slate-300 p-2 disabled:bg-slate-50"
-            value={kind === 'voice' ? (typeof JSON.parse(draft[key])?.voice === 'string' ? JSON.parse(draft[key]).voice : '') : draft[key]}
+            value={kind === 'voice' ? brandVoiceText(JSON.parse(draft[key])) : draft[key]}
             onChange={(event) => setDraft({ ...draft, [key]: kind === 'voice' ? JSON.stringify({ ...JSON.parse(draft[key]), voice: event.target.value }) : event.target.value })} /> :
             <input aria-label={label} maxLength={limit} className="mt-1 w-full rounded-lg border border-slate-300 p-2 disabled:bg-slate-50"
               value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />}

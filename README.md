@@ -11,7 +11,9 @@ The project is being upgraded from a browser-focused prototype into an applicati
 
 If you are joining the project or testing the recent backend changes, read:
 
-**[Step G — Current Implementation and Testing](docs/STEP_G_IMPLEMENTATION_AND_TESTING.md)**
+**[Step I — Current Implementation, Testing and Acceptance](docs/STEP_I_IMPLEMENTATION_AND_TESTING.md)**
+
+Read the [context/API contract](docs/STEP_I_CONTEXT_CONTRACT.md) for field validation, licensing identity, persona selection and compatibility. Earlier [Step G authorization gates](docs/STEP_G_IMPLEMENTATION_AND_TESTING.md) remain tracked separately.
 
 For historical setup and the Step F foundation, see [Step F guide](docs/STEP_F_DATA_LAYER_AND_TESTING.md). The following guide contents describe that historical foundation:
 
@@ -30,6 +32,9 @@ Other important documentation:
 
 - [Environment Configuration](docs/ENVIRONMENT.md)
 - [Authorization Matrix](docs/AUTHORIZATION_MATRIX.md)
+- [Step I Context and API Contract](docs/STEP_I_CONTEXT_CONTRACT.md)
+- [Step I Development Seed Review — Not Executed](docs/STEP_I_DEV_SEED_REVIEW.sql)
+- [Step H Finalization — Historical Baseline](docs/STEP_H_HOTFIX_FINALIZATION.md)
 - [Step E — Neon Auth and Session Identity Recap](docs/Lucie_Step_E_Neon_Auth_and_Session_Identity_Recap.md)
 - [Technical Audit and Risk Assessment](docs/Lucie_Technical_Audit_Whitepaper.pdf)
 - [End-User Manual](docs/Lucie_User_Manual.pdf)
@@ -90,10 +95,25 @@ A successful development test does not mean the entire application is ready for 
 
 Implemented locally on `codex/step-g-workspace-authorization`: explicit role capabilities, refreshed workspace membership checks, creator-private chat APIs, authenticated React generation, and scoped browser storage. Global SQLite history/preferences access is retired without deleting data. Cross-chat duplicate-idea suppression is temporarily unavailable. Real Neon Auth/database acceptance remains pending; no migration or deployment occurred.
 
+### Steps H and I — Database-Driven Brand and Persona Context
+
+Step H introduced the brand editor foundation. Step I on
+`codex/step-i-context-resolver` connects chat, campaigns/clarification, video briefs
+and social images to authorized Neon brand/persona context. Settings supports
+brand/licensing fields and a small persona create/edit flow. Generation uses
+workspace-owned persona UUIDs and server-side identity, preserving fixed
+compliance rules and response formatting.
+
+On 2026-10-18 the developer reported successful brand/persona configuration
+persistence across browsers using the same account, and successful basic use
+after the older-chat persona-selection hotfix. The automated suite and the exact
+scope of manual acceptance are recorded in the Step I report; these observations
+do not establish every role, output format or production deployment gate.
+
 ### Current Limitations
 
 - The normal ChatPage still uses browser localStorage.
-- Existing chats do not automatically synchronize between devices.
+- Brand profiles and persona definitions are database-backed and visible across browsers with authorized access. Chats and per-chat generation-persona selections remain browser-local; they do not synchronize between devices.
 - Joseph's historical data has not yet been migrated.
 - Existing SQLite data remains stored; authenticated V2 no longer uses it.
 - Live integration acceptance for the new authorization boundaries remains pending.
@@ -105,7 +125,7 @@ Implemented locally on `codex/step-g-workspace-authorization`: explicit role cap
 
 ## 4. Understanding the Current Architecture
 
-The normal application currently has two different data paths.
+The current application combines shared workspace configuration with browser-local chat history.
 
 ### Existing Chat Experience
 
@@ -114,10 +134,12 @@ React ChatPage
     |
     +-- User/workspace-scoped browser localStorage for chat history
     |
-    +-- Authenticated, capability-protected Flask /api/chat for AI generation
+    +-- Authenticated, capability-protected Flask generation routes
+            |
+            +-- Authorized workspace brand profile and selected active persona from Neon
 ```
 
-### New Step F Backend Data Layer
+### Authenticated Neon Data Layer (Steps F–I)
 
 ```text
 Neon Auth signed-in account
@@ -137,7 +159,7 @@ Neon PostgreSQL
 
 The second path has been implemented and tested.
 
-The normal ChatPage still needs to be integrated with it.
+Brand/persona Settings and generation context now use this data layer. Normal ChatPage history is still local; connecting conversation persistence and any reviewed historical migration belongs to Step J.
 
 ---
 
@@ -274,7 +296,22 @@ Expected address:
 
 ## 7. Testing
 
-The backend includes tests under `server/tests/`.
+Run the current offline/mock regression checks from the repository root:
+
+```powershell
+python -m pytest server/tests -q
+npm --prefix client test
+npm --prefix client run lint
+npm --prefix client run build
+```
+
+The configured linter is Oxlint; ESLint is not installed/configured. Default pytest
+blocks live database connections and skips opt-in integration tests. Paid model
+calls and live data writes require separate authorization. See the
+[Step I report](docs/STEP_I_IMPLEMENTATION_AND_TESTING.md) for current results,
+user-reported cross-browser checks and remaining acceptance coverage.
+
+The following focused checks are retained from the Step F/G setup guide:
 
 ### Workspace Authorization Tests
 
@@ -284,7 +321,7 @@ From `server/`, using the installed Python environment:
 .\.venv\Scripts\python.exe -m pytest tests/test_workspace_context.py -v
 ```
 
-### Database Connection Check
+### Optional Live Database Connection Check (Confirm Development Target First)
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/db_smoke_test.py
@@ -302,19 +339,26 @@ Do not run database write tests against production, and avoid modifying shared d
 
 A complete testing sequence, expected results, and live browser integration checks are documented in:
 
-[Step F Data Layer and Testing Guide](docs/STEP_F_DATA_LAYER_AND_TESTING.md)
+[Step I implementation/testing report](docs/STEP_I_IMPLEMENTATION_AND_TESTING.md). The [Step F guide](docs/STEP_F_DATA_LAYER_AND_TESTING.md) provides historical repository setup detail.
 
 ---
 
 ## 8. Application Usage
 
-For the existing prototype workflow:
+For the current development workflow:
 
 1. Open the local React application.
 2. Sign in using Neon Auth.
-3. Complete the local preferences/persona setup if required.
-4. Create marketing content through the chat interface.
-5. Review generated content before copying or using it.
+3. In Settings, an authorized configuration editor can review saved business and verified licensing details, brand voice and workspace personas. Missing required identity blocks generation.
+4. Choose a saved database persona during onboarding or in the chat's Generation persona dropdown. Choices persist per chat in this browser, including older chats; original records/messages remain preserved.
+5. Create marketing content and review output/disclosures before copying or using it.
+
+The Workspace dropdown appears only for accounts with more than one authorized
+workspace (or when selection is required). One workspace is automatically selected.
+The development team has tested one workspace; creating another workspace, its
+membership and profile requires separately approved provisioning/SQL. There is
+no workspace-creation or invitation UI. Named sidebar conversations are chats,
+not separate workspaces.
 
 The prototype requires human review of AI-generated mortgage marketing content.
 
@@ -350,10 +394,10 @@ Recommended next phases:
 
 1. Complete Step G live schema, revocation, Auth, and browser acceptance.
 2. Plan workspace invitation/onboarding under the approved creator-private policy.
-3. Connect the React UI to authenticated Neon database APIs.
-4. Prepare and validate Joseph's existing-data migration.
-5. Test cross-device access and synchronization.
-6. Implement additional long-term memory and retrieval features.
+3. Review/finalize the Step I branch using its current acceptance report; brand/persona UI integration is implemented.
+4. Implement Step J conversation persistence, then separately plan/validate any historical-data migration.
+5. Test cross-device chat access after that persistence work; shared brand/persona configuration is already implemented and user-confirmed.
+6. Consider long-term memory/retrieval only under a separately scoped phase.
 
 Step F is the foundation that supports these improvements.
 
@@ -393,6 +437,4 @@ The current backend database foundation has been demonstrated in local developme
 
 That is an important technical milestone, but it is distinct from finishing the user-facing migration to Neon.
 
-For team handoff and acceptance testing, follow the Step F testing guide rather than relying only on this README.
-
-Step G current handoff: [implementation, behavior changes, and live acceptance gates](docs/STEP_G_IMPLEMENTATION_AND_TESTING.md). Older Step F validation does not establish Step G live acceptance.
+For current handoff and acceptance, use the [Step I implementation/testing report](docs/STEP_I_IMPLEMENTATION_AND_TESTING.md). Earlier Step F/G/H documents are historical context; their separate security and live acceptance gates are not automatically closed by Step I.

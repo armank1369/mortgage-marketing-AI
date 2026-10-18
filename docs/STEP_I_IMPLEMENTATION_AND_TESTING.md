@@ -1,6 +1,73 @@
 # Step I implementation and testing
 
-Updated 2026-10-17 (America/Los_Angeles).
+Updated 2026-10-18 (America/Los_Angeles).
+
+## 2026-10-18 final review and current acceptance record
+
+This section supersedes the original implementation-time “NOT RUN” entries for
+user-reported checks. Older sections retain their historical automated results.
+Review started with a clean tree at `bdbe22f3fe9ef93e779078123a79ea535d81a747`
+(`Saving selected persona in old chats hotifx`) on
+`codex/step-i-context-resolver`. Commits `c7ca604` and `bdbe22f` already existed
+when this review began; the agent did not create or amend them.
+
+The developer subsequently confirmed that saved brand/persona configuration
+appears across multiple browsers signed into the same account, while the chats
+remain separate in each browser. The developer reported basic behavior working
+after the persona-selection hotfix and then requested final code/documentation
+review. This is **user-reported development smoke acceptance**, not an
+agent-operated live test or proof of every scenario below.
+
+| Acceptance area | Current evidence/status |
+| --- | --- |
+| Brand/profile and persona definitions persist across browsers on the same account | PASS — explicitly confirmed by the developer |
+| Basic use after the older-chat generation-persona fix | PASS — developer reported the updated behavior working; six automated regressions cover selection/reload/switching |
+| Chats stay browser-local | EXPECTED — developer confirmed; Step J persistence is not implemented |
+| Per-chat generation choice persists in the same browser | Implemented in `generationPersonaId`, using the existing scoped browser chat record; not cross-browser preference synchronization |
+| General text generation | Developer supplied screenshots of generated responses; no provider/cost audit was performed by the agent |
+| Live campaign clarification, video, all image exports and long-disclosure layout | Automated/mock/SSR coverage passes; detailed live scenario results not individually recorded |
+| Live member/viewer/developer restrictions and revoked membership | Automated coverage; complete live role/revocation matrix not individually confirmed |
+| Live switching/isolation between two workspaces | NOT RUN — the team has used only one workspace; automated isolation tests pass |
+| Live schema constraints, outage/idle recovery, provider cache hits, production readiness | Not established by the above smoke tests; keep earlier Step G/H and release gates separate |
+
+A single authorized workspace is selected automatically; the Workspace dropdown
+appears only for multiple memberships or an unresolved selection. Sidebar items
+such as “Test 2” are chats within a workspace. Workspace creation, invitations and
+membership/role management are not available in the UI. Another workspace would
+require separately approved provisioning of workspace, membership and brand
+profile; a second workspace is not an automatic prerequisite or migration for
+Step I. Brand/persona records can then be configured in Settings.
+
+The final review refreshed README navigation/status/usage, the authorization
+matrix, environment notes, this report and the context contract. It reconciled
+shared configuration versus browser-local chats/selections, the hotfix, single-
+workspace testing and the exact scope of user-reported acceptance. Historical
+Step F/G/H handoffs remain historical, with their outstanding gates linked.
+
+One additional UI edge case was corrected: tone is extensible JSON and a stored
+`voice` value can be structured data. Passing that object directly to the Brand
+Summary's React text node could crash the modal. The editor and summary now use
+one safe text accessor, with a regression test; structured tone data is preserved
+and no database value is rewritten. No further blocking application issue was
+identified in this scoped review. This is not a production-security certification.
+
+Final review checks (2026-10-18):
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest server/tests -q` | PASS: **343 passed, 20 integration tests skipped** |
+| `npm --prefix client test` | PASS: **63 passed**, including the six hotfix cases and the new tone-display case |
+| `npm --prefix client run lint` | PASS: configured Oxlint, three existing Fast Refresh warnings |
+| `npm --prefix client run build` | PASS: existing large-chunk/plugin-timing warnings |
+| Documentation links and Git whitespace | PASS: all relative file links in the five reviewed current Markdown documents resolve; no added whitespace errors |
+
+ESLint was not rerun or installed; the original unavailable-tool result is
+retained below, and Oxlint remains the configured linter. No live DB query/write,
+paid provider call, schema/environment change, workspace/member provisioning,
+commit, push, merge or deployment was performed by this review. Test middleware
+was closed and no application servers were started. The current branch is ready
+for human diff review and development finalization; use the acceptance matrix to
+carry unverified live/production scenarios forward rather than marking them passed.
 
 ## 2026-10-18 follow-up: remember generation persona on existing chats
 
@@ -31,16 +98,18 @@ existing Fast Refresh warnings, and production build passed with existing
 large-chunk/plugin-timing warnings. Whitespace checks passed. Backend code was
 unchanged, so backend tests were not rerun for this follow-up. No database writes,
 paid model calls, commits or pushes were performed. Interactive browser acceptance
-of this fix remains for the user: reload the updated app, select a saved persona
-once in the older chat, switch to Test 2 and back, then refresh and confirm that
-the dropdown and labels retain the choice without sending any message.
+of this fix was subsequently reported successful at a basic level by the developer;
+see the current acceptance record above. The reproducible check is to select a
+persona in the older chat, switch to Test 2 and back, then refresh without sending
+a new message.
 
 ## Delivery status
 
-The Step I application implementation is complete and ready for comprehensive
-local user acceptance testing. Automated/mock/SSR checks pass. Live browser,
-Neon, real Auth and Anthropic acceptance are **NOT RUN**, not implied passes.
-Production deployment or merge readiness is not claimed.
+The Step I application implementation is complete, with automated coverage and
+developer-reported basic development acceptance after the hotfix. Shared brand/
+persona persistence has been confirmed across browsers on one account/workspace.
+Detailed live cases beyond those observations remain individually unverified;
+see the current acceptance matrix. Production deployment readiness is not claimed.
 
 The owner explicitly authorized the full remaining implementation, the licensed
 name setting, brand editor expansion, and small database persona editor in the
@@ -50,7 +119,7 @@ still require owner verification before publishing.
 
 ## Branch and baseline
 
-Continue on `codex/step-i-context-resolver`. At the start of this session the tree
+Continue on `codex/step-i-context-resolver`. At the start of the original full implementation the tree
 was clean and HEAD was `443c250b4725ffa0af713857c495e98225f30489`
 (`Step I setup`), containing the first resolver slice. That work was preserved.
 The original Step H base is `8e452cbf71e703b724ac3b759a609788f37d43f0`.
@@ -158,13 +227,13 @@ Frontend:
 `components/CampaignResponse.jsx`, `components/ContentBriefCard.jsx`,
 `components/socialImage/SocialImageGenerator.jsx`, `templates.jsx`, `theme.jsx`,
 `lib/authenticatedApi.js`, `lib/brandProfile.js`, `utils/storage.js`, `constants.js`;
-new `components/PersonaManager.jsx`, `context/WorkspaceData.js`,
+new `components/PersonaManager.jsx`, `lib/chatPersonas.js`, `lib/chatPersonas.test.js`, `context/WorkspaceData.js`,
 `context/WorkspaceDataProvider.jsx`, `lib/workspaceConfiguration.js`,
 `lib/workspaceConfiguration.test.js` and `lib/stepIComponents.test.js`.
 
 Documentation:
-this report, `STEP_I_CONTEXT_CONTRACT.md`, and new
-`STEP_I_DEV_SEED_REVIEW.sql`.
+this report, `STEP_I_CONTEXT_CONTRACT.md`, new `STEP_I_DEV_SEED_REVIEW.sql`,
+and current README, `AUTHORIZATION_MATRIX.md` and `ENVIRONMENT.md` updates.
 
 No package/lockfile, environment, schema, membership or hosting changes.
 
@@ -173,7 +242,7 @@ No package/lockfile, environment, schema, membership or hosting changes.
 Earlier pre-Step-I baseline: 147 backend passed / 20 skipped, 25 client passed.
 First resolver slice: 218 backend passed / 20 skipped.
 
-Final checks for this implementation:
+Original full-implementation checks (2026-10-17; current review results appear above):
 
 | Check | Status/result |
 | --- | --- |
@@ -183,8 +252,8 @@ Final checks for this implementation:
 | `npm --prefix client run build` | PASS; existing large-bundle warning (~1.40 MB minified JS) |
 | `npm exec --offline --no -- eslint .` from client | NOT RUN successfully: ESLint is not installed/configured; offline resolution returned `ENOTCACHED`. No dependency was installed |
 | Git whitespace checks, including new files | PASS |
-| Live Neon/Auth/browser checks | NOT RUN |
-| Paid Anthropic generation | NOT RUN |
+| Agent-operated live Neon/Auth/browser checks | NOT RUN; subsequent developer smoke results are recorded above |
+| Agent-operated paid Anthropic generation | NOT RUN; developer-provided response screenshots are separate evidence |
 
 The full backend suite includes focused Step I tests for scope/UUID selection,
 foreign/deleted/malformed/missing personas, missing identity, denied access before
@@ -212,7 +281,8 @@ listener.
 
 ## Database/seed decisions
 
-No live database query or write was executed. The exact Neon development branch,
+No agent-operated live database query or write was executed. Developer-reported
+manual configuration saves are recorded separately above. The exact Neon development branch,
 target workspace and current values were not independently confirmed; credentials
 or a connection-string name alone would not establish that target safely.
 
@@ -257,7 +327,9 @@ reference information, not verified facts or authorization to overwrite a row.
    backend writes must return 403. Member may generate; viewer generation must
    return 403. Test developer config edits only in development/test, never by
    changing real membership/roles for this check.
-7. Switch account/workspace while configuration is loading or a save is pending.
+7. Using existing authorized accounts, switch account/workspace while configuration
+   is loading or a save is pending. Workspace switching can be deferred when only
+   one workspace exists; do not create another without separate provisioning approval.
    Expected: no stale profile/personas/result displayed in the new scope. A request
    already committed server-side is not undone by browser cancellation; do not
    automatically retry writes or paid calls after ambiguous connection failure.
@@ -277,9 +349,10 @@ reference information, not verified facts or authorization to overwrite a row.
 
 ## Open gates, limitations and integration
 
-No known automated test failures remain. Live compatibility with the actual
-profile JSON/types, persona uniqueness/defaults, real role membership, idle DB
-recovery, model behavior and visual export layout remain acceptance items.
+No known automated test failures remain. Basic configuration persistence works
+in the developer's reported environment. This does not prove every live profile
+type/constraint, persona uniqueness/default, role boundary, idle DB recovery path,
+model behavior or export layout; unconfirmed coverage remains tracked above.
 A missing profile requires separately authorized provisioning; this implementation
 preserves the Step H missing-row error instead of silently creating one.
 
@@ -289,8 +362,9 @@ Step H real-browser/idle-recovery gates remain separate. Step J chat persistence
 historical migration, RAG, embeddings and production deployment remain out of scope.
 
 No application servers or background services were started by this session. All
-commands/tests completed and test middleware was closed. No live writes, paid
-calls, database branch creation, schema changes, commits, pushes or merges occurred.
+commands/tests completed and test middleware was closed. The agent performed no live writes, paid calls, database branch creation, schema
+changes, commits, pushes or merges. Developer actions and pre-existing commits
+are distinguished from agent actions in the current acceptance record.
 
 Suggested human-approved integration: review the diff on this branch, complete
 local acceptance, refresh comparison against the actual `luciev2_newteam`, and

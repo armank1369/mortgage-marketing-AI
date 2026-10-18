@@ -1,7 +1,8 @@
 # Step I context contract
 
 Status: implemented across backend generation, configuration APIs and frontend.
-Updated 2026-10-17. Live Auth/Neon/Claude acceptance is tracked separately.
+Updated 2026-10-18. Developer-reported basic acceptance and unconfirmed live cases
+are distinguished in the [current report](STEP_I_IMPLEMENTATION_AND_TESTING.md).
 
 ## Trust boundary and invocation
 
@@ -36,7 +37,7 @@ they are not API response schemas or authorization evidence.
 | `business_name` | `brand.business_name`: required single-line text, 1–100 characters; never the licensee name |
 | `nmls_id`, `dre_number` | `identity` fields: required strings of 1–20 ASCII digits, not all zeros; leading zeros preserved |
 | Licensed person's name | `identity.licensed_person_name`: required single-line text, 1–100 characters, from `settings.licensed_person_name` |
-| `tone` | `brand.tone`: JSON object, serialized to at most 4,000 characters |
+| `tone` | `brand.tone`: JSON object, serialized to at most 4,000 characters; UI displays `voice` only when it is text and preserves other JSON |
 | `values` | `brand.values`: JSON string array normalized to tuple |
 | `keywords`, `catchphrases`, `banned_words` | Corresponding brand tuples from string arrays |
 | `blog_examples` | JSON list or object, serialized to at most 8,000 characters |
@@ -61,7 +62,8 @@ rejected before trimming. Optional context keeps legitimate newlines.
 
 These shapes follow the supplied schema/seed design: `tone` is JSONB object,
 `values` JSONB array, voice keyword fields TEXT[], and audience profile JSONB
-object. No live database types or records were inspected in this slice. An
+object. No agent-operated live schema/record inspection was performed during
+implementation or final review; developer UI acceptance is recorded separately. An
 incompatible stored shape produces a configuration error rather than arbitrary
 coercion; a targeted schema check can resolve any actual mismatch later.
 
@@ -159,3 +161,20 @@ notes; no legal certification is claimed.
 - Preference storage retains unknown/historical fields and performs no read-time
   migration. Existing chat/calendar storage scope and history behavior are retained.
   Step J persistence and cross-device historical migration remain out of scope.
+
+## Persistence and workspace UX acceptance
+
+Brand/profile and persona **definitions** are shared Neon workspace configuration.
+The developer confirmed those saves appear in multiple browsers using the same
+account on the one development workspace. Chat messages, local preferences and
+per-chat `generationPersonaId` remain scoped browser records; they are not shared
+conversation persistence or a server-saved account default. The older-chat
+selection hotfix requires an explicit choice and never maps a legacy ID silently.
+
+One recognized membership is selected automatically. A Workspace dropdown appears
+for multiple authorized memberships or unresolved selection; sidebar conversation
+names are not workspace names. The UI cannot create workspaces, invite users or
+change memberships. New workspace/member/profile provisioning is a separately
+approved database operation, not part of Step I or the review-only voice/persona
+seed. Multi-workspace live switching was not run; automated isolation coverage
+and developer-reported same-account cross-browser persistence are separate evidence.

@@ -12,7 +12,7 @@ import Section from '../components/Section'
 import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
-import { scopedRequest } from '../lib/workspaceConfiguration.js'
+import { brandVoiceText, scopedRequest } from '../lib/workspaceConfiguration.js'
 import { getChatGenerationPersona, selectChatGenerationPersona } from '../lib/chatPersonas.js'
 import { workspaceApi } from '../lib/api.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
@@ -1338,7 +1338,7 @@ export default function ChatPage() {
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Tone of Voice</h4>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{brand?.tone?.voice || 'Clear, professional, educational language.'}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{brandVoiceText(brand?.tone) || 'Clear, professional, educational language.'}</p>
               </div>
 
               <div>

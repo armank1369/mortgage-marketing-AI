@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createAuthenticatedApi, apiErrorMessage } from './authenticatedApi.js'
 import { brandProfileRequest } from './brandProfile.js'
-import { scopedRequest, validateBrandFields, validatePersonaFields, selectDatabasePersona, isDatabasePersona } from './workspaceConfiguration.js'
+import { brandVoiceText, scopedRequest, validateBrandFields, validatePersonaFields, selectDatabasePersona, isDatabasePersona } from './workspaceConfiguration.js'
 import { loadPreferencesFromStorage, savePreferencesToStorage } from '../utils/storage.js'
 
 const persona = { id: '11111111-1111-4111-8111-111111111111', name: 'Saved Audience' }
@@ -13,6 +13,17 @@ function setup(request) {
   return { api, setUser: (value) => { userId = value } }
 }
 const scope = JSON.stringify(['a', 'first'])
+
+test('tone display handles extensible JSON without rendering objects or changing stored values', () => {
+  const structured = { voice: { style: 'Warm' }, professional: 3 }
+  const before = structuredClone(structured)
+  assert.equal(brandVoiceText(structured), '')
+  assert.deepEqual(structured, before)
+  for (const value of [undefined, null, {}, { voice: null }, { voice: ['Warm'] }, { voice: 3 }]) {
+    assert.equal(brandVoiceText(value), '')
+  }
+  assert.equal(brandVoiceText({ voice: 'Warm and clear' }), 'Warm and clear')
+})
 
 test('all exposed brand fields survive validated save/load, with only the edited patch sent', async () => {
   const values = { business_name: 'Synthetic Brokerage', licensed_person_name: 'Synthetic Licensee', nmls_id: '123456', dre_number: '00123456',
