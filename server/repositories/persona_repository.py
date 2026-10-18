@@ -6,6 +6,7 @@ Enforces workspace scoping, parameterization, and sanitized logging.
 
 from typing import List, Optional, Dict, Any
 import psycopg
+from psycopg.types.json import Jsonb
 from psycopg.errors import UniqueViolation, ForeignKeyViolation, CheckViolation
 
 from db.connection import get_db_cursor
@@ -79,27 +80,29 @@ def update_persona(
     persona_id: str,
     name: Optional[str] = None,
     description: Optional[str] = None,
-    prompt_guidance: Optional[str] = None
+    prompt_guidance: Optional[str] = None,
+    **persona_fields,
 ) -> Optional[Dict[str, Any]]:
     """Update editable persona fields without dumping prompt guidance or descriptions to logs."""
-    query = """
-        UPDATE public.persona
-        SET
-            name = COALESCE(%s, name),
-            description = COALESCE(%s, description),
-            prompt_guidance = COALESCE(%s, prompt_guidance),
-            updated_at = now()
-        WHERE id = %s
-          AND workspace_id = %s
-          AND deleted_at IS NULL
-        RETURNING id, workspace_id, slug, name, description,
+    if persona_fields.keys() - {"slug", "audience_profile"}:
+        raise ValidationError("Unsupported persona fields.")
+    assignments = ["name = COALESCE(%s, name)", "description = COALESCE(%s, description)",
+                   "prompt_guidance = COALESCE(%s, prompt_guidance)"]
+    params = [name, description, prompt_guidance]
+    for key, value in sorted(persona_fields.items()):
+        assignments.append(f'"{key}" = %s')
+        params.append(Jsonb(value) if key == "audience_profile" else value)
+    params.extend([persona_id, workspace_id])
+    query = "UPDATE public.persona SET " + ", ".join(assignments) + """,
+        updated_at = now() WHERE id = %s AND workspace_id = %s AND deleted_at IS NULL
+        RETURNING id, workspace_id, slug, name, description, audience_profile,
                   prompt_guidance, is_starter, updated_at;
     """
     try:
         with get_db_cursor(commit=True) as cursor:
             cursor.execute(
                 query,
-                (name, description, prompt_guidance, persona_id, workspace_id),
+                tuple(params),
             )
             row = cursor.fetchone()
             log_db_operation(
@@ -121,3 +124,30 @@ def update_persona(
     except Exception as e:
         log_db_error("update_persona", e, workspace_id=workspace_id, resource_id=persona_id)
         raise
+
+def create_persona(workspace_id: str, *, slug: str, name: str, description="",
+                   audience_profile=None, prompt_guidance=""):
+    """Create only in the caller-authorized workspace; starter status is server-owned."""
+    query = """
+        INSERT INTO public.persona
+            (workspace_id, slug, name, description, audience_profile, prompt_guidance, is_starter)
+        VALUES (%s, %s, %s, %s, %s, %s, false)
+        RETURNING id, workspace_id, slug, name, description, audience_profile,
+                  prompt_guidance, is_starter, created_at, updated_at;
+    """
+    try:
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute(query, (workspace_id, slug, name, description,
+                                   Jsonb(audience_profile or {}), prompt_guidance))
+            row = cursor.fetchone()
+        log_db_operation("create_persona", workspace_id=workspace_id, status="success" if row else "not_found")
+        return dict(row) if row else None
+    except UniqueViolation as e:
+        log_db_error("create_persona", e, workspace_id=workspace_id)
+        raise ConflictError("A persona with this slug already exists in this workspace.") from e
+    except (ForeignKeyViolation, CheckViolation) as e:
+        log_db_error("create_persona", e, workspace_id=workspace_id)
+        raise ValidationError("Invalid persona configuration.") from e
+    except psycopg.OperationalError as e:
+        log_db_error("create_persona", e, workspace_id=workspace_id)
+        raise DatabaseUnavailableError() from e

@@ -15,7 +15,8 @@ logger = logging.getLogger("lucie.db")
 SENSITIVE_FIELD_NAMES = {
     "password", "token", "jwt", "authorization", "secret", "database_url",
     "nmls_id", "dre_number", "compliance_footer", "equal_housing_text",
-    "blog_examples", "audience_profile", "prompt_guidance"
+    "blog_examples", "audience_profile", "prompt_guidance", "licensed_person_name",
+    "settings", "business_name", "tone", "values", "keywords", "catchphrases", "banned_words"
 }
 
 

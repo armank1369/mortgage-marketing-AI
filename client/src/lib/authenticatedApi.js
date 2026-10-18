@@ -68,6 +68,11 @@ export function apiErrorMessage(error, fallback = 'The request failed. Please tr
     workspace_selection_required: 'Select a workspace to continue.',
     permission_denied: 'Your workspace role does not permit this action.',
     database_unavailable: 'Workspace data is temporarily unavailable. Please try again.',
+    generation_configuration_required: 'Generation needs complete, valid brand and licensing details. Ask an authorized editor to review Settings.',
+    not_found: 'The selected record is unavailable in this workspace. Refresh configuration or choose a saved persona.',
+    validation_error: 'Check the configuration fields, their types and length limits. A business name must contain 1–100 characters.',
+    conflict: 'This identifier is already in use. Choose another short identifier.',
+    ai_provider_unavailable: 'The AI provider is unavailable. Contact your administrator.',
   }
   return messages[code] || fallback
 }

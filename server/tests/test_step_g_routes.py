@@ -23,6 +23,7 @@ ROUTES = [
     ("GET", "/api/preferences"), ("POST", "/api/preferences"),
     ("GET", "/api/history"), ("POST", "/api/chat"),
     ("POST", "/api/social-image"), ("POST", "/api/video-brief"),
+    ("GET", "/api/personas"), ("POST", "/api/personas"), ("PUT", "/api/personas/" + S),
 ]
 
 
@@ -49,15 +50,23 @@ def client(monkeypatch):
         {"sub": "user", "exp": int(time.time()) + 60, "iss": ORIGIN, "aud": ORIGIN},
         **changes), key, algorithm="EdDSA")
     client.headers = lambda: {"Authorization": "Bearer " + client.token()}
+    # Approved complete synthetic context for successful generation regression tests.
+    from services import generation_context
+    monkeypatch.setattr(generation_context, "get_persona", lambda workspace, persona: {
+        "id": persona, "workspace_id": workspace, "slug": "education", "name": "Education",
+        "description": "", "audience_profile": {}, "prompt_guidance": "", "is_starter": False})
+    monkeypatch.setattr(generation_context, "get_brand_profile", lambda workspace: {
+        "workspace_id": workspace, "business_name": "Synthetic Brokerage", "nmls_id": "123456",
+        "dre_number": "00123456", "settings": {"licensed_person_name": "Synthetic Licensee"}})
     return client
 
 
 def test_route_inventory():
     actual = {(method, rule.rule) for rule in api.app.url_map.iter_rules()
               for method in rule.methods - {"HEAD", "OPTIONS"} if rule.endpoint != "static"}
-    expected = set(ROUTES) - {("GET", "/api/chat/sessions/" + S)}
+    expected = set(ROUTES) - {("GET", "/api/chat/sessions/" + S), ("PUT", "/api/personas/" + S)}
     expected |= {("GET", "/api/chat/sessions/<session_id>"), ("GET", "/api/hello"),
-                 ("GET", "/api/auth/me"), ("GET", "/api/workspaces")}
+                 ("GET", "/api/auth/me"), ("GET", "/api/workspaces"), ("PUT", "/api/personas/<persona_id>")}
     assert actual == expected
 
 
@@ -130,7 +139,7 @@ def test_read_passes_creator_even_for_admin(client, monkeypatch, role):
 
 
 def test_generation_still_returns_text(client):
-    response = client.post("/api/chat", headers=client.headers(), json={"message": "Explain refinancing", "persona": "self-employed"})
+    response = client.post("/api/chat", headers=client.headers(), json={"message": "Explain refinancing", "persona_id": S})
     assert response.status_code == 200
     assert response.json["type"] == "text"
     client.ai.messages.create.assert_called_once()
@@ -176,7 +185,7 @@ def test_multiple_membership_choice_is_enforced_on_real_route(client):
     client.memberships.append(dict(client.context, workspace_id=S))
     assert client.post('/api/chat', headers=client.headers(), json={'message': 'Hello'}).status_code == 409
     client.ai.messages.create.assert_not_called()
-    response = client.post('/api/chat', headers={**client.headers(), 'X-Workspace-Id': S}, json={'message': 'Hello'})
+    response = client.post('/api/chat', headers={**client.headers(), 'X-Workspace-Id': S}, json={'message': 'Hello', 'persona_id': S})
     assert response.status_code == 200
 
 
@@ -195,6 +204,7 @@ def test_generation_response_shapes_preserved(client, kind):
         output = {'template': next(iter(api.SOCIAL_IMAGE_TEMPLATE_SLOTS)), 'slots': {}}
         url, payload, key = '/api/social-image', {'title': 'Synthetic title'}, 'template'
     client.ai.messages.create.return_value.content = [SimpleNamespace(type='text', text=json.dumps(output))]
+    payload["persona_id"] = S
     response = client.post(url, headers=client.headers(), json=payload)
     assert response.status_code == 200
     assert key in response.json

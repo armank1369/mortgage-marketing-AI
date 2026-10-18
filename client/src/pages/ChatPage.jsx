@@ -1,7 +1,7 @@
 import { useBrowserScope } from '../context/BrowserScope'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authenticatedPost, apiErrorMessage } from '../lib/api'
+import { apiErrorMessage } from '../lib/api'
 import axios from 'axios'
 import CalendarPage from './CalendarPage'
 import PreferenceSetup from './PreferenceSetup'
@@ -11,7 +11,9 @@ import PostsResponse from '../components/PostsResponse'
 import Section from '../components/Section'
 import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
-import { NMLS_NUMBER } from '../constants'
+import { useWorkspaceData } from '../context/WorkspaceData.js'
+import { scopedRequest } from '../lib/workspaceConfiguration.js'
+import { workspaceApi } from '../lib/api.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
 // crypto.randomUUID() only exists in a secure context (HTTPS, or the special-cased
@@ -206,18 +208,6 @@ function MenuIcon() {
     </svg>
   )
 }
-
-const PERSONA_DESCRIPTIONS = {
-  'self-employed':
-    'Age 35-60, self-employed or entrepreneur with complex finances and significant tax write-offs. Traditional banks have turned them away. Non-QM borrower with good to excellent credit and 2 or more years of business ownership. Core message: Find a solution without cutting corners.',
-}
-
-const TONE_SCALES = [
-  { key: 'professional', low: 'Professional', high: 'Casual' },
-  { key: 'authoritative', low: 'Authoritative', high: 'Conversational' },
-  { key: 'serious', low: 'Serious', high: 'Humorous' },
-  { key: 'matterOfFact', low: 'Matter of Fact', high: 'Enthusiastic' },
-]
 
 const CHAT_SLOT_COUNT = 3
 
@@ -428,14 +418,17 @@ export default function ChatPage() {
   const abortControllerRef = useRef(null)
   useEffect(() => () => abortControllerRef.current?.abort(), [])
 
-  const nmls = NMLS_NUMBER
+  const { brand, personas, loading: configLoading, error: configError, reload: reloadConfig } = useWorkspaceData()
+  const [personaOverrides, setPersonaOverrides] = useState({})
+  const nmls = brand?.nmls_id || 'Not configured'
 
   const activeChat = chats.find((c) => c.id === activeChatId) || chats[0]
   const messages = activeChat?.messages || []
 
-  const activePersona = activeChat?.persona || preferences.persona
-  const persona = activePersona?.apiKey || 'self-employed'
-  const isDefaultPersona = persona === 'self-employed'
+  const savedPersona = activeChat?.persona || preferences.persona
+  const persona = personaOverrides[activeChatId] ?? (personas.some((row) => row.id === savedPersona?.id) ? savedPersona.id : '')
+  const activePersona = personas.find((row) => row.id === persona) || savedPersona
+  const isDefaultPersona = activePersona?.is_starter === true
 
   const personaLabel = activePersona?.name || 'No persona'
 
@@ -516,11 +509,9 @@ export default function ChatPage() {
     const controller = new AbortController()
     abortControllerRef.current = controller
     try {
-      const { data } = await authenticatedPost(
-        '/api/chat',
-        { message, persona, nmls_number: nmls },
-        { signal: controller.signal }
-      )
+      if (!persona) throw new Error('Select a saved workspace persona before generating.')
+      const data = await scopedRequest(workspaceApi, scope, controller.signal, '/api/chat', 'POST', { message, persona_id: persona })
+      if (controller.signal.aborted) return
       const createdAt = new Date().toISOString()
       const contentTypes = getResponseContentTypes(data)
       let assistantMessage
@@ -563,6 +554,7 @@ export default function ChatPage() {
         }
       }
 
+      assistantMessage.persona_id = persona
       updateActiveChatMessages(
         (msgs) => [...msgs, assistantMessage],
         (chat) => ({
@@ -573,14 +565,14 @@ export default function ChatPage() {
       // Cancelled by clearChat (or a superseded request) — the chat that would have
       // received this response may no longer exist in its old form, so there's nothing
       // to report back for it.
-      if (axios.isCancel(err)) return
+      if (axios.isCancel(err) || err.code === 'ERR_CANCELED' || controller.signal.aborted) return
       updateActiveChatMessages((msgs) => [
         ...msgs,
         {
           id: makeId(),
           role: 'assistant',
           type: 'text',
-          text: apiErrorMessage(err, 'Sorry, I could not generate a response. Please try again.'),
+          text: apiErrorMessage(err, !persona ? 'Select a saved workspace persona before generating.' : 'Could not generate a response. Please try again.'),
           prompt: message,
           createdAt: new Date().toISOString(),
         },
@@ -691,7 +683,9 @@ export default function ChatPage() {
       if (updated[index].type === 'campaign') return updated
       const original = updated[index].text
       const lines = original.split('\n').filter(Boolean)
-      const shortened = lines.slice(0, 2).join('\n') + `\n\n— Joseph Kim | NMLS #${nmls}`
+      const footerStart = lines.findIndex((line) => line.includes(' | NMLS #') && line.includes(' | DRE #'))
+      if (footerStart < 0) return updated // Legacy output needs regeneration with configured identity.
+      const shortened = lines.slice(0, Math.min(2, footerStart)).join('\n') + '\n\n' + lines.slice(footerStart).join('\n')
       updated[index] = { ...updated[index], type: 'text', text: shortened }
       return updated
     })
@@ -999,7 +993,7 @@ export default function ChatPage() {
         </nav>
 
         <div className="p-4 border-t border-slate-800 md:border-slate-100 text-xs text-slate-500 md:text-slate-400">
-          {preferences.name} | NMLS #{nmls}
+          {brand?.licensed_person_name || 'Identity not configured'} | NMLS #{nmls}
         </div>
       </aside>
 
@@ -1078,6 +1072,19 @@ export default function ChatPage() {
             </div>
           )}
 
+          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+            <label>Generation persona{' '}
+              <select aria-label="Generation persona" value={persona} disabled={configLoading || isTyping}
+                className="ml-2 max-w-full rounded border p-1" onChange={(event) => setPersonaOverrides({ ...personaOverrides, [activeChatId]: event.target.value })}>
+                <option value="">Select a workspace persona</option>
+                {personas.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+              </select>
+            </label>
+            {!persona && <p className="mt-2 text-amber-800">Select a database persona explicitly. Browser personas and this chat remain preserved.</p>}
+            {configError && <p role="alert">{configError} <button className="underline" onClick={reloadConfig}>Try again</button></p>}
+            <button className="mt-2 text-sky-700 underline" onClick={() => navigate('/settings')}>Configure brand and personas</button>
+          </div>
+
           {messages.map((msg, i) => (
             <div key={msg.id ?? i}>
               {msg.role === 'assistant' && msg.type === 'campaign' ? (
@@ -1085,7 +1092,7 @@ export default function ChatPage() {
                   <CampaignResponse
                     data={msg.campaign}
                     nmls={nmls}
-                    persona={persona}
+                    persona={msg.persona_id || persona}
                     onVideoGenerated={(entryIndex, video) => setCalendarEntryVideo(i, entryIndex, video)}
                     batchId={msg.id}
                   />
@@ -1100,7 +1107,7 @@ export default function ChatPage() {
                 </div>
               ) : msg.role === 'assistant' && msg.type === 'posts' ? (
                 <div className="flex justify-start">
-                  <PostsResponse data={msg.posts} nmls={nmls} persona={persona} batchId={msg.id} />
+                  <PostsResponse data={msg.posts} nmls={nmls} persona={msg.persona_id || persona} batchId={msg.id} />
                 </div>
               ) : msg.role === 'assistant' ? (
                 // Same card chrome as CampaignResponse's Section component — every AI
@@ -1313,66 +1320,26 @@ export default function ChatPage() {
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Active Persona</h4>
                 <p className="mt-2 text-sm font-semibold text-slate-900">{activePersona?.name}</p>
                 <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                  {PERSONA_DESCRIPTIONS[persona] || activePersona?.description || 'No persona configured.'}
+                  {activePersona?.description || 'No saved persona selected.'}
                 </p>
               </div>
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Brand Voice</h4>
                 <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-                  {activePersona?.coreValues || 'Not configured.'}
+                  {brand?.values?.join(', ') || 'No optional brand values configured.'}
                 </p>
               </div>
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Tone of Voice</h4>
-                <div className="space-y-4">
-                  {TONE_SCALES.map((scale) => {
-                    const value = activePersona?.tone?.[scale.key]
-                    return (
-                      <div key={scale.key}>
-                        <div className="flex justify-between text-[11px] text-slate-500">
-                          <span>{scale.low}</span>
-                          <span>{scale.high}</span>
-                        </div>
-                        <div className="flex gap-1 mt-1.5">
-                          {[1, 2, 3, 4, 5].map((n) => (
-                            <span
-                              key={n}
-                              className={`h-2 flex-1 rounded-full ${
-                                value === n ? 'bg-blue-800' : 'bg-slate-200'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{brand?.tone?.voice || 'Clear, professional, educational language.'}</p>
               </div>
 
               <div>
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Target Audience</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[11px] text-slate-500 font-medium">Age range</p>
-                    <p className="mt-1 text-sm text-slate-700">
-                      {activePersona?.ageRange ? `Age range: ${activePersona.ageRange[0]}-${activePersona.ageRange[1]}` : 'Not configured.'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-slate-500 font-medium">Income</p>
-                    <p className="mt-1 text-sm text-slate-700">{activePersona?.income || 'Not configured.'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-slate-500 font-medium">Education</p>
-                    <p className="mt-1 text-sm text-slate-700">{activePersona?.education || 'Not configured.'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-slate-500 font-medium">Pain points</p>
-                    <p className="mt-1 text-sm text-slate-700">{activePersona?.painPoints || 'Not configured.'}</p>
-                  </div>
-                </div>
+                <p className="whitespace-pre-wrap text-sm text-slate-700">{activePersona?.prompt_guidance || 'No optional guidance configured.'}</p>
+                <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-500">{JSON.stringify(activePersona?.audience_profile || {}, null, 2)}</pre>
               </div>
 
               <div>

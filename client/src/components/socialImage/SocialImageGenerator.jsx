@@ -1,5 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
-import { authenticatedPost, apiErrorMessage } from '../../lib/api'
+import { workspaceApi, apiErrorMessage } from '../../lib/api'
+import { scopedRequest } from '../../lib/workspaceConfiguration.js'
+import { useBrowserScope } from '../../context/BrowserScope.js'
 import { toPng } from 'html-to-image'
 import TEMPLATE_COMPONENTS, { TEMPLATE_DIMENSIONS } from './templates'
 
@@ -20,7 +22,10 @@ function resolvePlatformLabel(platform) {
   return PLATFORM_LABELS[key] || platform || 'Instagram'
 }
 
-export default function SocialImageGenerator({ title, script, platform, persona, nmls }) {
+export default function SocialImageGenerator({ title, script, platform, persona }) {
+  const scope = useBrowserScope()
+  const pendingRef = useRef(null)
+  useEffect(() => () => pendingRef.current?.abort(), [scope])
   const platformLabel = resolvePlatformLabel(platform)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -44,22 +49,24 @@ export default function SocialImageGenerator({ title, script, platform, persona,
   }, [result])
 
   const generate = async () => {
+    if (pendingRef.current) return
+    const pending = new AbortController()
+    pendingRef.current = pending
     setLoading(true)
     setError('')
     try {
-      const { data } = await authenticatedPost('/api/social-image', {
+      const data = await scopedRequest(workspaceApi, scope, pending.signal, '/api/social-image', 'POST', {
         title,
         script,
         platform: platformLabel,
-        persona,
-        nmls_number: nmls,
+        persona_id: persona,
         previous_attempt: result || undefined,
       })
-      setResult(data)
+      if (!pending.signal.aborted) setResult(data)
     } catch (err) {
-      setError(apiErrorMessage(err, 'Could not generate a graphic. Please try again.'))
+      if (!pending.signal.aborted && err.code !== 'ERR_CANCELED') setError(apiErrorMessage(err, 'Could not generate a graphic. Please try again.'))
     } finally {
-      setLoading(false)
+      if (!pending.signal.aborted) { setLoading(false); pendingRef.current = null }
     }
   }
 
@@ -99,6 +106,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
         </span>
       </div>
 
+      {result?.compliance_flags?.length > 0 && <p className="mb-3 text-xs text-amber-800" role="status">Human compliance review required before publishing: {result.compliance_flags.join(', ')}</p>}
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
 
       {!result ? (
@@ -129,7 +137,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
           >
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
               <div ref={captureRef} style={{ width: dims.width, height: dims.height }}>
-                <TemplateComponent slots={result.slots} nmls={nmls} />
+                <TemplateComponent slots={result.slots} footer={result.compliance_footer} businessName={result.business_name} />
               </div>
             </div>
           </div>

@@ -23,7 +23,7 @@ def rows(monkeypatch):
         "tone": {"voice": "Matter of fact"}, "values": ["Accuracy"],
         "keywords": ["clear"], "catchphrases": [], "banned_words": [],
         "blog_examples": [{"text": "Synthetic educational example"}],
-        "settings": {"private_unrelated_setting": "DO_NOT_COPY"},
+        "settings": {"private_unrelated_setting": "DO_NOT_COPY", "licensed_person_name": "Synthetic Licensee"},
     }
     persona = {
         "workspace_id": UUID(W), "id": UUID(P), "slug": "business-owner",
@@ -39,8 +39,6 @@ def rows(monkeypatch):
 
 
 def resolve(workspace=W, persona=P, **kwargs):
-    # Backend-only synthetic source: this is not a proposed production setting.
-    kwargs.setdefault("licensed_person_name_loader", lambda profile: "Synthetic Licensee")
     return service.resolve_generation_context(workspace, persona_id=persona, **kwargs)
 
 
@@ -152,17 +150,18 @@ def test_required_identity_configuration(rows, name, value):
     assert exc.value.details["field"] == name
 
 
-def test_name_source_is_explicit_and_has_no_legacy_or_settings_fallback(rows):
-    rows[0]["settings"]["licensed_person_name"] = "Unapproved setting"
+def test_missing_name_has_no_business_or_legacy_fallback(rows):
+    rows[0]["settings"].pop("licensed_person_name")
     with pytest.raises(service.GenerationConfigurationError) as exc:
         service.resolve_generation_context(W, persona_id=P)
-    assert exc.value.details["field"] == "licensed_person_name_source"
+    assert exc.value.details["field"] == "licensed_person_name"
 
 
 @pytest.mark.parametrize("value", [None, "", 123, "x" * 101, "Name\rForged footer"])
-def test_name_loader_result_must_be_valid(rows, value):
+def test_name_setting_must_be_valid(rows, value):
+    rows[0]["settings"]["licensed_person_name"] = value
     with pytest.raises(service.GenerationConfigurationError) as exc:
-        resolve(licensed_person_name_loader=lambda profile: value)
+        resolve()
     assert exc.value.details["field"] == "licensed_person_name"
 
 

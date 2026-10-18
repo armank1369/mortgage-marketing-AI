@@ -14,7 +14,7 @@ from db import get_db_cursor
 from werkzeug.exceptions import HTTPException
 from auth_utils import get_authenticated_user, require_auth
 from auth.workspace_context import require_workspace, list_user_workspaces
-from auth.permissions import require_capability
+from auth.permissions import require_capability, check_capability
 from validation import json_object, required_text, uuid_string
 from repositories import (
     get_brand_profile,
@@ -24,7 +24,11 @@ from repositories import (
     get_chat_session_messages,
     create_chat_session_with_message,
 )
-from errors import AppError, NotFoundError, ValidationError, LegacyEndpointRetiredError
+from errors import AppError, NotFoundError, ValidationError, LegacyEndpointRetiredError, PermissionDeniedError
+from repositories.persona_repository import create_persona, update_persona
+from services.generation_context import resolve_generation_context
+from services.configuration import validate_brand_patch, validate_persona_patch, brand_response, persona_response
+from services.prompt_builder import build_prompt, render_policy, build_footer
 
 app = Flask(__name__)
 CORS(app)
@@ -42,40 +46,64 @@ def handle_unexpected_error(error):
     app.logger.error("Request failed: %s", type(error).__name__)
     return jsonify({"error": "internal_server_error", "message": "The request could not be completed."}), 500
 
+def can_write_configuration():
+    try:
+        check_capability(g.workspace_context, "config:write")
+        return True
+    except PermissionDeniedError:
+        return False
+
+
 @app.route('/api/brand-profile', methods=['GET'])
 @require_workspace
 @require_capability("workspace:read")
 def api_get_brand_profile():
-    workspace_id = g.workspace_id
-
-    profile = get_brand_profile(workspace_id)
-    if not profile:
-        return jsonify({
-            "workspace_id": str(workspace_id),
-            "business_name": ""
-        }), 200
-
-    return jsonify({
-        "workspace_id": str(profile.get("workspace_id", workspace_id)),
-        "business_name": profile.get("business_name") or ""
-    }), 200
+    return jsonify(brand_response(get_brand_profile(g.workspace_id), g.workspace_id,
+                                  can_write_configuration()))
 
 
 @app.route('/api/brand-profile', methods=['PUT'])
 @require_workspace
 @require_capability("config:write")
 def api_update_brand_profile():
-    workspace_id = g.workspace_id
-    sanitized_name = required_text(json_object(), "business_name")
-    if len(sanitized_name) > 100:
-        raise ValidationError("Business name cannot exceed 100 characters.")
-    updated = update_brand_profile(workspace_id, business_name=sanitized_name)
+    fields = validate_brand_patch(json_object())
+    updated = update_brand_profile(g.workspace_id, **fields)
     if updated is None:
         raise NotFoundError("No brand profile exists for this workspace. Contact your workspace administrator.")
-    return jsonify({
-        "workspace_id": str(updated["workspace_id"]),
-        "business_name": updated["business_name"],
-    }), 200
+    return jsonify(brand_response(updated, g.workspace_id, True))
+
+
+@app.route('/api/personas', methods=['GET'])
+@require_workspace
+@require_capability("workspace:read")
+def api_list_personas():
+    return jsonify({"personas": [persona_response(row) for row in list_personas(g.workspace_id)
+                                  if str(row.get("workspace_id")) == str(g.workspace_id)
+                                  and row.get("deleted_at") is None],
+                    "can_write": can_write_configuration()})
+
+
+@app.route('/api/personas', methods=['POST'])
+@require_workspace
+@require_capability("config:write")
+def api_create_persona():
+    fields = validate_persona_patch(json_object(), creating=True)
+    row = create_persona(g.workspace_id, **fields)
+    if not row:
+        raise NotFoundError("The persona could not be created.")
+    return jsonify(persona_response(row)), 201
+
+
+@app.route('/api/personas/<persona_id>', methods=['PUT'])
+@require_workspace
+@require_capability("config:write")
+def api_update_persona(persona_id):
+    persona_id = uuid_string(persona_id, "persona_id")
+    fields = validate_persona_patch(json_object())
+    row = update_persona(g.workspace_id, persona_id, **fields)
+    if not row:
+        raise NotFoundError("The selected persona is unavailable in this workspace.")
+    return jsonify(persona_response(row))
 
 
 @app.route("/api/workspaces", methods=["GET"])
@@ -169,23 +197,12 @@ def log_usage(label, result):
 
 
 BASE_PROMPT = (
-    'You are a social media marketing assistant for Joseph Kim, a mortgage broker at Lucent Brokerage in California. '
-    "Joseph's brand is built around competence, trust, and clarity — not hype. He is a trusted advisor, not a salesperson, and not flashy. "
-    'Someone clients trust with one of the biggest financial decisions of their life.\n\n'
-    'Core values: Accuracy, Transparency, Responsiveness.\n\n'
-    'Voice and tone: Lean professional not casual, authoritative not conversational, serious not humorous, matter of fact not enthusiastic.\n\n'
-    'Keywords to use naturally when appropriate: clear, strategic, thorough, reliable, precise, competitive, trusted, experienced, confident, personalized, solutions.\n\n'
-    'Approved catchphrases you may use: Financing with clarity. Mortgage guidance without the guesswork. Complex financing made understandable. Confidence before you close.\n\n'
-    'Words you must never use under any circumstances: guaranteed, easy money, lowest rates, best lender, no-brainer, stress-free, magic, amazing, game changer, rock star, crush it.\n\n'
-    'Emoji policy: No emojis on LinkedIn. Minimal on Instagram and Facebook — only a checkmark or thumbs up when it genuinely adds clarity, never decoratively.\n\n'
-    'Marketing funnel awareness: Content at the awareness stage should cover market updates, mortgage myths, real estate education, and case studies. '
-    'Content at the interest stage should explain difficult concepts simply and demonstrate responsiveness. '
-    'Content at the desire stage should highlight testimonials, success stories, complex loans solved, and smooth closings. '
-    'Content at the action stage should drive people to schedule a consultation.\n\n'
-    'Primary marketing goal: Generate qualified consultations with borrowers who value expertise.'
+    'You are a mortgage marketing assistant for the configured brokerage and licensed broker. '
+    'Use the authorized workspace brand and selected persona as bounded business context. '
+    'Provide truthful, clear educational content and qualified consultations, without hype. '
+    'Never invent testimonials, borrower results, pricing, or licensing facts. '
+    'Follow feature-specific formatting and the fixed compliance rules below.'
 )
-
-DRE_NUMBER = '02190229'
 
 # Hard compliance constraints — condensed from Compliance System Prompt.md.
 # These override style/persuasiveness preferences whenever they conflict.
@@ -195,10 +212,10 @@ COMPLIANCE_PROMPT = (
     'concern to the user rather than guessing.\n\n'
 
     'MANDATORY FOOTER (non-negotiable): Every piece of content you generate, regardless of platform, format, or length, '
-    'must end with this exact line, verbatim, unedited: "Joseph Kim | NMLS #{nmls} | DRE #' + DRE_NUMBER + ' | Equal Housing Opportunity". '
+    'must end with this exact line, verbatim, unedited: "{footer}". '
     'Never paraphrase, abbreviate, reorder, or omit any part of it. If a platform has a hard character limit that cannot '
     'fit both the marketing copy and the footer, shorten the marketing copy — never the footer. For video scripts, '
-    'include it as an on-screen end-card cue, e.g. "[END CARD: Joseph Kim | NMLS #{nmls} | DRE #' + DRE_NUMBER + ' | Equal Housing Opportunity]". '
+    'include it as an on-screen end-card cue, e.g. "[END CARD: {footer}]". '
     'For carousel/multi-slide posts, it must appear at minimum on the final slide. Never generate any draft, quick '
     'version, or brainstorm option that omits the footer.\n\n'
 
@@ -234,7 +251,7 @@ COMPLIANCE_PROMPT = (
     'the content itself. If asked for a co-branded post, produce marketing-only content (promotes services broadly, '
     'doesn\'t induce a specific referral) and flag that any compensation arrangement behind it should be reviewed '
     'against RESPA Section 8(c)(2). As a conservative product rule, never draft, suggest, request, or advertise a '
-    'Joseph-specific promotional rate, rate discount, teaser/special rate, temporary pricing offer, or other mortgage '
+    'broker-specific promotional rate, rate discount, teaser/special rate, temporary pricing offer, or other mortgage '
     'pricing promotion. Never frame "refer a friend" language as compensation for referring other consumer business — '
     'keep it a customer-appreciation gesture and flag it for review. Whenever '
     'content touches co-marketing, partnerships, sponsorships, or "refer and earn" programs, append this note after '
@@ -242,10 +259,10 @@ COMPLIANCE_PROMPT = (
     'relationship that should be reviewed for RESPA Section 8 compliance before publishing."\n\n'
 
     'NO FABRICATED FACTS: Never invent interest rates, APRs, loan terms, fees, closing costs, pre-approval odds, '
-    'timelines, or "as low as" figures. Do not create, request, or fill placeholders for a Joseph-specific rate, APR, '
+    'timelines, or "as low as" figures. Do not create, request, or fill placeholders for a broker-specific rate, APR, '
     'discount, promotion, or other pricing offer. General market-rate context may be discussed only as neutral '
     'educational context when it is supplied by the user or comes from a verified source available to the system; '
-    'clearly frame it as market context, never as Joseph\'s offered rate, and state that rates can change and depend '
+    'clearly frame it as market context, never as the configured broker\'s offered rate, and state that rates can change and depend '
     'on borrower/property qualifications. Never state or imply guaranteed approval, guaranteed rates, or "no risk" — '
     'use qualified language ("may qualify," "subject to underwriting," "rates subject to change and creditworthiness"). Never '
     'fabricate testimonials, reviews, client stories, or statistics — if a testimonial-style post is requested, ask '
@@ -253,7 +270,7 @@ COMPLIANCE_PROMPT = (
     'state specific credit score thresholds, down payment minimums, or DTI requirements unless the user provides '
     'them.\n\n'
 
-    'LICENSING CONTEXT: Joseph Kim operates under NMLS #{nmls} and California DRE #' + DRE_NUMBER + ' (both always appear '
+    'LICENSING CONTEXT: {licensed_person_name} operates under NMLS #{nmls} and California DRE #{dre} (both always appear '
     'via the mandatory footer). Never imply he is a "lender" when he operates as a broker, or otherwise misrepresent '
     'his role, unless the user clarifies his exact licensed capacity for a specific program. Never promise specific '
     'loan approval, rate locks, or terms without standard qualifying language. If a request touches a loan program '
@@ -303,9 +320,8 @@ PLATFORM_PROMPT = (
     '- TikTok: vertical short video only. First 3 seconds must work as a standalone hook. Caption for sound-off '
     'viewing. End on exactly one clear CTA. Raw/authentic outperforms polished production. Sustainable cadence: 3-5 '
     'posts/week.\n\n'
-    'Joseph\'s brand voice is professional, authoritative, and serious, not casual or humorous (see brand voice above) '
-    '— weight content toward LinkedIn\'s text-first, thought-leadership style and Instagram/Facebook education-and-'
-    'trust content; treat TikTok\'s raw, entertainment-adjacent format as lower priority unless specifically requested.'
+    'Use the configured brand voice for each platform. Choose platforms from the actual request, '
+    'not assumptions about the broker or audience.'
 )
 
 # Every response either becomes literal copy pasted straight onto a social platform (which
@@ -372,7 +388,7 @@ CAMPAIGN_FORMAT_PROMPT = (
     '- Use 3-5 content pillars in content_strategy, weighted by percentage toward what matters most for the stated '
     'marketing goal (see funnel-stage guidance above).\n'
     '- platform_breakdown should only include platforms actually used in content_calendar, with frequency/times/tone '
-    'consistent with the per-platform quick reference above and Joseph\'s professional/authoritative brand voice.\n'
+    'consistent with the per-platform quick reference above and configured brand voice.\n'
     '- content_calendar should span 14 days by default, or the exact duration the user specifies (e.g. "1 week" = 7 '
     'days, "1 month" = 30 days). Only include calendar entries for days that actually have a scheduled post — do not '
     'create empty entries for off days.\n'
@@ -402,9 +418,9 @@ CAMPAIGN_FORMAT_PROMPT = (
     'the no-upfront-scripts rule below).\n'
     '- Every caption must still fully comply with the compliance rules above (mandatory footer, no fair housing '
     'violations, no fabricated facts, qualified language) exactly as it would for a single-post request.\n'
-    '- Do not include a Joseph-specific rate, APR, discount, promotion, or pricing incentive, and do not use a '
+    '- Do not include a broker-specific rate, APR, discount, promotion, or pricing incentive, and do not use a '
     'rate/promo placeholder. General market-rate context is allowed only as neutral educational context when supplied '
-    'or verified, and must never be presented as Joseph\'s offered or guaranteed rate.\n'
+    'or verified, and must never be presented as the configured broker\'s offered or guaranteed rate.\n'
     '- No two entries in content_calendar may share the same core idea, hook, or content concept (e.g. do not generate '
     '"a whiteboard video explaining X" more than once, even reworded) — every entry must offer a genuinely distinct '
     'angle or topic from every other entry in this calendar.\n'
@@ -449,11 +465,9 @@ VIDEO_BRIEF_FORMAT_PROMPT = (
     '- Each script follows intro (hook) -> body (value delivered) -> cta (the ask) with realistic timestamp ranges '
     'that sum to roughly the stated duration.\n'
     '- creative_direction must be concrete, filmable guidance (not generic advice) for setting, camera framing, '
-    'lighting, on-camera energy/delivery, background, and clothing, consistent with Joseph\'s professional, '
-    'trustworthy brand voice.\n'
+    'lighting, on-camera energy/delivery, background, and clothing, consistent with the configured brand voice.\n'
     '- Per the mandatory footer rule above, a video script is not text you can just append the footer to — end the '
-    'script\'s cta.text with the footer as an on-screen end-card cue: "[END CARD: Joseph Kim | NMLS #{nmls} | DRE #'
-    + DRE_NUMBER + ' | Equal Housing Opportunity]", never spoken aloud as dialogue.'
+    'script\'s cta.text with the footer as an on-screen end-card cue: "[END CARD: {footer}]", never spoken aloud as dialogue.'
 )
 
 # Non-campaign requests (single caption/post/idea/question) route through one of these three
@@ -573,12 +587,12 @@ SOCIAL_IMAGE_PROMPT = (
     'TEMPLATE OPTIONS AND THEIR SLOTS:\n'
     '- "pull_quote" — a single attributed quote. Best for a strong thought-leadership line from '
     'the hook or cta. Slots: {"quote": "<one punchy sentence, no quotation marks needed>", '
-    '"attribution_name": "<usually \'Joseph Kim\' unless the content is a real client '
+    '"attribution_name": "<usually \'{licensed_person_name}\' unless the content is a real client '
     'testimonial the user actually supplied>", "attribution_title": "<e.g. \'Mortgage Broker, '
     'Lucent Brokerage\', or the real client\'s role if this is a genuine testimonial>"}.\n'
     '- "stat_highlight" — one bold number. Best when the content centers on a specific verified stat '
     'or percentage. General market-rate context may be used only if it already exists in the source content and is '
-    'clearly educational rather than a Joseph-specific offer. Slots: {"eyebrow": "<short label, e.g. '
+    'clearly educational rather than a broker-specific offer. Slots: {"eyebrow": "<short label, e.g. '
     '\'THIS QUARTER\' or \'DID YOU KNOW\'>", "stat_number": "<the verified number, e.g. \'43%\' — '
     'never create a rate/promo placeholder or invent a figure>", "stat_label": "<what the '
     'number means, one short line>", "footnote": "<small source/context line, or empty string>"}.\n'
@@ -610,11 +624,11 @@ SOCIAL_IMAGE_PROMPT = (
 # Campaign requests generate through CAMPAIGN_JSON_SCHEMA below, which forces one fixed
 # shape via structured outputs — the model literally cannot ask a question in that call. This
 # prompt drives a separate, unstructured, schema-free check beforehand: a real content
-# strategy should be grounded in Joseph's actual goal/evidence, not guessed, so this asks for
+# strategy should be grounded in the configured broker's actual goal/evidence, not guessed, so this asks for
 # that context first unless the request already supplies it or is itself a follow-up answer.
 CAMPAIGN_CLARIFICATION_PROMPT = (
     'BEFORE BUILDING THIS CAMPAIGN — CHECK FOR REAL INPUT FIRST. A content strategy and calendar built entirely '
-    'from assumptions is weak — the goal, angle, evidence, and platform mix should come from Joseph\'s actual '
+    'from assumptions is weak — the goal, angle, evidence, and platform mix should come from the configured broker\'s actual '
     'current situation, not guesses.\n\n'
     'MANDATORY ON EVERY CAMPAIGN REQUEST, NO EXCEPTIONS — always check these two, independent of everything else '
     'below and of each other:\n'
@@ -783,17 +797,6 @@ VIDEO_BRIEF_JSON_SCHEMA = {
     'additionalProperties': False,
 }
 
-PERSONA_PROMPTS = {
-    'self-employed': (
-        'CURRENT PERSONA — The Business Owner: Age 35-60, entrepreneur, investor, physician, or consultant. '
-        'Income variable at $300k+. They have complex finances including multiple corporate tax returns and significant write-offs that make them appear non-bankable to traditional lenders. '
-        'They are a Non-QM borrower with good to excellent credit, 2 or more years of business ownership, and available down payment and post-funding reserves. '
-        'They are frustrated with traditional banks but want creative and legitimate financing. They appreciate genuine expertise. '
-        'Write content that validates their frustration, demonstrates deep knowledge of Non-QM loan products, and positions Joseph as the broker who knows how to work with complex financial profiles. '
-        'The core message this persona wants to hear is: Find a solution without cutting corners.'
-    ),
-}
-
 # Output-side compliance backstop: the model doesn't reliably apply the fair-housing/
 # no-fabrication rules from COMPLIANCE_PROMPT on its own (verified via testing), so these
 # checks run deterministically on every response rather than relying on the prompt alone.
@@ -827,7 +830,7 @@ RESTRICTED_PRICING_OFFER_PHRASES = [
 ]
 
 RESTRICTED_PRICING_FALLBACK = (
-    'This draft was withheld because it included a Joseph-specific pricing or promotional offer. '
+    'This draft was withheld because it included a broker-specific pricing or promotional offer. '
     'Please regenerate using general educational market context without presenting a specific offered or guaranteed rate.'
 )
 
@@ -835,10 +838,6 @@ RESTRICTED_PRICING_FALLBACK = (
 def has_restricted_pricing_offer(text):
     normalized = _normalize(text or '')
     return any(phrase in normalized for phrase in RESTRICTED_PRICING_OFFER_PHRASES)
-
-
-def build_footer(nmls):
-    return f'Joseph Kim | NMLS #{nmls} | DRE #{DRE_NUMBER} | Equal Housing Opportunity'
 
 
 def _normalize(text):
@@ -882,9 +881,9 @@ def strip_markdown_deep(value):
     return value
 
 
-def enforce_compliance(response_text, nmls):
+def enforce_compliance(response_text, context):
     flags = []
-    footer = build_footer(nmls)
+    footer = build_footer(context)
     if has_restricted_pricing_offer(response_text):
         flags.append('restricted_pricing_offer_removed')
         response_text = RESTRICTED_PRICING_FALLBACK
@@ -894,7 +893,7 @@ def enforce_compliance(response_text, nmls):
 
     lowered = _normalize(response_text)
     hit_phrases = [p for p in FLAGGED_STEERING_PHRASES if p in lowered]
-    hit_words = [w for w in FORBIDDEN_WORDS if w in lowered]
+    hit_words = [w for w in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)] if w in lowered]
 
     if hit_phrases or hit_words:
         note_bits = []
@@ -912,10 +911,10 @@ def enforce_compliance(response_text, nmls):
     return response_text, flags
 
 
-def enforce_video_brief_compliance(brief, nmls):
+def enforce_video_brief_compliance(brief, context):
     # Mirrors enforce_compliance, but a video script isn't caption text — the footer belongs
     # on-screen as an end-card cue, never appended as if it were spoken dialogue.
-    footer = build_footer(nmls)
+    footer = build_footer(context)
     end_card = f'[END CARD: {footer}]'
     flags = []
 
@@ -936,14 +935,15 @@ def enforce_video_brief_compliance(brief, nmls):
         script['intro'] = intro
         script['body'] = body
         full_text = RESTRICTED_PRICING_FALLBACK
-    if footer not in full_text and end_card not in full_text:
+    if end_card not in cta_text:
         flags.append('missing_or_altered_footer')
-        cta_text = (cta_text.rstrip() + '\n\n' if cta_text.strip() else '') + end_card
+        cta_text = cta_text.replace(footer, '').rstrip()
+        cta_text = (cta_text + '\n\n' if cta_text else '') + end_card
         full_text = '\n'.join([intro_text, body_text, cta_text])
 
     lowered = _normalize(full_text)
     hit_phrases = [p for p in FLAGGED_STEERING_PHRASES if p in lowered]
-    hit_words = [w for w in FORBIDDEN_WORDS if w in lowered]
+    hit_words = [w for w in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)] if w in lowered]
 
     if hit_phrases or hit_words:
         note_bits = []
@@ -1113,14 +1113,14 @@ def _parse_posts(raw_response):
     return None
 
 
-def enforce_posts_compliance(data, nmls):
+def enforce_posts_compliance(data, context):
     # Mirrors enforce_video_brief_compliance — the footer belongs at the end of the script's
     # cta line, not appended to a flat caption (posts no longer have one; the assembled
     # caption is rebuilt client-side from hook + body + cta for the Copy button).
     flags = set()
     if data.get('intro'):
         data['intro'] = strip_markdown(data['intro'])
-    footer = build_footer(nmls)
+    footer = build_footer(context)
     for post in data.get('posts', []):
         script = post.get('script') or {}
         hook = strip_markdown(script.get('hook', '') or '')
@@ -1145,14 +1145,14 @@ def enforce_posts_compliance(data, nmls):
             body_text = ''
             cta = ''
             full_text = hook
-        if footer not in full_text:
+        if footer not in cta:
             post_flags.append('missing_or_altered_footer')
             cta = (cta.rstrip() + '\n\n' if cta.strip() else '') + footer
             full_text = '\n'.join([hook, body_text, cta])
 
         lowered = _normalize(full_text)
         hit_phrases = [p for p in FLAGGED_STEERING_PHRASES if p in lowered]
-        hit_words = [w for w in FORBIDDEN_WORDS if w in lowered]
+        hit_words = [w for w in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)] if w in lowered]
         if hit_phrases or hit_words:
             note_bits = []
             if hit_phrases:
@@ -1299,14 +1299,34 @@ def _campaign_post_count_shortfalls(campaign):
     return shortfalls
 
 
-def enforce_campaign_compliance(campaign, nmls):
+def enforce_campaign_compliance(campaign, context):
     flags = set()
     for entry in campaign.get('content_calendar', []):
         caption = entry.get('caption', '')
-        fixed_caption, entry_flags = enforce_compliance(caption, nmls)
+        fixed_caption, entry_flags = enforce_compliance(caption, context)
         entry['caption'] = fixed_caption
         flags.update(entry_flags)
     return campaign, sorted(flags)
+
+
+def enforce_social_image_compliance(graphic, context):
+    text = json.dumps(graphic.get('slots', {}), ensure_ascii=False)
+    flags = []
+    if has_restricted_pricing_offer(text):
+        graphic = {'template': 'pull_quote', 'slots': {
+            'quote': RESTRICTED_PRICING_FALLBACK,
+            'attribution_name': context.identity.licensed_person_name,
+            'attribution_title': context.brand.business_name}}
+        flags.append('restricted_pricing_offer_removed')
+    if graphic['template'] == 'pull_quote':
+        graphic['slots']['attribution_name'] = context.identity.licensed_person_name
+        graphic['slots']['attribution_title'] = context.brand.business_name
+    lowered = _normalize(text)
+    if any(phrase in lowered for phrase in FLAGGED_STEERING_PHRASES):
+        flags.append('possible_fair_housing_language')
+    if any(word in lowered for word in [*FORBIDDEN_WORDS, *map(_normalize, context.brand.banned_words)]):
+        flags.append('forbidden_word_used')
+    return graphic, flags
 
 
 @app.route('/api/social-image', methods=['POST'])
@@ -1321,10 +1341,7 @@ def social_image():
     if not isinstance(script, dict):
         raise ValidationError('script must be an object.')
     platform = data.get('platform', '')
-    persona = data.get('persona', '')
-    if not isinstance(persona, str):
-        raise ValidationError('persona must be text.')
-    nmls = data.get('nmls_number') or '000000'
+    context = resolve_generation_context(g.workspace_id, persona_id=data.get('persona_id'))
 
     hook = script.get('hook', '')
     body = script.get('body', '')
@@ -1349,11 +1366,8 @@ def social_image():
             'wording — not a synonym swap of the same sentence.'
         )
 
-    persona_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS['self-employed'])
-    system_prompt = (
-        BASE_PROMPT + '\n\n' + COMPLIANCE_PROMPT + '\n\n' + NO_MARKDOWN_PROMPT + '\n\n'
-        + persona_prompt + '\n\n' + SOCIAL_IMAGE_PROMPT
-    ).replace('{nmls}', nmls)
+    system_prompt = build_prompt(context, BASE_PROMPT, COMPLIANCE_PROMPT,
+                                 NO_MARKDOWN_PROMPT, SOCIAL_IMAGE_PROMPT)
 
     try:
         result = get_anthropic_client().messages.create(
@@ -1368,9 +1382,11 @@ def social_image():
         social_image_data = _parse_social_image(raw_response)
         if not social_image_data:
             return jsonify({'error': 'Could not generate a graphic from this content. Try again.'}), 502
-        return jsonify(social_image_data)
+        social_image_data, flags = enforce_social_image_compliance(social_image_data, context)
+        return jsonify({**social_image_data, 'compliance_footer': build_footer(context),
+                        'business_name': context.brand.business_name, 'compliance_flags': flags})
     except anthropic.AuthenticationError:
-        return jsonify({'error': 'Invalid Anthropic API key. Check ANTHROPIC_API_KEY in .env.'}), 401
+        return jsonify({'error': 'ai_provider_unavailable', 'message': 'The AI provider is unavailable. Contact your administrator.'}), 502
     except anthropic.RateLimitError:
         return jsonify({'error': 'Anthropic rate limit exceeded. Please wait and try again.'}), 429
     except anthropic.APIConnectionError:
@@ -1391,16 +1407,10 @@ def video_brief():
 
     platform = data.get('platform', '')
     category = data.get('category', '')
-    persona = data.get('persona', '')
-    if not isinstance(persona, str):
-        raise ValidationError('persona must be text.')
-    nmls = data.get('nmls_number') or '000000'
+    context = resolve_generation_context(g.workspace_id, persona_id=data.get('persona_id'))
 
-    persona_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS['self-employed'])
-    system_prompt = (
-        BASE_PROMPT + '\n\n' + COMPLIANCE_PROMPT + '\n\n' + PLATFORM_PROMPT + '\n\n'
-        + NO_MARKDOWN_PROMPT + '\n\n' + persona_prompt + '\n\n' + VIDEO_BRIEF_FORMAT_PROMPT
-    ).replace('{nmls}', nmls)
+    system_prompt = build_prompt(context, BASE_PROMPT, COMPLIANCE_PROMPT, PLATFORM_PROMPT,
+                                 NO_MARKDOWN_PROMPT, VIDEO_BRIEF_FORMAT_PROMPT)
 
     source_text = f'Platform: {platform}\nCategory/pillar: {category}\nCaption:\n{caption}'
 
@@ -1420,10 +1430,10 @@ def video_brief():
         except json.JSONDecodeError:
             return jsonify({'error': 'Could not generate a video script from this post. Try again.'}), 502
         video = strip_markdown_deep(video)
-        video, flags = enforce_video_brief_compliance(video, nmls)
+        video, flags = enforce_video_brief_compliance(video, context)
         return jsonify({'video': video, 'compliance_flags': flags})
     except anthropic.AuthenticationError:
-        return jsonify({'error': 'Invalid Anthropic API key. Check ANTHROPIC_API_KEY in .env.'}), 401
+        return jsonify({'error': 'ai_provider_unavailable', 'message': 'The AI provider is unavailable. Contact your administrator.'}), 502
     except anthropic.RateLimitError:
         return jsonify({'error': 'Anthropic rate limit exceeded. Please wait and try again.'}), 429
     except anthropic.APIConnectionError:
@@ -1439,9 +1449,7 @@ def video_brief():
 def chat():
     data = json_object()
     message = required_text(data, 'message')
-    persona = data.get('persona', '')
-    if not isinstance(persona, str):
-        raise ValidationError('persona must be text.')
+    context = resolve_generation_context(g.workspace_id, persona_id=data.get('persona_id'))
 
     if not message:
         return jsonify({'error': 'message is required'}), 400
@@ -1454,14 +1462,10 @@ def chat():
     # campaign requests elsewhere, so this only fires for broad/time-bound single requests.
     is_ambiguous_scope = not is_campaign and bool(AMBIGUOUS_SCOPE_PATTERN.search(message))
 
-    persona_prompt = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS['self-employed'])
-    shared_system_prompt = (
-        BASE_PROMPT + '\n\n' + COMPLIANCE_PROMPT + '\n\n' + PLATFORM_PROMPT + '\n\n'
-        + NO_MARKDOWN_PROMPT + '\n\n' + persona_prompt
-    )
+    shared_system_prompt = build_prompt(context, BASE_PROMPT, COMPLIANCE_PROMPT,
+                                        PLATFORM_PROMPT, NO_MARKDOWN_PROMPT)
     # Step G: global SQLite history is not a safe source of workspace context.
     recent_idea_context = ""
-    nmls = data.get('nmls_number') or '000000'
 
     try:
         if is_campaign and not is_followup_answer:
@@ -1469,7 +1473,7 @@ def chat():
             # which can't ask a question — so the ask-or-proceed decision runs as a separate,
             # small, schema-free call first. Only when it doesn't return questions do we go
             # on to the full (expensive) structured campaign generation below.
-            check_system_prompt = (shared_system_prompt + '\n\n' + CAMPAIGN_CLARIFICATION_PROMPT).replace('{nmls}', nmls)
+            check_system_prompt = shared_system_prompt + '\n\n' + render_policy(CAMPAIGN_CLARIFICATION_PROMPT, context)
 
             check_result = get_anthropic_client().messages.create(
                 model=ANTHROPIC_MODEL,
@@ -1486,13 +1490,12 @@ def chat():
 
         system_prompt = shared_system_prompt
         if is_campaign:
-            system_prompt += '\n\n' + CAMPAIGN_FORMAT_PROMPT
-            system_prompt = system_prompt.replace('{today}', date.today().strftime('%A, %B %d, %Y'))
+            system_prompt += '\n\n' + render_policy(
+                CAMPAIGN_FORMAT_PROMPT.replace('{today}', date.today().strftime('%A, %B %d, %Y')), context)
         else:
-            system_prompt += '\n\n' + NON_CAMPAIGN_FORMAT_PROMPT
+            system_prompt += '\n\n' + render_policy(NON_CAMPAIGN_FORMAT_PROMPT, context)
             if is_ambiguous_scope:
                 system_prompt += '\n\n' + AMBIGUOUS_SCOPE_PROMPT
-        system_prompt = system_prompt.replace('{nmls}', nmls)
 
         request_kwargs = {
             'model': ANTHROPIC_MODEL,
@@ -1535,7 +1538,7 @@ def chat():
                     # frequency/severity can still be tracked from production traffic.
                     print(f'[campaign_shortfall] {shortfalls}')
 
-                campaign, compliance_flags = enforce_campaign_compliance(campaign, nmls)
+                campaign, compliance_flags = enforce_campaign_compliance(campaign, context)
                 return jsonify({'type': 'campaign', 'campaign': campaign, 'compliance_flags': compliance_flags})
             except (json.JSONDecodeError, AttributeError):
                 # Model didn't return valid/expected JSON shape — fall back to showing it as plain text
@@ -1548,14 +1551,14 @@ def chat():
 
             posts_data = _parse_posts(raw_response)
             if posts_data:
-                posts_data, compliance_flags = enforce_posts_compliance(posts_data, nmls)
+                posts_data, compliance_flags = enforce_posts_compliance(posts_data, context)
                 return jsonify({'type': 'posts', 'posts': posts_data, 'compliance_flags': compliance_flags})
 
         raw_response = _strip_stray_empty_posts_envelope(raw_response)
-        response, compliance_flags = enforce_compliance(strip_markdown(raw_response), nmls)
+        response, compliance_flags = enforce_compliance(strip_markdown(raw_response), context)
         return jsonify({'type': 'text', 'response': response, 'compliance_flags': compliance_flags})
     except anthropic.AuthenticationError:
-        return jsonify({'error': 'Invalid Anthropic API key. Check ANTHROPIC_API_KEY in .env.'}), 401
+        return jsonify({'error': 'ai_provider_unavailable', 'message': 'The AI provider is unavailable. Contact your administrator.'}), 502
     except anthropic.RateLimitError:
         return jsonify({'error': 'Anthropic rate limit exceeded. Please wait and try again.'}), 429
     except anthropic.APIConnectionError:

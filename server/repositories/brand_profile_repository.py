@@ -6,6 +6,7 @@ Enforces workspace scoping, parameterization, and sanitized logging.
 
 from typing import Optional, Dict, Any
 import psycopg
+from psycopg.types.json import Jsonb
 from psycopg.errors import UniqueViolation, ForeignKeyViolation, CheckViolation
 
 from db.connection import get_db_cursor
@@ -43,27 +44,40 @@ def update_brand_profile(
     nmls_id: Optional[str] = None,
     dre_number: Optional[str] = None,
     compliance_footer: Optional[str] = None,
-    equal_housing_text: Optional[str] = None
+    equal_housing_text: Optional[str] = None,
+    **brand_fields,
 ) -> Optional[Dict[str, Any]]:
     """Update core identity and compliance fields without leaking sensitive inputs to logs."""
-    query = """
-        UPDATE public.brand_profile
-        SET
-            business_name = COALESCE(%s, business_name),
-            nmls_id = COALESCE(%s, nmls_id),
-            dre_number = COALESCE(%s, dre_number),
-            compliance_footer = COALESCE(%s, compliance_footer),
-            equal_housing_text = COALESCE(%s, equal_housing_text),
-            updated_at = now()
-        WHERE workspace_id = %s
+    allowed = {"tone", "values", "keywords", "catchphrases", "banned_words", "blog_examples", "licensed_person_name"}
+    if brand_fields.keys() - allowed:
+        raise ValidationError("Unsupported brand profile fields.")
+    assignments = [
+        "business_name = COALESCE(%s, business_name)",
+        "nmls_id = COALESCE(%s, nmls_id)",
+        "dre_number = COALESCE(%s, dre_number)",
+        "compliance_footer = COALESCE(%s, compliance_footer)",
+        "equal_housing_text = COALESCE(%s, equal_housing_text)",
+    ]
+    params = [business_name, nmls_id, dre_number, compliance_footer, equal_housing_text]
+    for key, value in sorted(brand_fields.items()):
+        if key == "licensed_person_name":
+            assignments.append("settings = COALESCE(settings, '{}'::jsonb) || %s::jsonb")
+            params.append(Jsonb({"licensed_person_name": value}))
+        else:
+            assignments.append(f'"{key}" = %s')
+            params.append(Jsonb(value) if key in {"tone", "values", "blog_examples"} else value)
+    params.append(workspace_id)
+    query = "UPDATE public.brand_profile SET " + ", ".join(assignments) + """,
+        updated_at = now() WHERE workspace_id = %s
         RETURNING id, workspace_id, business_name, nmls_id, dre_number,
-                  compliance_footer, equal_housing_text, updated_at;
+                  compliance_footer, equal_housing_text, tone, values, keywords,
+                  catchphrases, banned_words, blog_examples, settings, updated_at;
     """
     try:
         with get_db_cursor(commit=True) as cursor:
             cursor.execute(
                 query,
-                (business_name, nmls_id, dre_number, compliance_footer, equal_housing_text, workspace_id),
+                tuple(params),
             )
             row = cursor.fetchone()
         # Cursor context has committed before reporting success.

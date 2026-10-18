@@ -1,17 +1,9 @@
-// Scoped requests also reject late responses from transports that ignore abort.
-export async function brandProfileRequest(api, scope, signal, businessName) {
-  if (!scope || signal.aborted) throw Object.assign(new Error('Request canceled'), { code: 'ERR_CANCELED' })
-  const [userId, workspaceId] = JSON.parse(scope)
-  if (!userId || !workspaceId) throw Object.assign(new Error('Select a workspace'), { code: 'ERR_CANCELED' })
-  const saving = businessName !== undefined
-  const response = await api.send({
-    url: '/api/brand-profile', method: saving ? 'PUT' : 'GET', signal,
-    ...(saving ? { data: { business_name: businessName.trim() } } : {}),
-  }, { expectedScope: scope })
-  if (signal.aborted || api.getWorkspace(userId) !== workspaceId) {
-    throw Object.assign(new Error('Request canceled'), { code: 'ERR_CANCELED' })
-  }
-  return response.data
+import { scopedRequest, validateBrandFields } from './workspaceConfiguration.js'
+// Retain the Step H single-name call contract and support a validated field patch.
+export async function brandProfileRequest(api, scope, signal, fields) {
+  const saving = fields !== undefined
+  const patch = saving ? validateBrandFields(typeof fields === 'string' ? { business_name: fields } : fields) : undefined
+  return scopedRequest(api, scope, signal, '/api/brand-profile', saving ? 'PUT' : 'GET', patch)
 }
 
 export function brandProfileError(error) {

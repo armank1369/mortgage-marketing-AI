@@ -18,13 +18,15 @@ def repositories(client, monkeypatch):
 
 def test_get_and_missing_profile(client, repositories):
     read, write = repositories
-    assert client.get('/api/brand-profile', headers=client.headers()).json == {
-        'workspace_id': W, 'business_name': 'Existing'}
+    data = client.get('/api/brand-profile', headers=client.headers()).json
+    assert data['workspace_id'] == W and data['business_name'] == 'Existing'
+    assert data['exists'] is True and data['can_write'] is False
     read.assert_called_once_with(W)
     read.return_value = None
     response = client.get('/api/brand-profile', headers=client.headers())
     assert response.status_code == 200
-    assert response.json == {'workspace_id': W, 'business_name': ''}
+    assert response.json['workspace_id'] == W and response.json['business_name'] == ''
+    assert response.json['exists'] is False
     write.assert_not_called()
 
 
@@ -58,7 +60,8 @@ def test_write_policy_and_persisted_response(client, repositories, role, environ
     assert response.status_code == (200 if allowed else 403)
     if allowed:
         write.assert_called_once_with(W, business_name='New name')
-        assert response.json == {'workspace_id': W, 'business_name': 'Persisted'}
+        assert response.json['workspace_id'] == W and response.json['business_name'] == 'Persisted'
+        assert response.json['can_write'] is True
     else:
         write.assert_not_called()
 
@@ -86,7 +89,7 @@ def test_explicit_second_workspace(client, repositories, method):
     read, write = repositories
     read.return_value = write.return_value = {'workspace_id': S, 'business_name': 'Second'}
     response = client.open('/api/brand-profile', method=method,
-        headers={**client.headers(), 'X-Workspace-Id': S}, json={'business_name': 'Second', 'workspace_id': W})
+        headers={**client.headers(), 'X-Workspace-Id': S}, json={'business_name': 'Second'})
     assert response.status_code == 200
     assert response.json['workspace_id'] == S
     if method == 'GET': read.assert_called_once_with(S)

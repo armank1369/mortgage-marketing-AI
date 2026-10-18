@@ -13,6 +13,7 @@ import AuthPage from './pages/AuthPage'
 import AuthDebugPage from './pages/AuthDebugPage'
 import SettingsPage from './pages/SettingsPage'
 import WorkspaceGate from './components/WorkspaceGate'
+import WorkspaceDataProvider from './context/WorkspaceDataProvider.jsx'
 
 function AppContent() {
   const { preferences } = usePreferences()
@@ -26,11 +27,11 @@ function AppContent() {
 
 function LucieApp() {
   return (
-    <PreferencesProvider>
+    <WorkspaceDataProvider><PreferencesProvider>
       <CalendarProvider>
         <AppContent />
       </CalendarProvider>
-    </PreferencesProvider>
+    </PreferencesProvider></WorkspaceDataProvider>
   )
 }
 

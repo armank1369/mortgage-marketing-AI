@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import { authenticatedPost, apiErrorMessage } from '../lib/api'
+import { useState, useRef, useEffect } from 'react'
+import { workspaceApi, apiErrorMessage } from '../lib/api'
+import { scopedRequest } from '../lib/workspaceConfiguration.js'
+import { useBrowserScope } from '../context/BrowserScope.js'
 import Section from './Section'
 import platformBadge from './platformBadge'
 import { ScriptLine, SlideCarousel, CreativeDirectionGrid, FORMAT_BADGES } from './ContentBriefCard'
@@ -199,6 +201,9 @@ function PlatformBreakdownBody({ platforms }) {
 
 function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
   const [copied, setCopied] = useState(false)
+  const scope = useBrowserScope()
+  const pendingRef = useRef(null)
+  useEffect(() => () => pendingRef.current?.abort(), [scope])
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
   const badge = platformBadge(entry.platform)
@@ -208,21 +213,23 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
   const details = video?.quick_details || {}
 
   const generateVideo = async () => {
+    if (pendingRef.current) return
+    const pending = new AbortController()
+    pendingRef.current = pending
     setGenerating(true)
     setGenError('')
     try {
-      const { data } = await authenticatedPost('/api/video-brief', {
+      const data = await scopedRequest(workspaceApi, scope, pending.signal, '/api/video-brief', 'POST', {
         caption: entry.caption,
         platform: entry.platform,
         category: entry.category,
-        persona,
-        nmls_number: nmls,
+        persona_id: persona,
       })
-      onVideoGenerated(data.video)
+      if (!pending.signal.aborted) onVideoGenerated({ ...data.video, compliance_flags: data.compliance_flags })
     } catch (err) {
-      setGenError(apiErrorMessage(err, 'Could not generate a video script. Please try again.'))
+      if (!pending.signal.aborted && err.code !== 'ERR_CANCELED') setGenError(apiErrorMessage(err, 'Could not generate a video script. Please try again.'))
     } finally {
-      setGenerating(false)
+      if (!pending.signal.aborted) { setGenerating(false); pendingRef.current = null }
     }
   }
 

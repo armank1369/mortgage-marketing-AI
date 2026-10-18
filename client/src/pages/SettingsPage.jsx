@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import WorkspaceGate from '../components/WorkspaceGate.jsx'
 import BrandProfileEditor from '../components/BrandProfileEditor.jsx'
+import PersonaManager from '../components/PersonaManager.jsx'
+import WorkspaceDataProvider from '../context/WorkspaceDataProvider.jsx'
 import { Link, useNavigate } from 'react-router-dom'
 import { authClient } from '../lib/neon/neon.js'
 
@@ -158,7 +160,7 @@ export default function SettingsPage() {
           )}
         </section>
         {!isPending && user && (
-          <WorkspaceGate><BrandProfileEditor /></WorkspaceGate>
+          <WorkspaceGate><WorkspaceDataProvider><BrandProfileEditor /><PersonaManager /></WorkspaceDataProvider></WorkspaceGate>
         )}
       </div>
     </main>

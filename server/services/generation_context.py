@@ -1,12 +1,11 @@
 """Resolve bounded business context after workspace authorization.
 
 This module has no provider calls, writes, cache, or request-body dependency.
-The licensed-person name source deliberately has no production default yet.
+Licensed-person name comes only from the approved server-side settings key.
 """
 from dataclasses import dataclass, field
 import json
 import re
-from typing import Callable, Mapping, Optional
 from uuid import UUID
 
 from errors import AppError, NotFoundError, ValidationError
@@ -142,13 +141,10 @@ def resolve_generation_context(
     workspace_id: str,
     *,
     persona_id: str,
-    licensed_person_name_loader: Optional[Callable[[Mapping], str]] = None,
 ) -> GenerationContext:
     """Caller must first authorize workspace + ai:generate.
 
-    The optional loader is backend configuration, never request input. Until an
-    owner-approved name source is implemented, omitting it fails closed. Tests
-    supply a synthetic loader; no settings key or legacy name is assumed.
+    Licensed identity is loaded only from the authorized workspace profile.
     """
     # UUID validation does not authorize workspace access.
     try:
@@ -186,9 +182,10 @@ def resolve_generation_context(
         if not re.fullmatch(r"[0-9]{1,20}", value) or not value.strip("0"):
             raise GenerationConfigurationError(name)
         identifiers[name] = value
-    if licensed_person_name_loader is None:
-        raise GenerationConfigurationError("licensed_person_name_source")
-    licensed_name = _text(licensed_person_name_loader(profile), "licensed_person_name", 100,
+    settings = profile.get("settings") or {}
+    if not isinstance(settings, dict):
+        raise GenerationConfigurationError("settings")
+    licensed_name = _text(settings.get("licensed_person_name"), "licensed_person_name", 100,
                           required=True, single_line=True)
 
     brand = BrandContext(
