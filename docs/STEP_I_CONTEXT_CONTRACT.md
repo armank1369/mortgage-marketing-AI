@@ -143,6 +143,12 @@ notes; no legal certification is claimed.
 - Generation requires an explicitly selected database UUID. Old `persona` keys
   are not mapped, and request-body NMLS/DRE/name values are ignored as authority.
   Unknown selections fail, never silently default to the business-owner persona.
+- Each chat stores an explicitly chosen generation UUID in `generationPersonaId`
+  within the existing account/workspace-scoped browser chat record. This selection
+  takes precedence over the original persona snapshot and survives chat switching
+  and reloads. Clearing it is explicit; unavailable/deleted/foreign selections do
+  not silently fall back. Original persona data and historical message UUIDs are
+  preserved. New chats without an override can use their original database persona.
 - Workspace/account remounts abort provider/editor/nested generation requests;
   shared scoped transport also rejects late workspace responses. Backend guards
   recheck current membership on each request.

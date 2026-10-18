@@ -13,6 +13,7 @@ import { usePreferences } from '../context/PreferencesContext'
 import { loadChatsFromStorage, saveChatsToStorage } from '../utils/storage'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
 import { scopedRequest } from '../lib/workspaceConfiguration.js'
+import { getChatGenerationPersona, selectChatGenerationPersona } from '../lib/chatPersonas.js'
 import { workspaceApi } from '../lib/api.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
@@ -419,15 +420,13 @@ export default function ChatPage() {
   useEffect(() => () => abortControllerRef.current?.abort(), [])
 
   const { brand, personas, loading: configLoading, error: configError, reload: reloadConfig } = useWorkspaceData()
-  const [personaOverrides, setPersonaOverrides] = useState({})
   const nmls = brand?.nmls_id || 'Not configured'
 
   const activeChat = chats.find((c) => c.id === activeChatId) || chats[0]
   const messages = activeChat?.messages || []
 
-  const savedPersona = activeChat?.persona || preferences.persona
-  const persona = personaOverrides[activeChatId] ?? (personas.some((row) => row.id === savedPersona?.id) ? savedPersona.id : '')
-  const activePersona = personas.find((row) => row.id === persona) || savedPersona
+  const activePersona = getChatGenerationPersona(activeChat, preferences.persona, personas)
+  const persona = activePersona?.id || ''
   const isDefaultPersona = activePersona?.is_starter === true
 
   const personaLabel = activePersona?.name || 'No persona'
@@ -479,6 +478,7 @@ export default function ChatPage() {
                 ...chat,
                 persona,
                 personaId: persona.id || persona.apiKey || null,
+                generationPersonaId: persona.id,
                 title: persona.name || 'New Chat',
                 createdAt: chat.createdAt || now,
                 updatedAt: now,
@@ -495,6 +495,7 @@ export default function ChatPage() {
                 ...chat,
                 persona,
                 personaId: persona.id || persona.apiKey || null,
+                generationPersonaId: persona.id,
                 title: persona.name || chat.title,
                 updatedAt: now,
               }
@@ -859,7 +860,7 @@ export default function ChatPage() {
 
           <div className="pt-3 space-y-1.5">
             {chats
-              .filter((chat) => chat.persona)
+              .filter((chat) => chat.persona || chat.generationPersonaId)
               .map((chat) => {
                 const isActive = chat.id === activeChatId
                 const displayLabel = chat.title || chat.persona?.name || 'Chat'
@@ -868,7 +869,8 @@ export default function ChatPage() {
                 const hiddenTypeCount = Math.max(0, (chat.contentTypes || []).length - visibleTypes.length)
                 const isEditing = editingChatId === chat.id
                 const latestActivity = buildLatestActivityPreview(chat)
-                const personaName = chat.persona?.name
+                const personaName = getChatGenerationPersona(chat, preferences.persona, personas)?.name ||
+                  (chat.generationPersonaId === undefined ? chat.persona?.name : null)
 
                 return (
                   <div
@@ -1075,7 +1077,10 @@ export default function ChatPage() {
           <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-sm">
             <label>Generation persona{' '}
               <select aria-label="Generation persona" value={persona} disabled={configLoading || isTyping}
-                className="ml-2 max-w-full rounded border p-1" onChange={(event) => setPersonaOverrides({ ...personaOverrides, [activeChatId]: event.target.value })}>
+                className="ml-2 max-w-full rounded border p-1" onChange={(event) => {
+                  const selectedId = event.target.value
+                  setChats((previous) => selectChatGenerationPersona(previous, activeChatId, selectedId, personas))
+                }}>
                 <option value="">Select a workspace persona</option>
                 {personas.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
               </select>

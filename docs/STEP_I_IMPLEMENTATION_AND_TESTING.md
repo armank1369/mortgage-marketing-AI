@@ -2,6 +2,39 @@
 
 Updated 2026-10-17 (America/Los_Angeles).
 
+## 2026-10-18 follow-up: remember generation persona on existing chats
+
+The user reported that a pre-Step-I chat forgot its generation-persona selection,
+while a newly created database-persona chat restored its default. The dropdown
+was writing only a temporary `personaOverrides` React map, never the saved chat
+record. Reload/remount discarded that map, leaving the older chat's original
+non-UUID persona. New chats already held a database UUID in their original
+persona snapshot, which explains their different behavior.
+
+The dropdown now updates `generationPersonaId` on the selected chat using the
+existing account/workspace-scoped chat persistence. Header/sidebar selection
+labels resolve from that saved ID and the current workspace persona list.
+Original persona snapshots, titles, timestamps and historical message UUIDs are
+preserved. No browser records are automatically mapped to database personas.
+An explicit empty selection remains empty; a deleted/foreign/unavailable persona
+does not silently fall back. Onboarding explicitly resets the selection when
+assigning a persona to a chat slot.
+
+Changed `client/src/pages/ChatPage.jsx`; added `client/src/lib/chatPersonas.js`
+and six regression cases in `chatPersonas.test.js`; updated this report and the
+context contract. Tests cover independent chat switching, real storage/reload,
+legacy message preservation, explicit clearing, unavailable selections and
+account/workspace storage separation.
+
+Validation: **62 frontend tests passed**, configured Oxlint passed with its three
+existing Fast Refresh warnings, and production build passed with existing
+large-chunk/plugin-timing warnings. Whitespace checks passed. Backend code was
+unchanged, so backend tests were not rerun for this follow-up. No database writes,
+paid model calls, commits or pushes were performed. Interactive browser acceptance
+of this fix remains for the user: reload the updated app, select a saved persona
+once in the older chat, switch to Test 2 and back, then refresh and confirm that
+the dropdown and labels retain the choice without sending any message.
+
 ## Delivery status
 
 The Step I application implementation is complete and ready for comprehensive
