@@ -86,7 +86,8 @@ export default function ChatPage() {
     if (!text.trim() || providerBlocked || !state.active) return
     action({ action: 'send', message: text.trim() }).then((result) => {
       // Keep unsent text until a durable claim/result can be confirmed. Errors never become assistant messages.
-      if (result?.request_message_id) setInputs((previous) => ({ ...previous, [inputKey]: '' }))
+      if (result?.request_message_id) setInputs((previous) =>
+        (previous[inputKey] || '').trim() === text.trim() ? { ...previous, [inputKey]: '' } : previous)
     })
   }
   const retry = (operation, acknowledge) => {

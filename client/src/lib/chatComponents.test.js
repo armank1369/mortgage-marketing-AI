@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createServer } from 'vite'
 import { decodeMessage, projectConversation } from './chatSerialization.js'
 
-const vite = await createServer({ server: { middlewareMode: true, hmr: false }, plugins: [{ name: 'step-j-offline-api', enforce: 'pre', load(id) {
+const vite = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, plugins: [{ name: 'step-j-offline-api', enforce: 'pre', load(id) {
   if (id.replaceAll('\\', '/').endsWith('/src/lib/api.js')) return `export const workspaceApi = { send() { throw Error('Unexpected network'); } }; export { apiErrorMessage } from './authenticatedApi.js';`
 } }] })
 after(() => vite.close())

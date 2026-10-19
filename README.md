@@ -5,11 +5,20 @@ Lucie is an AI-powered mortgage marketing assistant developed for Lucent Brokera
 
 The application helps with social media content creation, campaign planning, and marketing-related workflows while incorporating mortgage-industry compliance considerations.
 
-The project is being upgraded from a browser-focused prototype into an application with authenticated accounts, persistent backend storage, and eventually cross-device access and long-term AI memory.
+The application now supports authenticated accounts, creator-private persistent conversations, cross-browser reopening and bounded same-conversation context. Long-term memory remains outside the implemented scope.
 
 ## 1. Start Here
 
-If you are joining the project or testing the recent backend changes, read:
+For current features, architecture decisions, API/recovery behavior and limitations, read:
+
+**[Step J — Feature and Operations Guide](docs/STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md)**
+
+See [Step J finalization](docs/STEP_J_FINALIZATION.md) for acceptance/results and
+[Step J testing](docs/STEP_J_TESTING_GUIDE.md) for reproducible checks. The owner
+reported successful UI use after J.4 and J.5; deployment/live-matrix gates remain
+explicit. UI appearance refinements are separately planned with the owner's team.
+
+For the underlying brand/persona generation work, read:
 
 **[Step I — Current Implementation, Testing and Acceptance](docs/STEP_I_IMPLEMENTATION_AND_TESTING.md)**
 
@@ -22,7 +31,7 @@ This document includes:
 - A beginner-friendly explanation of Steps D, E, and F.
 - What the database layer actually does.
 - Instructions for setting up the project on Windows.
-- A complete list of backend tests.
+- Historical backend test examples; current suites/results are in the phase guides.
 - Instructions for connecting a Neon Auth account to a workspace.
 - Browser-based API tests.
 - Expected results and troubleshooting.
@@ -36,9 +45,9 @@ Other important documentation:
 - [Step I Development Seed Review — Not Executed](docs/STEP_I_DEV_SEED_REVIEW.sql)
 - [Step H Finalization — Historical Baseline](docs/STEP_H_HOTFIX_FINALIZATION.md)
 - [Step E — Neon Auth and Session Identity Recap](docs/Lucie_Step_E_Neon_Auth_and_Session_Identity_Recap.md)
-- [Technical Audit and Risk Assessment](docs/Lucie_Technical_Audit_Whitepaper.pdf)
-- [End-User Manual](docs/Lucie_User_Manual.pdf)
-- [Prototype UI Changes](docs/PROTOTYPE_UI_CHANGES.md)
+- [Historical Technical Audit and Risk Assessment](docs/Lucie_Technical_Audit_Whitepaper.pdf)
+- [Historical Prototype End-User Manual — Predates Step J](docs/Lucie_User_Manual.pdf)
+- [Historical Prototype UI Changes](docs/PROTOTYPE_UI_CHANGES.md)
 
 ---
 
@@ -109,6 +118,16 @@ persistence across browsers using the same account, and successful basic use
 after the older-chat persona-selection hotfix. The automated suite and the exact
 scope of manual acceptance are recorded in the Step I report; these observations
 do not establish every role, output format or production deployment gate.
+
+### Step J — Durable Conversations and Bounded Context
+
+Implemented on `codex/step-j-chat-persistence`: creator-private session/operation
+APIs, paginated conversations/history, explicit persona selection, archive/restore,
+immutable revisions, saved clarification answers and linked image/video specifications.
+Same-conversation context is bounded and captured on the server; unknown outcomes
+never trigger automatic repeat provider calls. Existing local history remains read-only;
+Calendar remains local. Save Draft is deferred. See the current Step J guide for all
+contracts, recovery paths, schema mapping, decisions and remaining release gates.
 
 ### Current Limitations
 

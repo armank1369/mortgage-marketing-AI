@@ -60,3 +60,14 @@ test('operation status outside the loaded message page overrides stale local run
   const pending = [{ body: { operation_key: 'key', action: 'send' }, state: 'running' }]
   assert.equal(operationRecords([], [{ operation_key: 'key', state: 'unknown' }], pending)[0].state, 'unknown')
 })
+
+test('independent older media attempts stay accessible as previous versions', () => {
+  const parent = structuredClone(rows[3])
+  const first = { ...structuredClone(rows[4]), source_message_id: parent.id }
+  const second = { ...structuredClone(first), id: 'sibling', kind: 'response' }
+  const projected = projectConversation([parent, first, second])
+  assert.equal(projected.length, 1)
+  const video = projected[0].artifacts['content_calendar:0'].video
+  assert.equal(video.id, second.id)
+  assert.deepEqual(video.previous.map((row) => row.id), [first.id])
+})

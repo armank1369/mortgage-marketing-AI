@@ -114,3 +114,26 @@ def test_real_abandoned_campaign_cannot_dispatch_second_stage(generation_session
         execute(session, fields, create)
     assert create.call_count == 1 and len(attempts(session)) == 1
     assert len(chats.get_session(wid, sid, mid)["messages"]) == 1
+
+
+def test_real_stale_media_parent_conflicts_and_current_artifact_creates_revision(generation_session):
+    from tests.test_step_j_operations import fixture
+    session = generation_session
+    persona = session[3]
+    campaign = fixture("campaign")["campaign"]
+    values = iter([{"proceed": True}, campaign])
+    parent = execute(session, operation(persona, message="Create a campaign"), lambda **_: provider_result(next(values)))
+    image = fixture("social_image")
+    raw = {"template": image["template"], "slots": image["slots"]}
+    fields = dict(action="social_image", operation_key=str(uuid4()), persona_id=persona,
+                  source_message_id=parent["response"]["id"], target={"collection": "content_calendar", "index": 0})
+    first = execute(session, fields, lambda **_: provider_result(raw))
+    before = len(attempts(session))
+    denied = Mock(side_effect=AssertionError("Stale parent must not call provider"))
+    with pytest.raises(ChatConflictError) as conflict:
+        execute(session, dict(fields, operation_key=str(uuid4())), denied)
+    assert conflict.value.error_code == "stale_source" and len(attempts(session)) == before
+    denied.assert_not_called()
+    revised = execute(session, dict(fields, operation_key=str(uuid4()), source_message_id=first["response"]["id"]), lambda **_: provider_result(raw))
+    assert revised["state"] == "succeeded" and revised["response"]["kind"] == "revision"
+    assert revised["response"]["source_message_id"] == first["response"]["id"]

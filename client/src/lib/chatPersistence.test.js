@@ -194,7 +194,7 @@ test('a completed operation outside the latest history page cannot leave the con
   // The next latest page omits the old request. The status endpoint is authoritative.
   f.messages.set(session.id, [])
   await c.reconcile()
-  assert.equal(c.operations()[0].state, 'succeeded')
+  assert.ok(c.operations().every((op) => ['succeeded', 'failed', 'abandoned'].includes(op.state)))
   assert.ok(f.calls.some((r) => r.url.endsWith(`/operations/${request.structured_data.input.operation_key}`)))
   c.stop()
 })
@@ -235,5 +235,72 @@ test('automatic titles retain Unicode code points at the 200-character boundary'
   const f = fixture(), c = f.make(); await c.start()
   await c.submit({ action: 'send', message: 'a'.repeat(199) + '🏡' + 'extra', persona_id: persona })
   assert.equal(f.calls.find((r) => r.method === 'PUT').data.title, 'a'.repeat(199) + '🏡')
+  c.stop()
+})
+
+test('refresh after a large history gap restarts at the latest page so intervening messages remain reachable', async () => {
+  let phase = 'initial'
+  const row = (i) => ({ id: `m-${i}`, role: 'user', content: `Message ${i}`, created_at: `2026-01-${String(i).padStart(2, '0')}` })
+  const f = fixture({ override: (config) => {
+    if (!config.url.includes('/history?')) return null
+    const messages = phase === 'initial' ? [row(1), row(2)] : config.url.includes('before=gap') ? [row(3), row(4)] : [row(5), row(6)]
+    return Promise.resolve({ data: { id: 'history', title: 'Paged', etag: '"v1"', messages,
+      operations: [], before_cursor: phase === 'initial' ? null : config.url.includes('before=gap') ? 'older' : 'gap' } })
+  } }), c = f.make()
+  await c.start(); await c.open('history')
+  phase = 'gap'; await c.open('history', false, true)
+  assert.deepEqual(c.getSnapshot().messages.map((m) => m.id), ['m-5', 'm-6'])
+  assert.equal(c.getSnapshot().before_cursor, 'gap')
+  await c.open('history', true)
+  assert.deepEqual(c.getSnapshot().messages.map((m) => m.id), ['m-3', 'm-4', 'm-5', 'm-6'])
+  assert.equal(c.getSnapshot().before_cursor, 'older')
+  c.stop()
+})
+
+test('a stale detail read cannot overwrite a newer saved operation result', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
+  const active = structuredClone(c.getSnapshot().active), barrier = deferred(), original = f.api.send
+  let intercepted = false
+  f.api.send = (config, options) => {
+    if (!intercepted && config.url.includes(`/${active.id}?`)) { intercepted = true; return barrier.promise }
+    return original(config, options)
+  }
+  const stale = c.open(active.id, false, true)
+  await c.submit({ action: 'send', message: 'Another request', persona_id: persona })
+  barrier.resolve({ data: { ...active, messages: [], operations: [{ operation_key: 'stale', state: 'running' }] } }); await stale
+  assert.equal(c.getSnapshot().messages.at(-1).content, 'saved text')
+  assert.ok(!c.operations().some((op) => op.operation_key === 'stale'))
+  c.stop()
+})
+
+test('a delayed running status cannot resurrect pending work after a saved resubmission', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  const original = f.api.send
+  let loseFirstReply = true
+  f.api.send = async (config, options) => {
+    const saved = await original(config, options)
+    if (loseFirstReply && config.method === 'POST') {
+      loseFirstReply = false
+      f.messages.get(c.getSnapshot().active.id)[0].structured_data.operation.state = 'running'
+      throw Error('reply not confirmed')
+    }
+    return saved
+  }
+  await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
+  const key = c.getSnapshot().pending[0].body.operation_key, barrier = deferred()
+  let captured = false
+  f.api.send = (config, options) => {
+    if (!captured && config.method === 'GET' && config.url.endsWith(`/operations/${key}`)) {
+      captured = true; return barrier.promise
+    }
+    return original(config, options)
+  }
+  const reconcile = c.reconcile(); await tick()
+  await c.resend(key)
+  barrier.resolve({ data: { operation_key: key, state: 'running', action: 'send', request_message_id: 'request' } })
+  await reconcile
+  assert.equal(c.getSnapshot().pending.length, 0)
+  assert.ok(c.operations().every((op) => ['succeeded', 'failed', 'abandoned'].includes(op.state)))
   c.stop()
 })

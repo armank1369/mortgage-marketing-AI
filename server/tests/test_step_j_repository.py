@@ -95,6 +95,11 @@ class MemorySQL:
                 rows = [r for r in rows if r["role"] == "assistant"]
             if "role='user'" in q:
                 rows = [r for r in rows if r["role"] == "user"]
+            if "structured_data->>'type'=%s" in q:
+                rows = [r for r in rows if r["structured_data"].get("type") == params[2]
+                        and r["structured_data"].get("target") == params[3].obj]
+            if "structured_data->'operation'->>'state' in ('running','unknown')" in q:
+                rows = [r for r in rows if r["structured_data"].get("operation", {}).get("state") in {"running", "unknown"}]
             for kind in ("revision", "operation"):
                 if "kind='" + kind + "'" in q:
                     rows = [r for r in rows if r["kind"] == kind]
@@ -231,6 +236,14 @@ def test_completed_claim_replays_without_active_persona(store):
     store.personas.clear()
     replay = repo.claim_operation(W, S, M, data)
     assert not replay["created"] and replay["status"]["state"] == "succeeded"
+
+
+def test_unresolved_query_does_not_load_completed_context_envelopes(store):
+    finish(repo.claim_operation(W, S, M, send()))
+    active = repo.claim_operation(W, S, M, send())
+    unresolved = repo._unresolved_requests(store, S)
+    assert [str(row["id"]) for row in unresolved] == [active["request"]["id"]]
+    assert "structured_data->'operation'->>'state' in ('running','unknown')" in store.calls[-1][0]
 
 
 def test_response_insert_and_commit_failure_never_report_saved(store):

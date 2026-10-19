@@ -5,6 +5,11 @@ Contract: [STEP-J-v1](STEP_J_APPROVED_PLAN.md).
 Current phase: **J.5 implementation and J.7 automated finalization complete;
 remaining live acceptance gates open**.
 
+Final sweep: the owner reported working behavior after J.5 and requested a last
+code/documentation review, excluding UI redesign. The current reference is
+[STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md).
+Latest sweep results/fixes are recorded below; earlier counts remain historical.
+
 Combined-run authorization: after reporting successful multiple-browser persistence
 testing, the owner approved implementing J.5 and running J.7 in the same run, with
 testing sequentially against the finished implementation. Save Draft (J.6) stays
@@ -430,10 +435,76 @@ merges or deployment. Development PostgreSQL fixture writes/cleanup occurred wit
 the existing approved workflow. Local HEAD and both remote refs remained at the
 verified starting values; this run's changes remain uncommitted.
 
+## Post-acceptance code/documentation sweep
+
+Started from a clean tree on local/remote `codex/step-j-chat-persistence` at
+`2984c1ce0220a4bc6c2ae13667a4d18b9cdd6314`; integration remote remained
+`0f59617be5b1eb1c7487f523a48ed78a4c58767c`. The owner made that intervening
+commit; this sweep did not commit, push, merge or deploy.
+
+Review found and fixed:
+
+1. An earlier reply cleared a newer draft typed during generation. ChatPage now
+   clears only the submitted text. The real Chrome fixture holds a response while
+   typing a different draft and verifies that draft survives.
+2. A large offline backlog could merge disjoint history pages while retaining an
+   old cursor, leaving intervening messages unreachable. Refresh now restarts at
+   the latest page when fetched page IDs do not overlap prior fetched history.
+   Ordinary overlapping refreshes retain loaded earlier history.
+3. Late detail/status responses could regress a newer saved result to running.
+   Detail reads are ordered/fenced, and terminal operation states cannot regress
+   under delayed running/unknown replies. Added focused race regressions.
+4. Frontend metadata/busy errors used labels different from backend codes. They now
+   recognize precondition_failed and operation_in_progress.
+5. A stale browser could generate a second initial artifact from the same parent
+   and target, bypassing linked revision rendering. Repository source validation
+   now returns stale_source before dispatch once the same media type/target exists.
+   Types/items remain independent. Previously saved sibling attempts are exposed
+   under previous versions without changing stored historical data.
+6. Campaign carousel image input used only the caption. It now loads the stored
+   slides, matching the original image flow; video caption behavior is preserved.
+7. Valid shortening/image revision chains stopped after an arbitrary depth of 20.
+   Iterative same-session provenance traversal now detects cycles rather than
+   rejecting long valid chains. Tests exercise 25 shortened versions and 23 image
+   attempts, with no real provider call.
+8. Reading active work transferred all completed requests, including copied context
+   projections. Unresolved-operation SQL now filters running/unknown rows before
+   transfer; no new index/table/DDL. The in-memory adapter and real SQL both cover it.
+9. Parallel SSR-only Vite tests could compete for a WebSocket port even with HMR off.
+   Their installed-runtime-supported ws:false setting removes the unneeded listener.
+
+Documentation: added the full feature/operations reference covering user behavior,
+ownership/capabilities, every API/action/limit, metadata ETags, recovery/billing,
+payload/database mapping, revision/media behavior, storage/context budgets, source
+traversal, all approved decisions/deferred features, code map, testing and live gates.
+README now starts with Step J, includes a current Step J status section, and labels
+prototype PDFs/historical instructions. Plan, authorization matrix, testing guide
+and finalization now acknowledge owner J.5 testing and the final review. No UI
+appearance redesign was included.
+
+Latest observed verification:
+
+| Check | Result |
+| --- | --- |
+| Full backend isolated suite | **505 passed, 36 skipped**, 5.34s |
+| Full frontend suite | **97 passed**, 0 failures/skips; no WebSocket-port conflict on final run |
+| Synthetic Chrome browser/export | Passed, including newer draft preservation and all prior durable flows |
+| Three approved opt-in SQL suites | **16 passed**, 185.90s; reviewed fixture cleanup passed |
+| Focused current-code SQL media rerun | **1 passed, 3 deselected**, 24.70s; fixture cleanup passed |
+| Lint/build | Exit 0; the same three Fast Refresh and large-bundle warnings |
+| Whitespace/document links | Checked at completion; no new broken relative file references or whitespace issues |
+
+Only fresh synthetic fixture workspaces were written/cleaned using the same approved
+development target and secret-redacted subprocess environment. No existing customer
+or configuration records were modified. No paid calls, migrations, new Neon branch,
+dependency changes, Git publishing or deployment. No owner-run SQL or routine script
+repetition is needed.
+
 ## Remaining verification and approval gates
 
 - J.4 was accepted after owner multiple-browser/UI testing. J.5 and J.7 automated
-  work are complete; live/release acceptance below is still open. J.6 stays deferred.
+  work and the requested final sweep are complete; owner also reported positive
+  J.5 testing. Live/release acceptance below is still open. J.6 stays deferred.
 - Owner metadata supports current schema/grants and five targeted live SQL tests
   passed on the configured connection. Continue verifying the intended branch before
   future live writes; database name alone cannot identify a Neon branch.

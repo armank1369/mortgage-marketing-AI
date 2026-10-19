@@ -13,8 +13,8 @@ export const pendingStorageKey = (scope) => `lucie_chat_pending:v1:${encodeURICo
 const terminal = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
 const apiError = (err) => {
   const code = err?.response?.data?.error
-  return ({ stale_metadata: 'This conversation changed elsewhere. Refresh and try the edit again.',
-    session_busy: 'Another operation is active in this conversation.', stale_source: 'A newer version exists. Refresh before trying again.',
+  return ({ precondition_failed: 'This conversation changed elsewhere. Refresh and try the edit again.',
+    operation_in_progress: 'Another operation is active in this conversation.', stale_source: 'A newer version exists. Refresh before trying again.',
     permission_denied: 'Your workspace role does not permit this action.', not_found: 'This conversation or source is unavailable.',
     generation_configuration_required: 'Review the brand and persona configuration in Settings.',
     database_unavailable: 'Conversation storage is unavailable. No unsaved generation will be started.',
@@ -27,6 +27,9 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   const base = '/api/chat/sessions'
   let listeners = new Set(), alive = false, epoch = 0, selection = 0, listSequence = 0, posting = false
   let controllers = new Set(), polling = false
+  let detailSequence = 0, lastDetailApplied = 0
+  let loadedHistoryIds = new Set()
+  const terminalStates = new Map()
   const metadataVersions = new Map()
   let initialPending = [], initialError = ''
   try {
@@ -70,17 +73,29 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   }
   async function open(id, older = false, refresh = false) {
     const seq = refresh || older ? selection : ++selection
+    const detail = ++detailSequence
     const metadataAtStart = metadataVersions.get(id) || 0
-    if (!refresh && !older) emit({ active: { id }, messages: [], operations: [], before_cursor: null, loading: true, error: state.storageError })
+    if (!refresh && !older) {
+      loadedHistoryIds = new Set()
+      emit({ active: { id }, messages: [], operations: [], before_cursor: null, loading: true, error: state.storageError })
+    }
     try {
       const data = await request(`${base}/${id}?version=2&limit=50${older && state.before_cursor ? `&before=${encodeURIComponent(state.before_cursor)}` : ''}`)
-      if (seq !== selection || state.active?.id !== id) return
-      emit({ active: metadataAtStart === (metadataVersions.get(id) || 0) ? data : state.active, messages: older || refresh ? mergeMessages(state.messages, data.messages) : data.messages,
-        before_cursor: refresh && state.messages.length ? state.before_cursor : data.before_cursor, operations: data.operations || [], loading: false })
+      if (seq !== selection || state.active?.id !== id || detail < lastDetailApplied) return
+      lastDetailApplied = detail
+      const contiguousRefresh = refresh && data.messages.some((row) => loadedHistoryIds.has(row.id))
+      // A large offline backlog can leave a gap between the old cache and latest
+      // page. Restart pagination at the new page instead of making that gap unreachable.
+      const merge = older || contiguousRefresh
+      loadedHistoryIds = new Set([...(merge ? loadedHistoryIds : []), ...data.messages.map((row) => row.id)])
+      emit({ active: metadataAtStart === (metadataVersions.get(id) || 0) ? data : state.active,
+        messages: merge ? mergeMessages(state.messages, data.messages) : data.messages,
+        before_cursor: contiguousRefresh ? state.before_cursor : data.before_cursor, operations: data.operations || [], loading: false })
     } catch (err) { if (seq === selection) { emit({ loading: false }); report(err) } }
   }
   function newChat(personaId = '') {
     ++selection
+    loadedHistoryIds = new Set()
     emit({ active: { id: uuid(), title: 'New conversation', default_persona_id: personaId, unsaved: true },
       messages: [], operations: [], before_cursor: null, loading: false, error: state.storageError })
   }
@@ -103,7 +118,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   }
   async function settle(record, result) {
     if (!alive) return
-    applyStatus(record.session_id, result)
+    if (applyStatus(record.session_id, result) === false) return
     const pending = state.pending.filter((item) => item.body.operation_key !== record.body.operation_key)
     if (!terminal(result.state)) pending.push({ ...record, state: result.state })
     try { persist(pending) } catch { /* Durable result is still available; retaining disk record is safe. */ }
@@ -112,13 +127,19 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     return result
   }
   function applyStatus(sessionId, result) {
-    if (state.active?.id !== sessionId) return
+    const cacheKey = `${sessionId}:${result.operation_key}`
+    const known = terminalStates.get(cacheKey)
+    if (known && known !== result.state) return false
+    if (terminal(result.state)) terminalStates.set(cacheKey, result.state)
+    if (state.active?.id !== sessionId) return true
+    lastDetailApplied = ++detailSequence // Fence history GETs started before this authoritative status.
     const messages = state.messages.map((row) => row.structured_data?.input?.operation_key === result.operation_key ? {
       ...row, structured_data: { ...row.structured_data, operation: { ...row.structured_data.operation,
         state: result.state, safe_error_code: result.safe_error_code, response_message_id: result.response?.id || null } },
     } : row)
     emit({ messages: result.response ? mergeMessages(messages, [result.response]) : messages,
       operations: [...state.operations.filter((op) => op.operation_key !== result.operation_key), ...(!terminal(result.state) ? [result] : [])] })
+    return true
   }
   async function dispatch(record) {
     if (posting) return

@@ -35,7 +35,7 @@ STEP_H_HOTFIX_FINALIZATION.md, STEP_F_DATA_LAYER_AND_TESTING.md and README.md.
 The supplied Step J schema snapshot establishes metadata only, not runtime grants,
 data, operational correctness or the configured database target.
 
-## 2. HTTP contracts (to implement in later phases)
+## 2. Implemented HTTP contracts
 
 All routes retain verified JWT and selected-workspace resolution. Existing stateless
 `/api/chat`, `/api/video-brief`, `/api/social-image` remain compatibility wrappers
@@ -95,12 +95,12 @@ POST results: 200 succeeded; 202 running; 409 abandoned; 429 known rate limit;
 state, safe_error_code and Location for status reconciliation. GET status remains
 read-only/200. Empty/truncated or empty-post output fails rather than becoming a
 successful saved draft. Existing compliant text fallback remains for malformed
-campaign JSON. Persistence may retry the same in-memory completion twice; it never
-repeats the provider to repair a failed save.
+campaign JSON. Persistence permits at most two completion attempts (one save-only
+retry on database-unavailable errors); it never repeats the provider to repair a failed save.
 
 ## 3. Authorization and operation lifecycle
 
-Add chat:write for owner/admin/developer/member; viewer retains chat:read only.
+chat:write is granted to owner/admin/developer/member; viewer retains chat:read only.
 Creation needs chat:create; metadata/archive/restore/shorten/abandon need chat:write;
 provider actions need chat:write AND ai:generate; reads/status need chat:read.
 All require creator ownership in the selected workspace, including admins/owners.

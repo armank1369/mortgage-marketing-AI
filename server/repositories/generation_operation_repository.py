@@ -29,41 +29,50 @@ def _clarification_task(original, source, answers):
     return text("Original request: " + original + "\n\nAnswers:\n" + "\n".join(lines), "combined clarification input")
 
 
-def _chat_task(cur, session_id, request, depth=0):
-    if depth > 20 or request["role"] != "user":
-        raise ValidationError("Original request provenance is unsupported.")
-    envelope = request.get("structured_data") or {}
-    effective = envelope.get("generation_input") or {}
-    if effective.get("kind") == "chat":
-        return text(effective.get("message"), "stored original request")
-    fields = envelope.get("input") or {}
-    if fields.get("action") == "send" or request["kind"] != "operation":
-        return text(fields.get("message", request["content"]), "stored original request")
-    if request.get("source_message_id"):
-        source = chats._message(cur, session_id, str(request["source_message_id"]))
-        if not source.get("request_message_id"):
+def _chat_task(cur, session_id, request):
+    seen, clarifications = set(), []
+    while True:
+        request_id = str(request["id"])
+        if request["role"] != "user" or request_id in seen:
+            raise ValidationError("Original request provenance is unsupported.")
+        seen.add(request_id)
+        envelope = request.get("structured_data") or {}
+        effective = envelope.get("generation_input") or {}
+        fields = envelope.get("input") or {}
+        if effective.get("kind") == "chat":
+            original = text(effective.get("message"), "stored original request")
+            break
+        if fields.get("action") == "send" or request["kind"] != "operation":
+            original = text(fields.get("message", request["content"]), "stored original request")
+            break
+        if not request.get("source_message_id"):
             raise ValidationError("Original request provenance is missing.")
-        original = _chat_task(cur, session_id, chats._message(cur, session_id, str(source["request_message_id"])), depth + 1)
+        source = chats._message(cur, session_id, str(request["source_message_id"]))
+        if source["role"] != "assistant" or not source.get("request_message_id"):
+            raise ValidationError("Original request provenance is missing.")
         if fields.get("action") == "clarify":
-            return _clarification_task(original, source, fields["answers"])
-        return original
-    raise ValidationError("Original request provenance is missing.")
+            clarifications.append((source, fields["answers"]))
+        request = chats._message(cur, session_id, str(source["request_message_id"]))
+    for source, answers in reversed(clarifications):
+        original = _clarification_task(original, source, answers)
+    return original
 
 
 def _media_input(cur, session_id, fields, source):
     previous = None
     if source["structured_data"]["type"] == "social_image":
         previous = deepcopy(source["structured_data"]["payload"])
-    root = source
-    for _ in range(21):
+    root, seen = source, set()
+    while True:
+        if root["role"] != "assistant" or str(root["id"]) in seen:
+            raise ValidationError("Media provenance is unsupported.")
+        seen.add(str(root["id"]))
         envelope = root["structured_data"]
         if envelope["type"] in {"posts", "campaign"}:
             break
         if not root.get("source_message_id"):
             raise ValidationError("Media has no stored publication source.")
         root = chats._message(cur, session_id, str(root["source_message_id"]))
-    else:
-        raise ValidationError("Media provenance chain is too long.")
     target = fields["target"]
     envelope = root["structured_data"]
     collection = "posts" if envelope["type"] == "posts" else "content_calendar"
@@ -71,7 +80,9 @@ def _media_input(cur, session_id, fields, source):
     if target["collection"] != collection or target["index"] >= len(items):
         raise ValidationError("Media target does not match its stored source.")
     item = items[target["index"]]
-    script = deepcopy(item.get("script") or {"hook": item.get("category", ""), "body": item.get("caption", ""), "cta": ""})
+    slides = item.get("slides")
+    body = slides if item.get("format") == "carousel" and isinstance(slides, list) and slides else item.get("caption", "")
+    script = deepcopy(item.get("script") or {"hook": item.get("category", ""), "body": body, "cta": ""})
     if fields["action"] == "video":
         body = script.get("body", "")
         parts = [script.get("hook", ""), "\n".join(body) if isinstance(body, list) else body, script.get("cta", "")]

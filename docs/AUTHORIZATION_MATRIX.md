@@ -1,7 +1,7 @@
 # Lucie Authorization Matrix
 
-Updated 2026-10-18 for Steps G–I. Step I basic development acceptance and shared configuration persistence are user-reported; the full multi-account/role and revocation lifecycle gates remain separate.
-See [current Step I report](STEP_I_IMPLEMENTATION_AND_TESTING.md) and [Step G gates](STEP_G_IMPLEMENTATION_AND_TESTING.md).
+Updated 2026-10-18 for Steps G–J. Step I shared configuration and Step J normal UI/multiple-browser behavior are user-reported; the full multi-account/role and revocation lifecycle gates remain separate.
+See the [current Step J guide](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md), [Step I report](STEP_I_IMPLEMENTATION_AND_TESTING.md) and [Step G gates](STEP_G_IMPLEMENTATION_AND_TESTING.md).
 
 ## Request boundaries
 
@@ -102,10 +102,12 @@ completed results enter bounded user/assistant projections; operational commands
 foreign conversations, failed/pending results and obsolete alternatives are excluded.
 Current brand/persona/compliance remain authoritative. Media uses its stored source,
 and compatibility stateless endpoints do not gain implicit conversation access.
+Stale parent media submissions are rejected before dispatch once a saved artifact
+exists for that source/type/target; subsequent attempts must use its current revision.
 Browser namespacing is not encryption or protection from someone controlling the device.
 
 ## Remaining acceptance
 
 Local synthetic tests cover route guards, signed JWT rejection, capabilities, selection,
 private repository predicates, attribution, generation response compatibility, and browser
-storage isolation. J.4 adds real Chrome UI checks against a synthetic transport, including account changes and viewer controls; these do not establish live Auth isolation. The developer confirmed basic signed-in use and shared brand/persona persistence across browsers on the same account after the hotfix. The live role matrix, multi-workspace isolation, revocation lifecycle, two-browser chat acceptance, deployment review, invitations and historical migration remain separately tracked. See the Step I acceptance matrix and Step J implementation record for precise evidence.
+storage isolation. J.4 adds real Chrome UI checks against a synthetic transport, including account changes and viewer controls; these do not establish live Auth isolation. The owner reported positive normal UI/multiple-browser chat behavior after J.4 and positive follow-up testing after J.5. The full live role matrix, multi-workspace isolation, revocation lifecycle, deployment review, invitations and historical migration remain separately tracked. See Step J finalization for precise evidence and remaining gates.

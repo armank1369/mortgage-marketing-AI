@@ -234,11 +234,68 @@ def test_media_loads_stored_source_and_preserves_artifact(world, action):
     assert saved["state"] == "succeeded" and saved["response"]["structured_data"]["type"] == action
     assert db.messages[parent["response"]["id"]] == original
     assert "Synthetic withheld publication packet" in create.call_args.kwargs["messages"][0]["content"]
+    stale = Mock(side_effect=AssertionError("A stale browser must not dispatch a second initial artifact"))
+    with pytest.raises(ChatConflictError) as conflict:
+        run(world, {"operation_key": str(uuid4()), "action": action, "persona_id": P,
+                    "source_message_id": parent["response"]["id"], "target": {"collection": "content_calendar", "index": 0}}, stale)
+    assert conflict.value.error_code == "stale_source"
+    stale.assert_not_called()
     if action == "social_image":
         again = Mock(return_value=result(raw))
         run(world, {"operation_key": str(uuid4()), "action": action, "persona_id": P,
                     "source_message_id": saved["response"]["id"], "target": {"collection": "content_calendar", "index": 0}}, again)
         assert "PREVIOUS ATTEMPT" in again.call_args.kwargs["messages"][0]["content"]
+
+
+def test_distinct_media_types_and_item_targets_do_not_conflict(world):
+    campaign = deepcopy(fixture("campaign")["campaign"])
+    campaign["content_calendar"].append(deepcopy(campaign["content_calendar"][0]))
+    parent, _ = run(world, send(message="Create a campaign"), Mock(side_effect=[result({"proceed": True}), result(campaign)]))
+    graphic = fixture("social_image")
+    for kind, index in [("video", 0), ("social_image", 0), ("social_image", 1)]:
+        raw = fixture("video")["video"] if kind == "video" else {"template": graphic["template"], "slots": graphic["slots"]}
+        saved, create = run(world, {"operation_key": str(uuid4()), "action": kind, "persona_id": P,
+                                   "source_message_id": parent["response"]["id"], "target": {"collection": "content_calendar", "index": index}}, Mock(return_value=result(raw)))
+        assert saved["state"] == "succeeded" and create.call_count == 1
+
+
+def test_campaign_carousel_image_receives_its_stored_slides(world):
+    campaign = deepcopy(fixture("campaign")["campaign"])
+    campaign["content_calendar"][0].update(format="carousel", caption="Caption only.", slides=["Unique first slide.", "Unique second slide."])
+    parent, _ = run(world, send(message="Create a campaign"), Mock(side_effect=[result({"proceed": True}), result(campaign)]))
+    raw = fixture("social_image")
+    saved, provider = run(world, {"operation_key": str(uuid4()), "action": "social_image", "persona_id": P,
+                                 "source_message_id": parent["response"]["id"], "target": {"collection": "content_calendar", "index": 0}},
+                          Mock(return_value=result({"template": raw["template"], "slots": raw["slots"]})))
+    assert saved["state"] == "succeeded"
+    assert "Unique first slide." in provider.call_args.kwargs["messages"][0]["content"]
+    assert "Unique second slide." in provider.call_args.kwargs["messages"][0]["content"]
+
+
+def test_many_shortened_versions_keep_original_task_available(world):
+    saved, _ = run(world, send(message="Original task for a long revision chain."))
+    for _ in range(25):
+        saved = chats.shorten_operation(W, S, M, dict(operation_key=str(uuid4()), action="shorten", source_message_id=saved["response"]["id"]))
+    _, provider = run(world, dict(operation_key=str(uuid4()), action="regenerate", persona_id=P, source_message_id=saved["response"]["id"]))
+    assert provider.call_args.kwargs["messages"][-1]["content"] == "Original task for a long revision chain."
+
+
+def test_many_image_versions_remain_regeneratable_and_cycles_are_rejected(world):
+    parent, _ = run(world, send(message="Create a campaign"), Mock(side_effect=[result({"proceed": True}), result(fixture("campaign")["campaign"])]))
+    image = fixture("social_image")
+    saved = parent
+    for _ in range(23):
+        saved, _ = run(world, dict(operation_key=str(uuid4()), action="social_image", persona_id=P, source_message_id=saved["response"]["id"],
+                                  target={"collection": "content_calendar", "index": 0}), Mock(return_value=result({"template": image["template"], "slots": image["slots"]})))
+        assert saved["state"] == "succeeded"
+    db = world[0]
+    db.messages[saved["response"]["id"]]["source_message_id"] = saved["response"]["id"]
+    denied = Mock(side_effect=AssertionError("Corrupt provenance must not dispatch"))
+    with pytest.raises(Exception) as failure:
+        run(world, dict(operation_key=str(uuid4()), action="social_image", persona_id=P, source_message_id=saved["response"]["id"],
+                        target={"collection": "content_calendar", "index": 0}), denied)
+    assert failure.value.error_code in {"validation_error", "stale_source"}
+    denied.assert_not_called()
 
 
 def test_timeout_is_unknown_never_auto_retried_and_can_be_explicitly_replaced(world):

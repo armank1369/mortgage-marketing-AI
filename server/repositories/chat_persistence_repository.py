@@ -118,9 +118,10 @@ def list_sessions(workspace_id, member_id, *, archived=False, limit=30, cursor=N
             "next_cursor": encode_cursor(page[-1]["updated_at"], page[-1]["id"]) if len(rows) > limit else None}
 
 
-def _requests(cur, session_id):
+def _unresolved_requests(cur, session_id):
     cur.execute(f"SELECT {MESSAGE_COLUMNS} FROM public.chat_message WHERE session_id=%s "
                 "AND role='user' AND kind='operation' AND structured_data->>'schema_version'='1' "
+                "AND structured_data->'operation'->>'state' IN ('running','unknown') "
                 "ORDER BY created_at,id", (session_id,))
     return [dict(row) for row in cur.fetchall()]
 
@@ -166,8 +167,7 @@ def get_session(workspace_id, session_id, member_id, *, limit=50, before=None):
                     "ORDER BY created_at DESC,id DESC LIMIT %s", (*params, limit + 1))
         rows = cur.fetchall()
         page = rows[:limit]
-        operations = [_status(cur, row) for row in _requests(cur, session_id)
-                      if row["structured_data"].get("operation", {}).get("state") in {"running", "unknown"}]
+        operations = [_status(cur, row) for row in _unresolved_requests(cur, session_id)]
         result = session_dto(session)
         result.update(messages=[public_message(row) for row in reversed(page)], operations=operations,
                       before_cursor=encode_cursor(page[-1]["created_at"], page[-1]["id"]) if len(rows) > limit else None)
@@ -213,7 +213,7 @@ def patch_session(workspace_id, session_id, member_id, fields, if_match):
 
 
 def _assert_idle(cur, session_id, excluding=None):
-    for row in _requests(cur, session_id):
+    for row in _unresolved_requests(cur, session_id):
         if str(row["id"]) != excluding and row["structured_data"]["operation"]["state"] in {"running", "unknown"}:
             raise ChatConflictError("operation_in_progress", "Resolve the active operation before continuing.")
 
@@ -275,6 +275,15 @@ def _source(cur, session_id, fields, *, excluding_request_id=None):
             items = envelope["payload"][kind].get(collection)
             if not target or target["collection"] != collection or not isinstance(items, list) or target["index"] >= len(items):
                 raise ValidationError("Choose an existing source item for media generation.")
+            # A second browser may still display the parent without its new media.
+            # Require that browser to reload and use the saved artifact as source,
+            # so a new attempt becomes a linked revision, not a hidden sibling.
+            cur.execute("SELECT id FROM public.chat_message WHERE session_id=%s AND source_message_id=%s "
+                        "AND role='assistant' AND structured_data->>'type'=%s "
+                        "AND structured_data->'target'=%s LIMIT 1",
+                        (session_id, source["id"], action, Jsonb(target)))
+            if cur.fetchone():
+                raise ChatConflictError("stale_source", "Reload the saved media and use its current revision.")
         elif target != envelope.get("target"):
             raise ValidationError("Media regeneration must retain its original target.")
     if action == "clarify":

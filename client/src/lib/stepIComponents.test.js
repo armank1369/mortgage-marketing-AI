@@ -7,7 +7,7 @@ import { createServer } from 'vite'
 // Render actual JSX through installed Vite, with Auth/transport replaced before
 // module evaluation. No listener, browser session, Neon connection or provider.
 const server = await createServer({
-  server: { middlewareMode: true, hmr: false },
+  server: { middlewareMode: true, hmr: false, ws: false },
   plugins: [{ name: 'step-i-synthetic-api', enforce: 'pre', load(id) {
     if (id.replaceAll('\\', '/').endsWith('/src/lib/api.js')) return `
       export const workspaceApi = { send() { throw new Error('Unexpected network'); } };

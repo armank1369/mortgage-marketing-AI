@@ -4,6 +4,7 @@ J.2/J.3 implement backend APIs; J.4 connects the normal Chat page to durable ses
 and operations. J.5 now adds bounded same-conversation context. No migration or
 additional owner-run Neon query is required. The agent completed J.7 automated
 checks and scoped SQL fixtures; remaining live gates are in STEP_J_FINALIZATION.md.
+The complete feature/decision reference is STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md.
 J.3 provider-backed POSTs now perform actual paid generation when configured. The
 automated tests below use fake provider responses and incur no AI charges. Do not
 run manual send/clarify/regenerate/video/social_image operations without paid-call
@@ -45,6 +46,9 @@ Neon Auth behavior. No memberships, grants, schema, test rows or ai_run rows nee
 to be pre-created now.
 
 ## J.5 manual UI review
+
+The owner reported successful testing after J.5. The checklist below remains a
+reference for future regression or focused review; routine repeat testing is not required.
 
 Routine PowerShell scripts are the agent's responsibility; no need to repeat them.
 For the owner's optional normal-app review (normal generation uses the configured
@@ -146,6 +150,11 @@ states, atomic response/run rollback with save-only retry, role downgrade before
 completion, and an in-flight duplicate that returns while the first fake provider
 call is waiting. They configure brand/licensing only inside newly created synthetic
 test workspaces. No test constructs an Anthropic client or makes a paid call.
+
+The four J.5/final-review SQL cases cover captured history/revision boundaries,
+same-owner conversation isolation and foreign-admin denial, real process interruption
+with explicit retry only, abandoned campaign-stage fencing, and stale parent-media
+rejection followed by a linked artifact revision. The selected suites total 16 cases.
 
 Fixtures create random synthetic workspace/member/persona/session/message records.
 They use the existing conftest fixture's cleanup:
@@ -251,7 +260,7 @@ is no public assistant-seeding endpoint for preparing a manual shortening exampl
 | Phase | What will need verification | What to prepare now |
 | --- | --- | --- |
 | J.3 | Implemented and tested with synthetic provider/real SQL. Paid-provider behavior still needs separately approved smoke. | No ai_run pre-insertion or schema change. Reuse existing synthetic test target if code changes. |
-| J.4 | Implemented; synthetic Chrome UI checks pass. Real same-creator/two-browser and foreign-creator/admin denial remain live acceptance gates. | Existing test accounts and explicit selected persona. No extra SQL or migration. |
+| J.4 | Implemented; synthetic Chrome UI checks pass and owner reported positive multiple-browser use. Full live foreign-creator/admin/workspace/role denial remains a separate gate. | Existing test accounts and explicit selected persona. No extra SQL or migration. |
 | J.5 | Implemented; scoped real SQL and synthetic provider request tests pass, including revisions, original-task boundaries, Unicode limits and foreign-session exclusion | Optional owner UI follow-up review; no embeddings, vector extension, summary table or migration. |
 | J.7 | Automated regressions, real independent-connection/process interruption tests and synthetic PNG export passed. Remaining live identity/provider/runtime gates are recorded separately. | Existing test identities, actual Render worker/start-command and proxy timeout settings, and separate paid-call approval/budget before agent-run paid smoke. |
 

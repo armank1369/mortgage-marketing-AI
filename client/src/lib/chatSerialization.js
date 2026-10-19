@@ -46,6 +46,13 @@ export function projectConversation(rows) {
     if (parent && row.target) {
       const locator = `${row.target.collection}:${row.target.index}`
       parent.artifacts[locator] ||= {}
+      const previous = parent.artifacts[locator][row.type]
+      if (previous && previous.id !== row.id) {
+        // Older releases allowed two initial attempts from the same parent/item.
+        // Keep those immutable siblings visible under the latest artifact's versions.
+        row.previous = [...new Map([...row.previous, previous, ...previous.previous]
+          .filter((prior) => prior.id !== row.id).map((prior) => [prior.id, prior])).values()]
+      }
       parent.artifacts[locator][row.type] = row
       hidden.add(row.id)
     }

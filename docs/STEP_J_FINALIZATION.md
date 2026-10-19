@@ -1,6 +1,7 @@
 # Step J finalization — persistence and bounded conversation context
 
 Date: 2026-10-18 (America/Los_Angeles).
+Post-acceptance code/documentation sweep: 2026-10-18 (America/Los_Angeles).
 Branch: `codex/step-j-chat-persistence`.
 J.5/J.7 starting HEAD: `d50a52303152b532d86f6df3f326c82dc1426dd4`.
 
@@ -81,10 +82,10 @@ dependency, model-selection, output-envelope or compliance-policy rewrite occurr
 
 | Check | Result | What it establishes |
 | --- | --- | --- |
-| Full isolated backend suite | **500 passed, 35 skipped**, 5.58s | Includes 19 new context cases; live DB is blocked in ordinary unit tests |
-| Full frontend suite | **93 passed**, 0 skipped | Persistence, storage, scope races, serialization and actual JSX rendering |
+| Full isolated backend suite | **505 passed, 36 skipped**, 5.34s | Includes context and final-sweep regressions; live DB is blocked in ordinary unit tests |
+| Full frontend suite | **97 passed**, 0 skipped | Persistence, storage, scope races, serialization and actual JSX rendering |
 | Synthetic Chrome browser runner | **Passed** | Actual React send/reload, revisions/media, clarification, recovery, pagination, account/viewer controls and narrow layout; synthetic transport |
-| Three Step J opt-in PostgreSQL suites | **15 passed**, 174.50s | Existing five J.2/seven J.3 cases plus three J.5/J.7 cases; reviewed isolated fixture cleanup passed |
+| Three Step J opt-in PostgreSQL suites | **16 passed**, 185.90s | Five J.2, seven J.3 and four context/recovery/media-review cases; fixture cleanup passed. Final focused media rerun: 1 passed, 3 deselected, 24.70s. |
 | Native PNG export | **1080×1080 pull_quote exported and visually inspected** | Complete synthetic license/equal-housing footer and supplemental line visible at native resolution; no paid call |
 | Lint/build | Exit 0 | Three existing Fast Refresh warnings; existing large-bundle/plugin-timing notices |
 | Whitespace checks | Passed | No whitespace defects; normal repository CRLF notices only |
@@ -105,18 +106,19 @@ requires an acknowledged new operation to obtain a replacement output. Only that
 fixture's progress timestamp is aged to exercise the five-minute boundary quickly.
 Another case abandons a campaign during preflight and proves stage two is fenced.
 
-The owner reported successful normal UI/multiple-browser persistence after J.4.
+The owner reported successful normal UI/multiple-browser persistence after J.4
+and working behavior after additional J.5 testing. The owner then requested this
+final code/documentation sweep, excluding UI redesign.
 This is useful positive live evidence; it does not establish every response type,
-foreign-account denial or actual model follow-up quality. Unit request fixtures
+foreign-account denial or a complete output/cache/usage matrix. Unit request fixtures
 prove bounded history reaches the provider boundary; actual provider behavior has
 not been smoke-tested by the agent in this run.
 
 ## Remaining owner/release gates
 
-1. **Normal UI context review:** optionally ask for a checklist, then “Explain your
-   second point” in the same conversation, including after reopening in another
-   browser. A separate conversation must not receive that history. Normal generation
-   uses the configured paid provider; routine PowerShell checks need no repetition.
+1. **Normal UI context review:** the owner reported successful testing after J.5.
+   No routine repetition is requested. The guide retains targeted follow-up checks
+   for future regression; the report is qualitative, not a complete role/output matrix.
 2. **Live identity matrix:** verify denial from a different existing test account,
    including admin, and relevant workspace/viewer/revocation cases through real Auth.
    Repository tests and synthetic browser identities do not establish all live Auth
@@ -146,3 +148,40 @@ outside this Step J implementation.
 
 Evidence and commands: [implementation record](STEP_J_IMPLEMENTATION_AND_TESTING.md).
 Owner UI checks and reproducible free scripts: [testing guide](STEP_J_TESTING_GUIDE.md).
+Complete feature/contracts/decision reference:
+[feature and operations guide](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md).
+
+## Post-acceptance sweep fixes
+
+Review baseline was clean at local/remote feature HEAD
+`2984c1ce0220a4bc6c2ae13667a4d18b9cdd6314`; integration remained at the approved
+`0f59617be5b1eb1c7487f523a48ed78a4c58767c`. This review did not publish changes.
+
+- Preserve a newer unsent draft when an earlier request completes, verified through
+  a delayed synthetic browser reply and actual textarea interaction.
+- Restart latest-page pagination when a large offline backlog has no overlap with
+  cached history, preserving access to intervening messages. Fence older detail
+  reads after newer status/results; ignore delayed nonterminal status after a known
+  terminal result. Use actual precondition_failed/operation_in_progress error codes.
+- Reject stale parent-media submissions before provider dispatch once that source,
+  type and target already has an artifact. A new attempt uses the current artifact
+  and becomes a linked revision. Existing independent sibling attempts are retained
+  in previous-version rendering, with no historical DB rewrite.
+- Use saved campaign carousel slides as image source instead of silently falling
+  back to caption-only input. Video caption behavior and compliance remain intact.
+- Replace arbitrary depth-20 provenance cutoffs with iterative same-session traversal
+  and cycle detection. Long valid shortening/image chains remain usable.
+- Filter unresolved operations in SQL instead of transferring every completed
+  request/context snapshot on reads/claims. No schema/index change was needed.
+- Disable unneeded WebSockets in SSR-only tests to avoid competing for a dev port.
+- Point README/current docs to the new complete feature/operations guide; retain
+  historical phase evidence and label old PDFs/prototype instructions accordingly.
+
+Current sweep evidence supersedes the earlier counts retained in the chronological implementation record:
+**505 backend passes / 36 integration skips**, **97 frontend passes**, **16 scoped
+PostgreSQL passes** (185.90s), plus a final focused current-code SQL media check
+(1 passed, 3 deselected; 24.70s). Fixture cleanup passed. The extra skipped case in
+the default suite is the new opt-in media regression; it passed in the SQL suite.
+Lint/build and the synthetic browser/export flow passed; three existing Fast Refresh
+warnings and the existing bundle-size warning remain. No paid calls, DDL, migrations,
+customer-data changes, Git publishing, deployment or UI redesign occurred.

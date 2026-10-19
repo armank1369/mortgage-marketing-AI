@@ -77,6 +77,9 @@ window.__stepJ.api = { getWorkspace: () => 'workspace-a', async send(config, { e
     }
     const result = { operation_key: data.operation_key, action: data.action, state, request_message_id: request.id, response, safe_error_code: state === 'unknown' ? 'provider_outcome_unknown' : null }
     db.results[data.operation_key] = result; session.updated_at = nextTime(); save()
+    if (window.__stepJ.holdReply) await new Promise((resolve) => {
+      window.__stepJ.releaseReply = () => { window.__stepJ.holdReply = false; resolve() }
+    })
     if (window.__stepJ.mode === 'lost') throw Error('Synthetic reply lost after commit')
     return { data: result }
   }
