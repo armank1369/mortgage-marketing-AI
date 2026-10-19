@@ -1,0 +1,130 @@
+{
+  "catalog_version": 1,
+  "purpose": "Synthetic post-compliance response examples for later Step J tests; no live records, seed data or publication approval. Payload excludes top-level compliance_flags; flags remain in their dedicated column.",
+  "persona_snapshot": {
+    "id": "44444444-4444-4444-8444-444444444444",
+    "name": "Synthetic education audience",
+    "slug": "synthetic-education"
+  },
+  "cases": [
+    {
+      "name": "text_with_supplemental_disclosure",
+      "schema_version": 1,
+      "type": "text",
+      "payload": {
+        "response": "Prepare questions about the application process.\n\nSynthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity\nSynthetic supplemental disclosure."
+      },
+      "compliance_flags": ["embedded_compliance_note_removed"],
+      "assertions": ["Text and complete multiline disclosure survive exactly", "Review flag stays outside publication copy"]
+    },
+    {
+      "name": "posts_carousel",
+      "schema_version": 1,
+      "type": "posts",
+      "payload": {
+        "posts": {
+          "posts": [
+            {
+              "title": "Application questions",
+              "platform": "Instagram",
+              "format": "carousel",
+              "script": {
+                "hook": "Prepare for a mortgage conversation.",
+                "body": ["Ask about required documents.", "Discuss the process.\n\nSynthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity"],
+                "cta": "Bring your questions.\n\nSynthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity"
+              },
+              "hashtags": ["#MortgageEducation"]
+            }
+          ]
+        }
+      },
+      "compliance_flags": [],
+      "assertions": ["Preserve the existing posts.posts nesting", "Keep array body, hashtags and CTA distinct"]
+    },
+    {
+      "name": "clarification_and_answers",
+      "schema_version": 1,
+      "type": "clarification",
+      "payload": {
+        "clarification": {
+          "questions": [
+            {"question": "Which platform?", "type": "single", "options": ["Instagram", "LinkedIn"]}
+          ]
+        }
+      },
+      "compliance_flags": [],
+      "synthetic_user_answer": {"question_index": 0, "selected": ["Instagram"], "custom": "Use a calm educational tone."},
+      "assertions": ["Store answers on a linked user record, not on the immutable assistant payload", "Restore submitted selections from the linked record"]
+    },
+    {
+      "name": "campaign_with_withheld_packet",
+      "schema_version": 1,
+      "type": "campaign",
+      "payload": {
+        "campaign": {
+          "content_strategy": {
+            "title": "Synthetic education campaign",
+            "goal": "Explain the process",
+            "pillars": [{"name": "Education", "percentage": 100, "description": "General process information", "examples": ["Documents"]}]
+          },
+          "platform_breakdown": [
+            {"platform": "Instagram", "frequency": "Once weekly", "total_posts": 1, "times": "09:00", "audience": "People learning about mortgages", "tone": "Educational"}
+          ],
+          "content_calendar": [
+            {
+              "day": "Mon", "date": "2026-10-19", "platform": "Instagram", "format": "carousel", "category": "Education", "time": "09:00",
+              "caption": "Synthetic withheld publication packet.\n\nSynthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity",
+              "slides": ["Synthetic withheld publication packet.\n\nSynthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity"],
+              "hashtags": []
+            }
+          ]
+        }
+      },
+      "compliance_flags": ["restricted_pricing_offer_removed"],
+      "assertions": ["Keep the withheld caption/slides and cleared hashtags exactly", "Keep strategy and scheduling metadata", "This illustrative text does not replace the existing compliance fallback constant"]
+    },
+    {
+      "name": "linked_campaign_video",
+      "schema_version": 1,
+      "type": "video",
+      "target": {"collection": "content_calendar", "index": 0},
+      "payload": {
+        "video": {
+          "script": {
+            "intro": {"time": "0-3s", "text": "Have questions about documents?"},
+            "body": {"time": "3-15s", "text": "Ask your lender which records are needed."},
+            "cta": {"time": "15-20s", "text": "Prepare your questions. [END CARD: Synthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity]"}
+          },
+          "creative_direction": {"setting": "Desk", "camera": "Fixed", "lighting": "Soft", "energy": "Calm", "background": "Plain", "clothing": "Neutral"},
+          "quick_details": {"duration": "20 seconds", "tone": "Educational", "call_to_action": "Prepare questions"}
+        }
+      },
+      "compliance_flags": ["embedded_compliance_note_removed"],
+      "assertions": ["Preserve timing, direction and end-card disclosure", "Load via same-session source link; parent campaign stays immutable", "Combine parent/artifact warning display without publishing warnings"]
+    },
+    {
+      "name": "linked_post_image_specification",
+      "schema_version": 1,
+      "type": "social_image",
+      "render_version": 1,
+      "target": {"collection": "posts", "index": 0},
+      "payload": {
+        "template": "pull_quote",
+        "slots": {"quote": "Start with questions about the process.", "attribution_name": "Synthetic Licensee", "attribution_title": "Synthetic Brokerage"},
+        "compliance_footer": "Synthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity\nSynthetic supplemental disclosure.",
+        "business_name": "Synthetic Brokerage"
+      },
+      "compliance_flags": [],
+      "assertions": ["Rehydrate the specification without a paid call", "Preserve footer/business name and render version", "No invented uploaded PNG URL"]
+    }
+  ],
+  "future_test_matrix": [
+    "Same key/body replays; changed body conflicts",
+    "Concurrent operations serialize under session lock",
+    "Unknown outcome never auto-dispatches; explicit retry fences late completion",
+    "Request/source links cannot cross creator/session/workspace",
+    "Legacy row without envelope renders text; future version renders unsupported state",
+    "Long Unicode history meets byte budgets without truncating stored content",
+    "Local legacy storage remains byte-for-byte unchanged"
+  ]
+}
