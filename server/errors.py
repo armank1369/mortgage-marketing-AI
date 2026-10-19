@@ -95,3 +95,35 @@ class LegacyEndpointRetiredError(AppError):
 
     def __init__(self):
         super().__init__("This legacy endpoint is no longer available in Lucie V2.")
+
+
+class ChatConflictError(AppError):
+    status_code = 409
+
+    def __init__(self, code="operation_conflict", message="Refresh this conversation before continuing."):
+        self.error_code = code
+        super().__init__(message)
+
+
+class PreconditionRequiredError(AppError):
+    status_code = 428
+    error_code = "precondition_required"
+
+    def __init__(self):
+        super().__init__("Supply the current conversation ETag in If-Match.")
+
+
+class PreconditionFailedError(AppError):
+    status_code = 412
+    error_code = "precondition_failed"
+
+    def __init__(self):
+        super().__init__("Conversation settings changed. Refresh before saving.")
+
+
+class GenerationPersistenceNotReadyError(AppError):
+    status_code = 501
+    error_code = "durable_generation_not_ready"
+
+    def __init__(self):
+        super().__init__("Durable AI generation is not available until Step J.3.")

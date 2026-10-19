@@ -33,6 +33,16 @@ from services.prompt_builder import build_prompt, render_policy, build_footer
 app = Flask(__name__)
 CORS(app)
 
+from services.chat_http import blueprint as durable_chat_blueprint, list_v2, detail_v2, body as chat_body
+app.register_blueprint(durable_chat_blueprint)
+
+
+@app.after_request
+def private_chat_cache_control(response):
+    if request.path == '/api/chat/sessions' or request.path.startswith('/api/chat/sessions/'):
+        response.headers['Cache-Control'] = 'no-store'
+    return response
+
 # Return stable machine-readable codes and safe human-readable messages.
 @app.errorhandler(AppError)
 def handle_app_error(err):
@@ -121,6 +131,10 @@ def api_workspaces():
 @require_workspace
 @require_capability("chat:read")
 def api_list_chat_sessions():
+    if request.args.get('version') == '2':
+        return list_v2()
+    if 'version' in request.args:
+        raise ValidationError('Unsupported chat API version.')
     sessions = list_chat_sessions(g.workspace_id, g.workspace_context["workspace_member_id"])
     return jsonify(sessions), 200
 
@@ -129,7 +143,7 @@ def api_list_chat_sessions():
 @require_workspace
 @require_capability("chat:create")
 def api_create_chat_session():
-    data = json_object()
+    data = chat_body()
     title = required_text(data, "title")
     initial_content = required_text(data, "content")
 
@@ -147,6 +161,10 @@ def api_create_chat_session():
 @require_workspace
 @require_capability("chat:read")
 def api_get_chat_session(session_id):
+    if request.args.get('version') == '2':
+        return detail_v2(session_id)
+    if 'version' in request.args:
+        raise ValidationError('Unsupported chat API version.')
     session = get_chat_session_messages(g.workspace_id, uuid_string(session_id, "session_id"), g.workspace_context["workspace_member_id"])
     if not session:
         raise NotFoundError("Chat session not found in this workspace.")

@@ -6,10 +6,10 @@ from flask import g
 from errors import PermissionDeniedError
 
 ROLE_CAPABILITIES = {
-    "owner": frozenset({"workspace:read", "chat:read", "chat:create", "ai:generate", "config:write"}),
-    "admin": frozenset({"workspace:read", "chat:read", "chat:create", "ai:generate", "config:write"}),
-    "developer": frozenset({"workspace:read", "chat:read", "chat:create", "ai:generate"}),
-    "member": frozenset({"workspace:read", "chat:read", "chat:create", "ai:generate"}),
+    "owner": frozenset({"workspace:read", "chat:read", "chat:create", "chat:write", "ai:generate", "config:write"}),
+    "admin": frozenset({"workspace:read", "chat:read", "chat:create", "chat:write", "ai:generate", "config:write"}),
+    "developer": frozenset({"workspace:read", "chat:read", "chat:create", "chat:write", "ai:generate"}),
+    "member": frozenset({"workspace:read", "chat:read", "chat:create", "chat:write", "ai:generate"}),
     "viewer": frozenset({"workspace:read", "chat:read"}),
 }
 

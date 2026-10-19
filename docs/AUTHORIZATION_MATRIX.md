@@ -21,6 +21,13 @@ Stored workspace selection is a preference, not permission.
 | GET /api/chat/sessions | JWT + membership | chat:read | Creator's unarchived sessions only |
 | GET /api/chat/sessions/<id> | JWT + membership | chat:read | Selected workspace and creator; otherwise 404 |
 | POST /api/chat/sessions | JWT + membership | chat:create | Trusted member attribution; persona must belong to workspace |
+| PUT /api/chat/sessions/<id> | JWT + membership | chat:create | Idempotent empty creation, creator-only replay; no overwrite |
+| GET /api/chat/sessions?version=2 | JWT + membership | chat:read | Paginated own active/archive list; never another creator's rows |
+| GET /api/chat/sessions/<id>?version=2 | JWT + membership | chat:read | Own active or archived session, full typed fields, bounded message page |
+| PATCH /api/chat/sessions/<id> | JWT + membership | chat:write | Own session; If-Match required; archive blocked while unresolved |
+| POST /api/chat/sessions/<id>/operations | JWT + membership | chat:write; also ai:generate for provider actions | J.2 exposes deterministic text shortening. Provider actions verify ownership then return 501 until J.3; no claim/call |
+| GET /api/chat/sessions/<id>/operations/<key> | JWT + membership | chat:read | Own session status; never dispatches or exposes claim tokens |
+| POST /api/chat/sessions/<id>/operations/<key>/abandon | JWT + membership | chat:write | Own uncertain operation; explicit boolean acknowledgement; old completion fenced |
 | POST /api/chat | JWT + membership | ai:generate | Active persona UUID and required identity from selected workspace; no global history/preferences |
 | POST /api/video-brief | JWT + membership | ai:generate | Same scoped persona/identity resolution before provider invocation |
 | POST /api/social-image | JWT + membership | ai:generate | Same scoped persona/identity resolution before provider invocation |
@@ -43,6 +50,13 @@ sanitized 503. Unknown roles are excluded from authorized membership discovery.
 | member | Yes | Yes | Yes | No |
 | viewer | Yes | No | No | No |
 
+Step J.2 adds `chat:write` for owner/admin/developer/member, and not viewer.
+It permits creator-owned metadata/revisions/archive/recovery only; it does not
+grant configuration edits or access to another creator. All J.2 repository writes
+refresh membership/role under a short membership lock before locking the session.
+Legacy initial-message creation now also refreshes its `chat:create` permission.
+Private chat responses, including errors, use `Cache-Control: no-store`.
+
 Step I brand PUT and persona POST/PUT enforce `config:write`; read-only UI controls
 mirror that capability, with the server authoritative on every request. Missing
 required generation configuration returns sanitized 409; missing/malformed persona
@@ -60,8 +74,9 @@ No role bypasses chat ownership.
 ## Privacy and revocation
 
 Session queries require both workspace ID and the authenticated member's creator ID.
-Message reads first authorize that parent session. Unattributed and archived sessions
-remain stored and hidden. New session/message authors come from verified backend context.
+Message reads first authorize that parent session. Unattributed sessions remain
+hidden. Legacy reads hide archives; v2 explicitly supports creator-owned archived
+history and restore. New session/message authors come from verified backend context.
 No historical ownership backfill occurs.
 
 Deleted memberships cannot authorize subsequent requests. If `revoked_at` exists, a

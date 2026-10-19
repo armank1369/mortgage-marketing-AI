@@ -67,6 +67,10 @@ def test_route_inventory():
     expected = set(ROUTES) - {("GET", "/api/chat/sessions/" + S), ("PUT", "/api/personas/" + S)}
     expected |= {("GET", "/api/chat/sessions/<session_id>"), ("GET", "/api/hello"),
                  ("GET", "/api/auth/me"), ("GET", "/api/workspaces"), ("PUT", "/api/personas/<persona_id>")}
+    expected |= {("PUT", "/api/chat/sessions/<session_id>"), ("PATCH", "/api/chat/sessions/<session_id>"),
+                 ("POST", "/api/chat/sessions/<session_id>/operations"),
+                 ("GET", "/api/chat/sessions/<session_id>/operations/<operation_key>"),
+                 ("POST", "/api/chat/sessions/<session_id>/operations/<operation_key>/abandon")}
     assert actual == expected
 
 

@@ -11,6 +11,7 @@ W = "11111111-1111-4111-8111-111111111111"
 M = "22222222-2222-4222-8222-222222222222"
 S = "33333333-3333-4333-8333-333333333333"
 P = "44444444-4444-4444-8444-444444444444"
+MEMBER = {"id": M, "role": "member", "environment": "test"}
 
 
 @pytest.fixture
@@ -52,7 +53,7 @@ def test_foreign_member_cannot_create(cursor):
 
 
 def test_foreign_or_deleted_persona_cannot_create(cursor):
-    cursor.fetchone.side_effect = [{'id': M}, None]
+    cursor.fetchone.side_effect = [MEMBER, None]
     with pytest.raises(NotFoundError):
         chats.create_chat_session_with_message(W, 'Synthetic', 'Hello', author_member_id=M, persona_id=P)
     assert cursor.execute.call_count == 2
@@ -62,7 +63,7 @@ def test_foreign_or_deleted_persona_cannot_create(cursor):
 
 
 def test_member_attribution_on_both_inserts(cursor):
-    cursor.fetchone.side_effect = [{'id': M}, {'id': P}, {'id': S, 'workspace_id': W}, {'id': P, 'session_id': S}]
+    cursor.fetchone.side_effect = [MEMBER, {'id': P}, {'id': S, 'workspace_id': W}, {'id': P, 'session_id': S}]
     chats.create_chat_session_with_message(W, 'Synthetic', 'Hello', author_member_id=M, persona_id=P)
     assert cursor.execute.call_args_list[2].args[1] == (W, 'Synthetic', P, M)
     assert cursor.execute.call_args_list[3].args[1] == (S, M, P, 'user', 'message', 'Hello')
@@ -71,7 +72,7 @@ def test_member_attribution_on_both_inserts(cursor):
 def test_failed_message_insert_exits_transaction_with_error(monkeypatch):
     exited = []
     cur = Mock()
-    cur.fetchone.side_effect = [{'id': M}, {'id': S, 'workspace_id': W}]
+    cur.fetchone.side_effect = [MEMBER, {'id': S, 'workspace_id': W}]
     cur.execute.side_effect = [None, None, RuntimeError('synthetic failure')]
     @contextmanager
     def transaction():

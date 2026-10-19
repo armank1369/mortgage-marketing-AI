@@ -6,9 +6,11 @@ Enforces multi-step atomic transactions for session creation and message logging
 
 from typing import List, Optional, Dict, Any
 from db.connection import get_db_cursor, get_db_transaction
-from errors import NotFoundError, WorkspaceAccessDeniedError
+from errors import NotFoundError
 from validation import uuid_string
 from logging_utils import log_db_operation, log_db_error
+from services.chat_contract import public_message, text
+from repositories.chat_persistence_repository import lock_member
 
 
 def list_chat_sessions(workspace_id: str, member_id: str, limit: int = 50) -> List[Dict[str, Any]]:
@@ -20,7 +22,7 @@ def list_chat_sessions(workspace_id: str, member_id: str, limit: int = 50) -> Li
         WHERE workspace_id = %s
           AND created_by_member_id = %s
           AND archived_at IS NULL
-        ORDER BY updated_at DESC
+        ORDER BY updated_at DESC, id DESC
         LIMIT %s;
     """
     try:
@@ -59,10 +61,11 @@ def get_chat_session_messages(workspace_id: str, session_id: str, member_id: str
     """
     message_query = """
         SELECT id, session_id, author_member_id, persona_id, role, kind,
-               content, content_format, client_message_key, created_at
+               content, content_format, client_message_key, created_at, mode,
+               structured_data, compliance_flags, request_message_id, source_message_id
         FROM public.chat_message
         WHERE session_id = %s
-        ORDER BY created_at ASC;
+        ORDER BY created_at ASC, id ASC;
     """
     try:
         with get_db_cursor() as cur:
@@ -83,7 +86,7 @@ def get_chat_session_messages(workspace_id: str, session_id: str, member_id: str
                 msg = dict(m)
                 msg["id"] = str(msg["id"])
                 msg["session_id"] = str(msg["session_id"])
-                serialized_messages.append(msg)
+                serialized_messages.append(public_message(msg))
 
             result["messages"] = serialized_messages
             log_db_operation(
@@ -111,14 +114,13 @@ def create_chat_session_with_message(
     Inserts a chat_session and its first chat_message in a single transaction block.
     """
     try:
+        title = text(title, "title", 200)
+        # Preserve the legacy DB constraint error for invalid internal None content.
+        if initial_content is not None:
+            initial_content = text(initial_content, "content")
         with get_db_transaction() as cur:
             author_member_id = uuid_string(author_member_id, "author_member_id")
-            cur.execute(
-                "SELECT id FROM public.workspace_member wm WHERE id = %s AND workspace_id = %s AND (to_jsonb(wm)->>'revoked_at') IS NULL FOR SHARE",
-                (author_member_id, workspace_id),
-            )
-            if not cur.fetchone():
-                raise WorkspaceAccessDeniedError()
+            lock_member(cur, workspace_id, author_member_id, "chat:create")
             if persona_id is not None:
                 persona_id = uuid_string(persona_id, "persona_id")
                 cur.execute(

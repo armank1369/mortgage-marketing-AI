@@ -1,8 +1,9 @@
 # Step J frozen execution contract — STEP-J-v1
 
 Status: plan approved by the owner's explicit implementation request on 2026-10-18
-(America/Los_Angeles). Execution remains phase-gated. J.1 is authorized; review its
-baseline and artifacts before J.2. Earlier DRAFT/UNAPPROVED labels in the quoted
+(America/Los_Angeles). Execution remains phase-gated. J.1 was completed and the
+owner subsequently approved proceeding with J.2, including test guidance and
+database preparation. Review J.2 before J.3. Earlier DRAFT/UNAPPROVED labels in the quoted
 proposal are superseded by that request, not by automatic approval of later gates.
 
 Baseline: `0f59617be5b1eb1c7487f523a48ed78a4c58767c`.
@@ -74,6 +75,13 @@ operation body: 128 KiB. Unknown fields/type mismatches: 400; foreign/missing re
 indistinguishable 404; stale revision/busy/key-body mismatch: 409 with stable code;
 stale metadata: 412; missing precondition: 428; outages: sanitized 503.
 Private conversation/status responses: `Cache-Control: no-store`.
+
+J.2 phase boundary: the operation HTTP endpoint implements `shorten`; provider-backed
+actions return 501 `durable_generation_not_ready` after guards/ownership, without
+claiming or dispatching. Internal claim/completion primitives accept synthetic
+post-compliance outputs in tests. J.3 will supply actual provider orchestration.
+Internal `original_request_id` provenance in v1 envelopes preserves the original
+user task across revision chains; it is checked against the same session.
 
 ## 3. Authorization and operation lifecycle
 
