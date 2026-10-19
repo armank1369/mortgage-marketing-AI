@@ -95,6 +95,13 @@ Already-authorized in-flight requests are not automatically canceled.
 
 On the Step J feature branch, normal React chats use creator-private session/operation APIs. The sidebar role controls are advisory; every request still verifies membership, capabilities and creator ownership on the server. Account/workspace changes abort local waiting and reject stale responses.
 Scoped legacy chats have a separate read-only Local history view. Old scoped/unscoped keys remain untouched; unscoped records remain hidden. Pending operation identifiers/input use a new account/workspace namespace, with no automatic POST replay or historical import. Calendar remains browser-local.
+J.5 snapshots history only after membership/capability/creator/source authorization,
+inside the session claim lock. All history query joins repeat session equality.
+The browser cannot supply history, generation_input or conversation_context. Only
+completed results enter bounded user/assistant projections; operational commands,
+foreign conversations, failed/pending results and obsolete alternatives are excluded.
+Current brand/persona/compliance remain authoritative. Media uses its stored source,
+and compatibility stateless endpoints do not gain implicit conversation access.
 Browser namespacing is not encryption or protection from someone controlling the device.
 
 ## Remaining acceptance

@@ -2,7 +2,7 @@
 // Run from client: npm run test:chat-browser. Does not start Flask or contact Neon/AI.
 import { createServer } from 'vite'
 import { spawn } from 'node:child_process'
-import { readFile, mkdtemp, writeFile, rm, realpath } from 'node:fs/promises'
+import { readFile, mkdtemp, writeFile, rm, realpath, mkdir, readdir, copyFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -87,6 +87,22 @@ try {
   await input('textarea', 'Synthetic posts'); await click('Send'); await wait(`document.body.innerText.includes('Generate social image')`)
   await click('Generate social image', false); await wait(`document.body.innerText.includes('Download PNG')`)
   const imageCalls = await posts(); await reload(); await wait(`document.body.innerText.includes('Download PNG')`); assert.equal(await posts(), imageCalls)
+  // Exercise the actual local PNG exporter, not a screenshot of its scaled preview.
+  const downloads = path.join(profile, 'downloads'); await mkdir(downloads)
+  await cdp('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads })
+  await click('Download PNG', false)
+  let exported
+  for (let i = 0; i < 160; i++) {
+    exported = (await readdir(downloads)).find((name) => name.endsWith('.png'))
+    if (exported) break
+    await sleep(100)
+  }
+  assert.ok(exported, 'Native PNG export should finish')
+  const png = await readFile(path.join(downloads, exported))
+  assert.equal(png.readUInt32BE(16), 1080); assert.equal(png.readUInt32BE(20), 1080)
+  const nativeImage = path.join(process.env.STEP_J_SCREENSHOT_DIR || tmpdir(), 'step-j7-native-image.png')
+  await copyFile(path.join(downloads, exported), nativeImage)
+  console.log(`Native PNG export: 1080 x 1080; ${nativeImage}`)
   await click('↻ Regenerate'); await wait(`document.body.innerText.includes('Previous image versions')`)
   const screenshotDir = process.env.STEP_J_SCREENSHOT_DIR || tmpdir()
   const desktop = await cdp('Page.captureScreenshot', { format: 'png' })

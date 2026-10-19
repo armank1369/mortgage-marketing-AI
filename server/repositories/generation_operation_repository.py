@@ -12,7 +12,7 @@ from services.chat_contract import canonical, input_hash, operation_fields, oper
 from repositories import chat_persistence_repository as chats
 from db.connection import get_db_transaction
 
-PROMPT_VERSION = "step-i-policy-step-j3-v1"
+PROMPT_VERSION = "step-i-policy-step-j5-v1"
 SAFE_ERRORS = frozenset({"provider_unavailable", "provider_rate_limited", "provider_outcome_unknown",
                          "invalid_provider_output", "persistence_outcome_unknown", "generation_failed"})
 

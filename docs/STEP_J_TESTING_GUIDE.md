@@ -1,8 +1,9 @@
-# Step J testing and preparation for J.5–J.7
+# Step J testing and final acceptance
 
 J.2/J.3 implement backend APIs; J.4 connects the normal Chat page to durable sessions
-and operations. No migration or additional Neon query is required for J.4 or to
-begin J.5 after review. Existing preflight/SQL results remain in the implementation record.
+and operations. J.5 now adds bounded same-conversation context. No migration or
+additional owner-run Neon query is required. The agent completed J.7 automated
+checks and scoped SQL fixtures; remaining live gates are in STEP_J_FINALIZATION.md.
 J.3 provider-backed POSTs now perform actual paid generation when configured. The
 automated tests below use fake provider responses and incur no AI charges. Do not
 run manual send/clarify/regenerate/video/social_image operations without paid-call
@@ -27,6 +28,7 @@ It exercises send/reload, immutable shortening, archive/restore, persisted image
 specifications and their revisions, clarification selections, lost responses, explicit
 uncertainty acknowledgement/abandonment, unchanged legacy keys/read-only history,
 conversation/history pagination, account switching, viewer controls and narrow layout.
+It also downloads a real 1080×1080 synthetic PNG through the local exporter.
 Screenshots go to the OS temporary directory (or `STEP_J_SCREENSHOT_DIR`).
 
 For an optional normal-app review, open an existing saved conversation and refresh it:
@@ -36,12 +38,38 @@ local chats are read-only and Calendar remains local. New Chat creates no remote
 placeholder until Send. Send, Continue, Regenerate and media generation in the normal
 app can make paid calls; use the synthetic browser command for free functional checks.
 
-Live two-browser reopening and cross-account API denial still belong to controlled
+The owner reported successful normal UI/multiple-browser persistence after J.4.
+The remaining live cross-account/workspace/role matrix still needs controlled
 acceptance with existing test identities. Browser fixture identities do not prove
 Neon Auth behavior. No memberships, grants, schema, test rows or ai_run rows need
 to be pre-created now.
 
-## 1. What you can prepare now
+## J.5 manual UI review
+
+Routine PowerShell scripts are the agent's responsibility; no need to repeat them.
+For the owner's optional normal-app review (normal generation uses the configured
+paid provider):
+
+1. In one conversation, ask for a short checklist, then ask “Explain your second point.”
+   The follow-up should use that conversation's earlier content.
+2. Reopen that saved conversation in another browser and ask a related follow-up.
+   Reads themselves must not regenerate; new generation loads history from Neon.
+3. Start a separate conversation and verify it does not know the first one's details.
+4. Regenerate an earlier result: its original task and preceding context should be
+   used, with previous versions preserved. Clarification should retain its answers.
+
+Context is deliberately bounded: up to six completed logical exchanges, at most
+16 KiB of canonical UTF-8 history JSON, and 4 KiB per historical user/assistant
+projection. Older complete exchanges are removed first. Truncated projections are
+marked, while saved output/disclosures remain unmodified. Failed/pending requests,
+operational command labels and unrelated media are excluded. This is not long-term
+memory or knowledge of other conversations.
+
+## 1. Historical J.2/J.3 preflight — already completed
+
+The following preparation/checklist is retained for reference. Do not rerun its SQL
+or create fixtures now unless the target/configuration changes or a new check is
+explicitly requested. No additional Neon query is needed for J.5/J.7.
 
 1. In Neon's UI, select the existing development branch and confirm privately that
    Flask's DATABASE_URL targets it. Do not paste the URL, password or tokens.
@@ -73,6 +101,7 @@ From repository root:
 ```powershell
 .\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_repository.py server/tests/test_step_j_routes.py server/tests/test_step_j_contract.py server/tests/test_step_g_private_chats.py server/tests/test_step_g_authorization.py -q
 .\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_operations.py server/tests/test_step_i_routes.py server/tests/test_step_i_compliance.py -q
+.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_context.py server/tests/test_step_i_context.py server/tests/test_step_i_routes.py -q
 .\server\venv\Scripts\python.exe -m pytest server/tests -q
 git diff --check
 ```
@@ -99,7 +128,7 @@ The owner follow-up run used this process-only setup and all five live tests pas
 see the implementation record. No need to rerun them unless code/target changes.
 
 ```powershell
-.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_integration.py server/tests/test_step_j_generation_integration.py --run-integration -m integration -q
+.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_integration.py server/tests/test_step_j_generation_integration.py server/tests/test_step_j_context_integration.py --run-integration -m integration -q
 ```
 
 The five tests cover:
@@ -223,8 +252,8 @@ is no public assistant-seeding endpoint for preparing a manual shortening exampl
 | --- | --- | --- |
 | J.3 | Implemented and tested with synthetic provider/real SQL. Paid-provider behavior still needs separately approved smoke. | No ai_run pre-insertion or schema change. Reuse existing synthetic test target if code changes. |
 | J.4 | Implemented; synthetic Chrome UI checks pass. Real same-creator/two-browser and foreign-creator/admin denial remain live acceptance gates. | Existing test accounts and explicit selected persona. No extra SQL or migration. |
-| J.5 | Only authorized same-session completed history enters bounded context | Reuse synthetic sessions and large Unicode fixtures; no embeddings, vector extension, summary table or migration. |
-| J.7 | Independent-connection/process races, interruption recovery and live identity acceptance; optional paid output/export smoke | Reviewed fixture write/cleanup approval, test identities, runtime timeout settings, and separate paid-call approval/budget. |
+| J.5 | Implemented; scoped real SQL and synthetic provider request tests pass, including revisions, original-task boundaries, Unicode limits and foreign-session exclusion | Optional owner UI follow-up review; no embeddings, vector extension, summary table or migration. |
+| J.7 | Automated regressions, real independent-connection/process interruption tests and synthetic PNG export passed. Remaining live identity/provider/runtime gates are recorded separately. | Existing test identities, actual Render worker/start-command and proxy timeout settings, and separate paid-call approval/budget before agent-run paid smoke. |
 
 Do not alter schema, seed real content, pre-create ai_run rows, add revoked_at,
 change roles/grants, or run paid generation in advance. If the preflight shows a

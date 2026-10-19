@@ -42,6 +42,36 @@ class GenerationSQL(MemorySQL):
 
     def execute(self, sql, params=()):
         q = " ".join(sql.lower().split())
+        if q.startswith("with latest as"):
+            self.calls.append((q, params))
+            sid, *rest = params
+            latest = {}
+            for row in self.messages.values():
+                envelope = row.get("structured_data") or {}
+                request = self.messages.get(row.get("request_message_id"))
+                root = self.messages.get(envelope.get("original_request_id") or row.get("request_message_id"))
+                if (row["session_id"] != sid or row["role"] != "assistant" or envelope.get("schema_version") != 1
+                        or envelope.get("type") not in {"text", "posts", "campaign", "clarification"}
+                        or not request or request["session_id"] != sid or request["role"] != "user"
+                        or request["structured_data"].get("operation", {}).get("state") != "succeeded"
+                        or not root or root["session_id"] != sid or root["role"] != "user"
+                        or root["structured_data"].get("input", {}).get("action", "send") != "send"):
+                    continue
+                if len(rest) == 3 and (root["created_at"], root["id"]) >= tuple(rest[:2]):
+                    continue
+                previous = latest.get(root["id"])
+                if previous and (previous["created_at"], previous["id"]) >= (row["created_at"], row["id"]):
+                    continue
+                latest[root["id"]] = row
+            candidates = []
+            for root_id, row in latest.items():
+                request, root = self.messages[row["request_message_id"]], self.messages[root_id]
+                candidates.append(dict(assistant_id=row["id"], assistant_data=row["structured_data"],
+                                       request_id=request["id"], request_kind=request["kind"], request_content=request["content"],
+                                       request_data=request["structured_data"], request_source_id=request.get("source_message_id"),
+                                       root_id=root_id, root_created_at=root["created_at"]))
+            self.rows = sorted(candidates, key=lambda r: (r["root_created_at"], r["root_id"]), reverse=True)[:params[-1]]
+            return
         if "public.ai_run" not in q:
             super().execute(sql, params)
             if "and id<>%s" in q:

@@ -2,8 +2,26 @@
 
 Updated: 2026-10-18 (America/Los_Angeles).
 Contract: [STEP-J-v1](STEP_J_APPROVED_PLAN.md).
-Current phase: **J.4 implementation, isolated regression and synthetic Chrome UI
-verification complete; stopped for owner review before J.5**.
+Current phase: **J.5 implementation and J.7 automated finalization complete;
+remaining live acceptance gates open**.
+
+Combined-run authorization: after reporting successful multiple-browser persistence
+testing, the owner approved implementing J.5 and running J.7 in the same run, with
+testing sequentially against the finished implementation. Save Draft (J.6) stays
+deferred. The owner reported visual dissatisfaction; UI redesign remains separate.
+Routine command/script tests are the agent's responsibility; manual UI review is
+the owner's preference. Existing synthetic-development-fixture testing/cleanup
+authorization persists; no paid calls, DDL, publishing or deployment is authorized.
+
+Combined-run baseline: branch was clean at `d50a52303152b532d86f6df3f326c82dc1426dd4`
+(local and remote); integration remains `0f59617be5b1eb1c7487f523a48ed78a4c58767c`.
+J.5 captures context inside the claim/session lock through an internal callback,
+stores versioned message projections/IDs in request generation_input, and passes
+history only to durable chat generation (both campaign calls); stateless/media
+paths remain separate. Focused tests, real scoped SQL/interruption checks,
+frontend/browser regression and Markdown finalization have passed/completed.
+Runtime/proxy timeout settings and real cross-account browser denial are still
+unverified; do not silently claim these gates passed or make paid calls.
 
 ## Authorization and baseline
 
@@ -341,32 +359,105 @@ No Neon access/writes, migrations, paid calls, commits, pushes, merges or deploy
 were performed during J.4. Existing J.2/J.3 synthetic SQL evidence remains above;
 it was not rerun because this phase changed only frontend/docs and test harnesses.
 
+## J.5 implementation / J.7 combined verification
+
+Added `server/services/conversation_context.py`, integrated through an internal
+claim callback after ownership/source authorization and under the existing session
+lock. Latest completed responses are grouped by original user task, including
+clarification/regeneration/shortening provenance. Historical provider messages use
+the effective original task and current assistant result, never operational command
+labels. Regenerating/clarifying an earlier task excludes that task and later tasks
+from general history; the original task remains explicit current input.
+
+At most six logical exchanges and 16 KiB canonical UTF-8 history JSON are retained.
+Each historical user/assistant projection is capped at 4 KiB (a conservative user
+cap in addition to the planned artifact cap). UTF-8 truncation preserves complete
+code points and marks projections; oldest whole pairs are removed first. Saved
+publication payloads/flags/disclosures remain untouched. Only allowlisted rich
+content fields are projected, with no failed/pending/system/tool/media rows or
+foreign conversations. Every SQL join repeats session equality.
+
+The request stores `generation_input.conversation_context` with projection_version,
+bounded messages, selected/provenance IDs, exchange links, truncation flag and byte
+count. Both campaign calls consume that exact claimed snapshot. Current brand,
+persona and compliance remain authoritative; history enters provider user/assistant
+messages only. Media and old stateless routes stay separate. The ai_run prompt
+version now reads `step-i-policy-step-j5-v1`. Context failures roll back the claim
+before any provider invocation; completed replay performs no history/config reload.
+
+Added `test_step_j_context.py` (19 synthetic cases), extended the in-memory SQL
+adapter for relational context selection, and added three opt-in context/interruption
+integration cases. Extended the Chrome runner to download a real native PNG through
+the existing exporter. Updated plan, README, authorization/test guides and wrote
+[STEP_J_FINALIZATION.md](STEP_J_FINALIZATION.md). No production UI redesign, schema,
+API envelope, dependency, model or compliance-policy change occurred in this run.
+
+Final observed results:
+
+| Check | Result |
+| --- | --- |
+| `python -m pytest server/tests -q` using server venv | **500 passed, 35 skipped**, 5.58s |
+| Focused context cases | **19 passed**, 4.07s; included in full suite |
+| `npm --prefix client test` | **93 passed**, 0 failures/skips |
+| `npm --prefix client run test:chat-browser` | **Passed**, including native PNG export and all prior J.4 flows |
+| Three opt-in Step J SQL suites | **15 passed**, 174.50s; fixture cleanup passed |
+| Lint / build | Exit 0; existing three Fast Refresh, bundle-size/plugin timing warnings |
+| `git diff --check` / untracked whitespace | Passed; normal CRLF notices only |
+
+The scoped SQL command selected only `test_step_j_integration.py`,
+`test_step_j_generation_integration.py` and `test_step_j_context_integration.py`,
+with `--run-integration -m integration -q`. It reused the previously approved
+development connection only in subprocess environment variables; credentials and
+host were redacted from captured output, with no persistent .env change.
+
+New real SQL evidence covers snapshot IDs/projection fidelity, current revision and
+original-task cutoffs, separate-conversation exclusion and denial to another creator
+with admin role. A separate Windows-spawned worker is terminated after its fake
+provider dispatch begins; the committed request/run survives, same-key running and
+unknown replays do not invoke a provider, and only acknowledged replacement creates
+new output. The test ages only its own fixture progress timestamp to avoid a
+five-minute wait. Another real race abandons a campaign after preflight and fences
+the second provider stage. All writes/cleanup remain inside new fixture workspaces;
+existing customer/workspace configuration was not modified.
+
+Visually inspected `step-j7-native-image.png` in the OS temporary directory at
+1080×1080: the pull_quote image shows the full synthetic license/equal-housing footer
+and supplemental disclosure line. No AI request was needed. This does not establish
+all templates, maximum-length footer layout or actual provider output quality.
+
+No paid calls, DDL, migrations, new Neon branch, historical import, commits, pushes,
+merges or deployment. Development PostgreSQL fixture writes/cleanup occurred within
+the existing approved workflow. Local HEAD and both remote refs remained at the
+verified starting values; this run's changes remain uncommitted.
+
 ## Remaining verification and approval gates
 
-- J.4 is ready for owner review. J.5/J.7 implementation has not started; J.6 Save Draft remains deferred.
+- J.4 was accepted after owner multiple-browser/UI testing. J.5 and J.7 automated
+  work are complete; live/release acceptance below is still open. J.6 stays deferred.
 - Owner metadata supports current schema/grants and five targeted live SQL tests
   passed on the configured connection. Continue verifying the intended branch before
   future live writes; database name alone cannot identify a Neon branch.
 - J.3 adds seven real SQL orchestration cases with a fake provider; these do not
   establish paid-provider timing, billing guarantees or all future recovery paths.
-- Live Auth/multi-account/two-browser acceptance remains unverified.
+- Owner reported positive normal UI/multiple-browser persistence. The full live
+  Auth/cross-account/viewer/workspace/revocation matrix remains unverified; SQL
+  admin-denial and synthetic browser controls are separate evidence.
 - Actual server/proxy timeout compatibility with synchronous calls is unverified.
 - Paid provider usage/output/cache/export checks need separate explicit approval.
 - Existing soft-revocation lifecycle, image advisory cleanup, Calendar copy and
   long-disclosure PNG layout limitations remain separate outstanding work.
-- Any DDL, fixture writes/cleanup, paid calls, commit/push/merge/deployment needs
-  separate authorization. No new Neon branch or historical import.
+- DDL, writes outside the approved synthetic fixture workflow, paid calls and
+  commit/push/merge/deployment need separate authorization. No new Neon branch or import.
 
 ## Next checkpoint / resumption
 
-Review J.4 and its updated testing guide. No additional Neon SQL or manual repetition
-of automated checks is required before approving J.5. The normal UI now uses paid
-provider-backed operations when configured; use the synthetic browser command for
-free UI tests, or existing saved conversations for read/metadata review.
+Review [finalization](STEP_J_FINALIZATION.md) and the testing guide's short J.5 UI
+checklist. No additional owner-run Neon SQL or repeated PowerShell checks are needed.
+Before agent-run paid smoke, verify actual Render worker/start-command and proxy
+timeout settings, then approve a bounded provider-call budget. Finish real identity
+negative cases with existing synthetic/test accounts; do not provision memberships
+implicitly. Track the owner's UI appearance feedback separately.
 
-After explicit owner approval, start J.5 only. Preserve expected uncommitted J.3/J.4
-changes and verify refs/worktree. Implement the authorized bounded same-chat
-projection and audit metadata using fake provider request fixtures; do not introduce
-cross-chat memory, DDL, live fixture writes or paid calls implicitly. J.7 still needs
-controlled real identity/two-browser, runtime-timeout and any approved paid/export
-acceptance. Keep all later evidence in this record.
+Do not restart J.5, implement Save Draft or auto-publish. Preserve this run's expected
+uncommitted changes. Further work follows owner review of remaining acceptance or
+a separately authorized UI refinement. Keep later observations in this same record.

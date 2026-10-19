@@ -13,6 +13,7 @@ from repositories import generation_operation_repository as runs
 from services.chat_contract import operation_fields
 from services.generation_context import resolve_generation_context
 from services.generation import generate_chat, generate_video, generate_image, InvalidGenerationOutputError
+from services.conversation_context import capture_context
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,11 @@ def execute_operation(workspace_id, session_id, member_id, data, runtime):
     task = prepared["generation_input"]
     claim = chats.claim_operation(workspace_id, session_id, member_id, fields, generation_input=task,
                                   persona_snapshot={"id": context.persona.id, "name": context.persona.name,
-                                                    "slug": context.persona.slug})
+                                                    "slug": context.persona.slug},
+                                  context_factory=lambda cur, sid, fields, source: capture_context(cur, sid, fields, source, runs._chat_task))
     if not claim["created"]:
         return claim["status"]
+    task = claim["request"]["structured_data"]["generation_input"]
     key = fields["operation_key"]
     token = claim["request"]["structured_data"]["operation"]["claim_token"]
     stage, pending, active = 0, None, None
@@ -82,7 +85,8 @@ def execute_operation(workspace_id, session_id, member_id, data, runtime):
 
     try:
         if task["kind"] == "chat":
-            response = generate_chat(task["message"], context, invoke, model=runtime.model)
+            response = generate_chat(task["message"], context, invoke, model=runtime.model,
+                                     history=task.get("conversation_context", {}).get("messages", []))
         elif task["kind"] == "video":
             response = {"type": "video", **generate_video(task, context, invoke, model=runtime.model)}
         else:

@@ -4,7 +4,9 @@ Status: plan approved by the owner's explicit implementation request on 2026-10-
 (America/Los_Angeles). Execution remains phase-gated. J.1 was completed and the
 owner subsequently approved proceeding with J.2, including test guidance and
 database preparation, followed by explicit approval to implement J.3 and J.4.
-Stop after J.4 for review before J.5. Earlier DRAFT/UNAPPROVED labels in the quoted
+After J.4 acceptance, the owner explicitly combined J.5 implementation and J.7
+verification in one run, preserving separate external-action approvals and deferring
+J.6. Earlier DRAFT/UNAPPROVED labels in the quoted
 proposal are superseded by that request, not by automatic approval of later gates.
 
 Baseline: `0f59617be5b1eb1c7487f523a48ed78a4c58767c`.
@@ -233,6 +235,10 @@ video/image uses its explicit source rather than unrelated history.
 
 One phase per run; stop for owner review. No auto-advance.
 
+Owner-approved exception after J.4 acceptance: implement J.5, test it, then perform
+J.7 verification/finalization in the same run. No intermediate J.5 approval is
+required; this does not authorize DDL, paid calls or Git/deployment actions.
+
 | Phase | Work and expected files | Exit gate |
 | --- | --- | --- |
 | J.1 | This plan, implementation record, synthetic JSON fixture catalog; full existing isolated regression baseline | Contracts/baseline reviewed before J.2; no application edits |
@@ -245,6 +251,7 @@ One phase per run; stop for owner review. No auto-advance.
 | J.7 | Integration/regression tests, implementation record, README/authorization docs | Full regression and separately approved live acceptance; documented remaining gates |
 
 Dependencies: J.1 -> J.2 -> J.3 -> J.4 -> J.5 -> J.7, each reviewed.
+The J.5/J.7 review checkpoints are combined by the later explicit owner instruction.
 
 ```powershell
 # Baseline and final isolated regression (from repository root)

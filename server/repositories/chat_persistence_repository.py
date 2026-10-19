@@ -310,7 +310,7 @@ def _source(cur, session_id, fields, *, excluding_request_id=None):
     return source
 
 
-def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generation_input=None, persona_snapshot=None):
+def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generation_input=None, persona_snapshot=None, context_factory=None):
     old = _request(cur, session_id, fields["operation_key"])
     digest = input_hash(fields)
     if old:
@@ -343,6 +343,8 @@ def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generatio
                     "last_progress_at": now, "response_message_id": None, "safe_error_code": None}}
     if generation_input is not None:
         envelope["generation_input"] = deepcopy(generation_input)
+        if context_factory is not None and generation_input.get("kind") == "chat":
+            envelope["generation_input"]["conversation_context"] = context_factory(cur, session_id, fields, source)
     if source:
         envelope["original_request_id"] = (source["structured_data"].get("original_request_id") or
                                            str(source["request_message_id"]))
@@ -357,7 +359,7 @@ def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generatio
     return row, True
 
 
-def claim_operation(workspace_id, session_id, member_id, data, *, generation_input=None, persona_snapshot=None):
+def claim_operation(workspace_id, session_id, member_id, data, *, generation_input=None, persona_snapshot=None, context_factory=None):
     """Internal only. J.3 must resolve Step I configuration before a NEW provider claim.
 
     Only the caller receiving created=True may dispatch, after this function commits.
@@ -369,7 +371,7 @@ def claim_operation(workspace_id, session_id, member_id, data, *, generation_inp
         lock_member(cur, workspace_id, member_id, *capabilities)
         owned_session(cur, workspace_id, session_id, member_id, lock=True)
         row, created = _claim_locked(cur, workspace_id, session_id, member_id, fields,
-                                    generation_input=generation_input, persona_snapshot=persona_snapshot)
+                                    generation_input=generation_input, persona_snapshot=persona_snapshot, context_factory=context_factory)
         result = {"created": created, "request": deepcopy(row), "status": _status(cur, row)}
     return result  # Contains private claim token: service use only, never jsonify.
 

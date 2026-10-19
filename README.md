@@ -161,7 +161,7 @@ Neon PostgreSQL
 
 The second path has been implemented and tested.
 
-Brand/persona Settings and generation context use this data layer. Step J.2–J.4 connect normal ChatPage persistence on the feature branch. Bounded context (J.5), final live acceptance (J.7) and any separately approved historical migration remain outstanding; Save Draft is deferred.
+Brand/persona Settings and generation context use this data layer. Step J.2–J.5 connect normal ChatPage persistence and bounded same-conversation context on the feature branch. Context uses at most six completed exchanges and 16 KiB of historical projection; media uses its explicit source. Remaining live acceptance gates and separately approved historical migration remain outstanding; Save Draft is deferred. See [Step J finalization](docs/STEP_J_FINALIZATION.md).
 
 ---
 
@@ -397,8 +397,8 @@ Recommended next phases:
 1. Complete Step G live schema, revocation, Auth, and browser acceptance.
 2. Plan workspace invitation/onboarding under the approved creator-private policy.
 3. Review/finalize the Step I branch using its current acceptance report; brand/persona UI integration is implemented.
-4. Review Step J.4 UI/persistence, then approve J.5 bounded context; separately plan any historical-data migration.
-5. Complete J.7 live cross-device chat acceptance; shared brand/persona configuration is already implemented and user-confirmed.
+4. Review Step J finalization and the separately tracked UI refinements; plan any historical-data migration separately.
+5. Complete remaining J.7 live identity/provider/runtime gates; the owner reported successful multiple-browser chat use after J.4.
 6. Consider long-term memory/retrieval only under a separately scoped phase.
 
 Step F is the foundation that supports these improvements.
