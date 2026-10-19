@@ -1,8 +1,45 @@
-# Step J.2 testing and preparation for J.3–J.7
+# Step J testing and preparation for J.5–J.7
 
-J.2 is a backend/API phase. The normal Chat page still uses its existing local
-history and generation routes until J.4. New persistence features cannot yet be
-tested by clicking the normal chat buttons. No migration is required for J.2.
+J.2/J.3 implement backend APIs; J.4 connects the normal Chat page to durable sessions
+and operations. No migration or additional Neon query is required for J.4 or to
+begin J.5 after review. Existing preflight/SQL results remain in the implementation record.
+J.3 provider-backed POSTs now perform actual paid generation when configured. The
+automated tests below use fake provider responses and incur no AI charges. Do not
+run manual send/clarify/regenerate/video/social_image operations without paid-call
+approval. Creation/metadata/read/archive examples below remain model-free.
+
+## J.4 UI checks — safe to run without a database or paid calls
+
+From repository root:
+
+```powershell
+npm --prefix client test
+npm --prefix client run test:chat-browser
+npm --prefix client run lint
+npm --prefix client run build
+```
+
+The browser command uses installed Chrome (or Edge), an isolated temporary browser
+profile, and a loopback Vite harness with synthetic transport. It never starts Flask,
+uses your signed-in browser, connects to Neon or invokes an AI provider. Override
+`STEP_J_BROWSER` with an installed Chrome/Edge executable if automatic discovery fails.
+It exercises send/reload, immutable shortening, archive/restore, persisted image/video
+specifications and their revisions, clarification selections, lost responses, explicit
+uncertainty acknowledgement/abandonment, unchanged legacy keys/read-only history,
+conversation/history pagination, account switching, viewer controls and narrow layout.
+Screenshots go to the OS temporary directory (or `STEP_J_SCREENSHOT_DIR`).
+
+For an optional normal-app review, open an existing saved conversation and refresh it:
+reads do not regenerate. Check Previous versions, Archive/Restore, Rename, explicit
+Generation persona selection, Load earlier messages and Local history. Verify old
+local chats are read-only and Calendar remains local. New Chat creates no remote
+placeholder until Send. Send, Continue, Regenerate and media generation in the normal
+app can make paid calls; use the synthetic browser command for free functional checks.
+
+Live two-browser reopening and cross-account API denial still belong to controlled
+acceptance with existing test identities. Browser fixture identities do not prove
+Neon Auth behavior. No memberships, grants, schema, test rows or ai_run rows need
+to be pre-created now.
 
 ## 1. What you can prepare now
 
@@ -35,6 +72,7 @@ From repository root:
 
 ```powershell
 .\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_repository.py server/tests/test_step_j_routes.py server/tests/test_step_j_contract.py server/tests/test_step_g_private_chats.py server/tests/test_step_g_authorization.py -q
+.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_operations.py server/tests/test_step_i_routes.py server/tests/test_step_i_compliance.py -q
 .\server\venv\Scripts\python.exe -m pytest server/tests -q
 git diff --check
 ```
@@ -61,7 +99,7 @@ The owner follow-up run used this process-only setup and all five live tests pas
 see the implementation record. No need to rerun them unless code/target changes.
 
 ```powershell
-.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_integration.py --run-integration -m integration -q
+.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_integration.py server/tests/test_step_j_generation_integration.py --run-integration -m integration -q
 ```
 
 The five tests cover:
@@ -72,6 +110,13 @@ The five tests cover:
   and deterministic shortening that preserves the footer and flags.
 - Explicit uncertain replacement fences an old completion, without any paid call.
 - Metadata ETag conflict, archive/restore, and denial to another member with admin role.
+
+The seven additional J.3 cases cover committed ai_run records before dispatch,
+two-call campaign accounting with one response link, failed/uncertain operation
+states, atomic response/run rollback with save-only retry, role downgrade before
+completion, and an in-flight duplicate that returns while the first fake provider
+call is waiting. They configure brand/licensing only inside newly created synthetic
+test workspaces. No test constructs an Anthropic client or makes a paid call.
 
 Fixtures create random synthetic workspace/member/persona/session/message records.
 They use the existing conftest fixture's cleanup:
@@ -144,16 +189,13 @@ var j2Restored = await j2Api.send({method: 'PATCH', url: j2Path,
 The list is paginated; if your workspace has over 100 archived sessions, follow
 next_cursor or verify the session by its direct detail endpoint.
 
-Check the deliberate J.3 boundary using ONLY the new operation endpoint:
+Check a nonexistent operation using GET, which never invokes AI:
 
 ```javascript
 try {
-  await j2Api.send({method: 'POST', url: j2Path + '/operations', data: {
-    operation_key: crypto.randomUUID(), action: 'send', persona_id: j2PersonaId,
-    message: 'Synthetic education test'
-  }})
+  await j2Api.send({method: 'GET', url: j2Path + '/operations/' + crypto.randomUUID()})
 } catch (error) { console.log(error.response?.status, error.response?.data.error) }
-// 501 durable_generation_not_ready; no message/claim and no provider invocation.
+// 404 not_found; no message/claim and no provider invocation.
 console.log((await j2Api.send({method: 'GET', url: j2Path + '?version=2'})).data.messages.length) // 0
 ```
 
@@ -179,8 +221,8 @@ is no public assistant-seeding endpoint for preparing a manual shortening exampl
 
 | Phase | What will need verification | What to prepare now |
 | --- | --- | --- |
-| J.3 | ai_run required fields/checks; run insertion/completion; two-call campaigns; completion/failure rollback and fencing | Preflight role grants/metadata; approved synthetic fixture target. No run rows need manual pre-insertion. |
-| J.4 | Same creator in two browsers reloads typed history; another creator/admin cannot read it; persona/history/archive remain consistent | Existing test accounts and explicit selected persona. UI does not support these flows until J.4. |
+| J.3 | Implemented and tested with synthetic provider/real SQL. Paid-provider behavior still needs separately approved smoke. | No ai_run pre-insertion or schema change. Reuse existing synthetic test target if code changes. |
+| J.4 | Implemented; synthetic Chrome UI checks pass. Real same-creator/two-browser and foreign-creator/admin denial remain live acceptance gates. | Existing test accounts and explicit selected persona. No extra SQL or migration. |
 | J.5 | Only authorized same-session completed history enters bounded context | Reuse synthetic sessions and large Unicode fixtures; no embeddings, vector extension, summary table or migration. |
 | J.7 | Independent-connection/process races, interruption recovery and live identity acceptance; optional paid output/export smoke | Reviewed fixture write/cleanup approval, test identities, runtime timeout settings, and separate paid-call approval/budget. |
 

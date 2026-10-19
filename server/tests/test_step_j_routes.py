@@ -80,13 +80,15 @@ def test_patch_passes_precondition_and_only_allowed_fields(client, monkeypatch):
     assert client.patch(BASE, json={"archived": "true"}, headers=client.headers()).status_code == 400
 
 
-def test_provider_operation_phase_boundary_creates_no_claim_and_calls_no_provider(client, monkeypatch):
-    monkeypatch.setattr(chats, "get_session", Mock(return_value={"id": S}))
-    claim = Mock(side_effect=AssertionError("No orphan claim"))
-    monkeypatch.setattr(chats, "claim_operation", claim)
-    response = client.post(BASE + "/operations", json={"operation_key": KEY, "action": "send", "persona_id": P, "message": "Explain documents"}, headers=client.headers())
-    assert response.status_code == 501 and response.json["error"] == "durable_generation_not_ready"
-    claim.assert_not_called()
+def test_provider_operation_delegates_to_durable_service(client, monkeypatch):
+    from services import chat_http
+    execute = Mock(return_value={"operation_key": KEY, "state": "running", "response": None})
+    monkeypatch.setattr(chat_http, "execute_operation", execute)
+    fields = {"operation_key": KEY, "action": "send", "persona_id": P, "message": "Explain documents"}
+    response = client.post(BASE + "/operations", json=fields, headers=client.headers())
+    assert response.status_code == 202
+    assert response.headers["Location"] == BASE + "/operations/" + KEY
+    assert execute.call_args.args[:4] == (W, S, M, fields)
     client.ai.messages.create.assert_not_called()
 
 

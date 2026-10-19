@@ -119,11 +119,3 @@ class PreconditionFailedError(AppError):
 
     def __init__(self):
         super().__init__("Conversation settings changed. Refresh before saving.")
-
-
-class GenerationPersistenceNotReadyError(AppError):
-    status_code = 501
-    error_code = "durable_generation_not_ready"
-
-    def __init__(self):
-        super().__init__("Durable AI generation is not available until Step J.3.")

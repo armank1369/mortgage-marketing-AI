@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test src/lib/*.test.js"
+    "test": "node --test src/lib/*.test.js",
+    "test:chat-browser": "node scripts/test-chat-browser.mjs"
   },
   "dependencies": {
     "@neondatabase/neon-js": "^0.7.0-beta",

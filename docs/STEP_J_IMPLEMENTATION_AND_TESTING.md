@@ -2,8 +2,8 @@
 
 Updated: 2026-10-18 (America/Los_Angeles).
 Contract: [STEP-J-v1](STEP_J_APPROVED_PLAN.md).
-Current phase: **J.2 implementation, isolated tests and five live PostgreSQL tests
-complete; awaiting owner review before J.3**.
+Current phase: **J.4 implementation, isolated regression and synthetic Chrome UI
+verification complete; stopped for owner review before J.5**.
 
 ## Authorization and baseline
 
@@ -181,14 +181,174 @@ converted into passes. No application source changed during this follow-up.
 Owner preference: perform self-contained local checks directly rather than asking
 the owner to repeat them. Preserve phase gates and separately scoped live/paid actions.
 
+## J.3 generation service and durable orchestration
+
+The owner approved J.3 after J.2's passing SQL checks and asked the agent to perform
+routine tests directly. Initial worktree was clean on codex/step-j-chat-persistence
+at pre-existing commit `517cd3d7742dc40513fb15fb9643a2d67e35394c` ("J.2 implementation").
+Remote Step J matched this commit; integration remained at `0f59617`. No commit or
+push was made by this implementation session.
+
+J.3a extraction:
+
+- Moved 54 existing policy/helper definitions from app.py into
+  `services/generation_policy.py`. AST comparison against `517cd3d` confirmed every
+  moved definition exactly matches the baseline. app.py re-exports the historical
+  helper names for existing tests/callers.
+- Added `services/generation.py` with injectable chat/video/image generation and
+  no Flask/database dependency. Legacy stateless routes are thin compatibility
+  wrappers; the actual prompts, parsing, disclosure/compliance and output types
+  are shared with durable generation. No model/SDK/dependency upgrade.
+- Full existing backend suite after extraction: **453 passed, 25 skipped**, 9.85s.
+
+J.3b implementation:
+
+- `repositories/generation_operation_repository.py` provides authorized replay
+  preflight before config lookup, stored-source task projection, per-invocation run
+  insertion, atomic response/final-run completion and safe failure classification.
+- `services/generation_operations.py` coordinates preflight, fresh Step I context,
+  committed request claim, committed run, provider invocation outside transactions,
+  post-compliance completion and bounded save-only retry. No queue/background job,
+  browser-authoritative assistant insert, cross-chat context or implicit model retry.
+- Each provider stage refreshes membership/role/creator/claim authorization. A stage
+  cannot be claimed twice or advanced without the prior in-memory provider result.
+  Campaign preflight gets its own run; only the final producing call links the
+  assistant response. Runs store actual available model/usage/cache counts/latency,
+  code-controlled prompt version and canonical system-block SHA-256, not raw prompts.
+- Configured the shared lazy Anthropic client with max_retries=0 and timeout=120s.
+  This affects both durable and compatibility endpoints. Tests mock the client;
+  no actual Anthropic request was authorized or performed.
+- Same-key replay returns stored running/completed/failed/uncertain status without
+  re-reading obsolete persona/brand or invoking the provider. Claim/run commit
+  uncertainty grants no dispatch rights. Save acknowledgement loss retries only
+  persistence of the same in-memory output, at most twice; no regeneration.
+- Provider timeouts/connection ambiguity/server ambiguity stay operation `unknown`;
+  corresponding ai_run stays `started` with safe classification. Known rate limits,
+  provider rejection and invalid output produce failed states. No non-schema run
+  status was added. Failure text is limited to code-controlled classifications.
+- Persona snapshots use the actual resolved generation context. Existing request
+  JSONB stores server-derived generation_input, preserving clarification answers
+  through regeneration. Media uses same-session stored publication fields and
+  prior image specification; parent messages remain immutable.
+- Added validation that rejects empty/truncated/empty-post outputs instead of saving
+  false success. Existing compliant text fallback for malformed campaign JSON remains.
+  This is a narrow output-validation refinement; no policy text was changed.
+- The operation POST now performs durable generation, replacing J.2's temporary 501.
+  Responses: success 200, running 202, known rate limit 429, other known failure 502,
+  uncertainty 503, abandoned 409. Location identifies the read-only status endpoint.
+  No claim tokens are returned. Step J.4 will implement the durable browser flows.
+
+Verification:
+
+| Check | Observed result |
+| --- | --- |
+| Full isolated backend suite after final behavior changes | **481 passed, 32 skipped**, 3.91s |
+| Targeted J.3 unit cases (included above) | 28 cases covering actual service/policy with fake SQL/provider, including guarded route replay, error classification and stage fencing |
+| Combined J.2/J.3 live PostgreSQL suite, synthetic provider | **12 passed**, 106.83s; five J.2 regressions plus seven J.3 cases; fixture cleanup passed |
+| Final J.3 SQL rerun after snapshot/stage guard refinements | **7 passed**, 64.04s; fixture cleanup passed |
+| Syntax, extracted-policy AST comparison, new-file whitespace, git diff --check | Passed; Git's existing CRLF normalization notices only |
+| Frontend tests/lint/build | Not repeated: no frontend or dependency changes; J.1 evidence remains above |
+
+The new SQL suite tests committed run visibility before dispatch, two-run campaign
+accounting, empty/timeout outcomes without assistant insertion, atomic final-run link
+rollback with save-only retry, real role downgrade before completion, and duplicate
+replay while the first fake provider is waiting. All records belong to newly created
+synthetic test workspaces, which the reviewed fixtures clean up. Existing development
+brand/persona/customer records are not updated. Credentials were passed only through
+the pytest subprocess environment and redacted from captured output.
+
+No migrations, new Neon branch, paid calls, production writes, configuration-file
+changes, commits, pushes, merges or deployment. Synthetic database fixture writes
+and cleanup were performed within the previously approved testing workflow.
+
+## J.4 durable conversation UI — implementation and verification
+
+Owner explicitly requested: “Ok, proceed with J.4”. This phase preserves the existing
+uncommitted J.3 backend changes. Local/remote `codex/step-j-chat-persistence` still
+point to `517cd3d7742dc40513fb15fb9643a2d67e35394c`; integration remote
+`luciev2_newteam` remains `0f59617be5b1eb1c7487f523a48ed78a4c58767c`.
+Read-only remote ref verification used Windows schannel without disabling TLS checks.
+No new commit, push, branch or integration merge was performed.
+
+Changed behavior and files:
+
+- Replaced ChatPage's three browser slots with scrollable server conversations,
+  paginated history, New Chat, Rename, Archive/Restore and separate read-only Local
+  history. Empty composers remain unsaved until first send. The UI no longer writes
+  old chat storage keys or calls the stateless generation routes.
+- Added `chatPersistence.js` and `useChatPersistence.js`: authenticated scoped API
+  calls, ETag edits, stable request/session UUIDs, explicit status reconciliation,
+  visibility-aware two-second unresolved-operation polling, focus/reconnect refresh,
+  stale scope/selection guards and abort on unmount. Pending identifiers/input are
+  saved before creation/dispatch in `lucie_chat_pending:v1:<encoded scope>`.
+  Storage failure blocks dispatch. There is no automatic POST or provider retry.
+- Added `chatSerialization.js` and `PersistedMessage.jsx`: immutable revision chains,
+  previous versions, complete envelopes/flags/persona snapshots and linked nested
+  image/video artifacts. Pagination can display an artifact on its own until its
+  ancestor is loaded. Future formats have a safe unsupported state. All publication
+  payloads remain intact; copy helpers are separate rendering/export projections.
+- Adapted ClarificationResponse to submit structured selections/custom text and
+  restore actual saved answers. Stable question content preserves unsent choices
+  during polling. CampaignResponse/PostsResponse/SocialImageGenerator accept durable
+  callbacks and saved artifacts; durable/read-only rendering never falls back to
+  stateless generation. Images remain specifications rendered/downloaded locally.
+- WorkspaceGate provides advisory role controls through WorkspaceAccess; server
+  permissions remain authoritative. Removed the local-preference onboarding gate
+  from normal chat so a second browser can read saved conversations immediately.
+  Current active persona selection remains explicit; historical labels do not depend
+  on current configuration. Existing conversations can shorten without a current
+  persona or another session-creation request.
+- Failures/unknown outcomes are operation panels rather than assistant messages.
+  Unknown replacement/abandonment requires a checked acknowledgement; an unconfirmed
+  request can only be deliberately resubmitted using its original key/input. A lost
+  reply is reconciled with GET status. Late metadata GETs cannot overwrite saved
+  edits, and status outside the latest history page cannot leave the UI busy forever.
+- Calendar behavior remains local with stable message batch IDs. No Save Draft,
+  historical import, bounded context, new DB contract, DDL, backend change or provider
+  policy change was added during J.4. README/authorization/testing documentation now
+  distinguish this feature-branch behavior from deployment/live acceptance.
+
+Observed verification (final behavior):
+
+| Command/check | Result |
+| --- | --- |
+| `npm --prefix client test` | **93 passed**, 0 failed/skipped; 24 new persistence/serialization/actual JSX-rendering cases |
+| `npm --prefix client run test:chat-browser` | **Passed**, actual headless Chrome against isolated synthetic transport; no Flask/Auth/Neon/provider |
+| `npm --prefix client run lint` | Exit 0; only the three existing Fast Refresh warnings |
+| `npm --prefix client run build` | Exit 0; 2217 modules; existing large-chunk warning |
+| `.\server\venv\Scripts\python.exe -m pytest server/tests -q` | **481 passed, 32 skipped**, 10.31s; live integration stays opt-in |
+| `git diff --check` and untracked-file whitespace check | Passed; existing CRLF normalization notices only |
+
+The synthetic Chrome test is reproducible via `client/scripts/test-chat-browser.mjs`
+and `chatBrowserHarness.js`, using the frozen six-response fixture catalog and an
+isolated temporary profile. It exercises actual React interactions for send/reload,
+shortening/previous versions, archive/restore, nested image/video generation and
+revisions/reload, clarification selections/reload, lost reply after synthetic commit,
+uncertainty with no automatic redispatch, explicit close, byte-preserved scoped and
+unscoped legacy storage, read-only history, >30 conversations, >50 history rows,
+account switching, viewer controls and 390px layout. It also runs under React StrictMode.
+Desktop/mobile screenshots were captured in the OS temp directory and inspected;
+these are synthetic UI evidence, not paid PNG-export or full long-footer acceptance.
+Edge's debugging endpoint did not initialize reliably on this machine; Chrome
+completed the checks. The runner prefers Chrome and supports `STEP_J_BROWSER`.
+
+No new dependency or lockfile change was required. Browser/network failures during
+test-runner development were resolved before the final passing run; unit coverage
+also caught/fixed preservation of out-of-page operation status, stale metadata reads,
+persona-independent shortening and Unicode-safe automatic titles.
+
+No Neon access/writes, migrations, paid calls, commits, pushes, merges or deployment
+were performed during J.4. Existing J.2/J.3 synthetic SQL evidence remains above;
+it was not rerun because this phase changed only frontend/docs and test harnesses.
+
 ## Remaining verification and approval gates
 
-- J.3-J.5/J.7 implementation has not started; J.6 Save Draft remains deferred.
+- J.4 is ready for owner review. J.5/J.7 implementation has not started; J.6 Save Draft remains deferred.
 - Owner metadata supports current schema/grants and five targeted live SQL tests
   passed on the configured connection. Continue verifying the intended branch before
   future live writes; database name alone cannot identify a Neon branch.
-- Extend real SQL coverage for J.3 ai_run/provider orchestration and later recovery
-  paths; J.2's five tested cases are not blanket acceptance of future implementations.
+- J.3 adds seven real SQL orchestration cases with a fake provider; these do not
+  establish paid-provider timing, billing guarantees or all future recovery paths.
 - Live Auth/multi-account/two-browser acceptance remains unverified.
 - Actual server/proxy timeout compatibility with synchronous calls is unverified.
 - Paid provider usage/output/cache/export checks need separate explicit approval.
@@ -199,11 +359,14 @@ the owner to repeat them. Preserve phase gates and separately scoped live/paid a
 
 ## Next checkpoint / resumption
 
-Review J.2 implementation, metadata results and the five passing live SQL checks.
-No need to repeat the successful commands or set a persistent test URL just for
-this completed run. No UI clicks or paid calls are needed to repeat J.2's SQL tests.
+Review J.4 and its updated testing guide. No additional Neon SQL or manual repetition
+of automated checks is required before approving J.5. The normal UI now uses paid
+provider-backed operations when configured; use the synthetic browser command for
+free UI tests, or existing saved conversations for read/metadata review.
 
-After owner approval, start J.3 only on this branch. Recheck refs/worktree; preserve
-the expected J.2 changes. Review extraction parity before generation orchestration.
-Do not begin frontend changes or paid smoke automatically. Keep subsequent phase
-evidence here rather than scattering status across historical handoffs.
+After explicit owner approval, start J.5 only. Preserve expected uncommitted J.3/J.4
+changes and verify refs/worktree. Implement the authorized bounded same-chat
+projection and audit metadata using fake provider request fixtures; do not introduce
+cross-chat memory, DDL, live fixture writes or paid calls implicitly. J.7 still needs
+controlled real identity/two-browser, runtime-timeout and any approved paid/export
+acceptance. Keep all later evidence in this record.

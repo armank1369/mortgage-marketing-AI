@@ -5,9 +5,8 @@ import {
   SignedIn,
 } from '@neondatabase/neon-js/auth/react'
 
-import { PreferencesProvider, usePreferences } from './context/PreferencesContext'
+import { PreferencesProvider } from './context/PreferencesContext'
 import { CalendarProvider } from './context/CalendarContext'
-import PreferenceSetup from './pages/PreferenceSetup'
 import ChatPage from './pages/ChatPage'
 import AuthPage from './pages/AuthPage'
 import AuthDebugPage from './pages/AuthDebugPage'
@@ -16,12 +15,6 @@ import WorkspaceGate from './components/WorkspaceGate'
 import WorkspaceDataProvider from './context/WorkspaceDataProvider.jsx'
 
 function AppContent() {
-  const { preferences } = usePreferences()
-
-  if (!preferences) {
-    return <PreferenceSetup />
-  }
-
   return <ChatPage />
 }
 

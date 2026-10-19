@@ -205,7 +205,7 @@ function PlatformBreakdownBody({ platforms }) {
   )
 }
 
-function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
+function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated, durable = false, onGenerateVideo, imageProps, disabled = false, readOnly = false }) {
   const [copied, setCopied] = useState(false)
   const scope = useBrowserScope()
   const pendingRef = useRef(null)
@@ -219,6 +219,8 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
   const details = video?.quick_details || {}
 
   const generateVideo = async () => {
+    if (disabled || readOnly) return
+    if (durable) { if (onGenerateVideo) await onGenerateVideo(); return }
     if (pendingRef.current) return
     const pending = new AbortController()
     pendingRef.current = pending
@@ -307,7 +309,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
             <button
               type="button"
               onClick={generateVideo}
-              disabled={generating}
+              disabled={generating || disabled || readOnly}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {generating && (
@@ -360,6 +362,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
 
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100">
             <span className="text-[11px] text-slate-400">Draft ready</span>
+            {durable && !readOnly && <button type="button" disabled={disabled} onClick={generateVideo} className="text-xs text-blue-700 disabled:opacity-40">Regenerate video</button>}
             <button
               type="button"
               onClick={handleCopy}
@@ -387,13 +390,14 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
           platform={entry.platform}
           persona={persona}
           nmls={nmls}
+          {...imageProps}
         />
       )}
     </div>
   )
 }
 
-function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
+function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated, entryPropsFor }) {
   if (!calendar || calendar.length === 0) {
     return <p className="text-xs text-slate-400">No calendar entries returned.</p>
   }
@@ -405,14 +409,15 @@ function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
           entry={entry}
           nmls={nmls}
           persona={persona}
-          onVideoGenerated={(video) => onVideoGenerated(i, video)}
+          onVideoGenerated={(video) => onVideoGenerated?.(i, video)}
+          {...entryPropsFor?.(i)}
         />
       ))}
     </div>
   )
 }
 
-export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId, complianceFlags = [] }) {
+export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId, complianceFlags = [], entryPropsFor }) {
   if (!data) return null
   const { content_strategy, platform_breakdown, content_calendar } = data
   const scriptedCount = (content_calendar || []).filter((entry) => entry.video).length
@@ -446,6 +451,7 @@ export default function CampaignResponse({ data, nmls, persona, onVideoGenerated
           nmls={nmls}
           persona={persona}
           onVideoGenerated={onVideoGenerated}
+          entryPropsFor={entryPropsFor}
         />
       </Section>
     </div>

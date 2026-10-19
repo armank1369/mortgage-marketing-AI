@@ -25,7 +25,7 @@ Stored workspace selection is a preference, not permission.
 | GET /api/chat/sessions?version=2 | JWT + membership | chat:read | Paginated own active/archive list; never another creator's rows |
 | GET /api/chat/sessions/<id>?version=2 | JWT + membership | chat:read | Own active or archived session, full typed fields, bounded message page |
 | PATCH /api/chat/sessions/<id> | JWT + membership | chat:write | Own session; If-Match required; archive blocked while unresolved |
-| POST /api/chat/sessions/<id>/operations | JWT + membership | chat:write; also ai:generate for provider actions | J.2 exposes deterministic text shortening. Provider actions verify ownership then return 501 until J.3; no claim/call |
+| POST /api/chat/sessions/<id>/operations | JWT + membership | chat:write; also ai:generate for provider actions | J.3 durable generation/replay: creator-only source projection, Step I context, committed claim/run before call, atomic response/final-run completion. Shortening remains deterministic. |
 | GET /api/chat/sessions/<id>/operations/<key> | JWT + membership | chat:read | Own session status; never dispatches or exposes claim tokens |
 | POST /api/chat/sessions/<id>/operations/<key>/abandon | JWT + membership | chat:write | Own uncertain operation; explicit boolean acknowledgement; old completion fenced |
 | POST /api/chat | JWT + membership | ai:generate | Active persona UUID and required identity from selected workspace; no global history/preferences |
@@ -56,6 +56,13 @@ grant configuration edits or access to another creator. All J.2 repository write
 refresh membership/role under a short membership lock before locking the session.
 Legacy initial-message creation now also refreshes its `chat:create` permission.
 Private chat responses, including errors, use `Cache-Control: no-store`.
+J.3 rechecks current capabilities and claim fencing before every provider stage and
+completion. Same-key replay precedes generation configuration lookup. Responses use
+200 for success, 202 for already-running, 429 for known provider rate-limit failure,
+502 for other known generation failures, 503 for uncertain outcomes, and 409 for an
+abandoned operation. GET status stays read-only/200. Uncertain outcomes require a new
+explicitly acknowledged attempt; SDK retries are disabled. Old stateless endpoints
+keep their capability/response contracts and do not persist conversation output.
 
 Step I brand PUT and persona POST/PUT enforce `config:write`; read-only UI controls
 mirror that capability, with the server authoritative on every request. Missing
@@ -86,12 +93,12 @@ not provide soft revocation when no lifecycle mechanism exists. Live inspection 
 migration execution remain outstanding. See [approved design](STEP_G_REVOCATION_PROPOSAL.md).
 Already-authorized in-flight requests are not automatically canceled.
 
-Brand profile/persona definitions persist in Neon; normal React chats and each chat's `generationPersonaId` persist locally under user/workspace-scoped browser keys. This is not Step J conversation synchronization.
-Old unscoped browser records remain untouched and hidden pending an approved migration.
+On the Step J feature branch, normal React chats use creator-private session/operation APIs. The sidebar role controls are advisory; every request still verifies membership, capabilities and creator ownership on the server. Account/workspace changes abort local waiting and reject stale responses.
+Scoped legacy chats have a separate read-only Local history view. Old scoped/unscoped keys remain untouched; unscoped records remain hidden. Pending operation identifiers/input use a new account/workspace namespace, with no automatic POST replay or historical import. Calendar remains browser-local.
 Browser namespacing is not encryption or protection from someone controlling the device.
 
 ## Remaining acceptance
 
 Local synthetic tests cover route guards, signed JWT rejection, capabilities, selection,
 private repository predicates, attribution, generation response compatibility, and browser
-storage isolation. The developer confirmed basic signed-in use and shared brand/persona persistence across browsers on the same account after the hotfix. This does not establish the entire live role matrix, multi-workspace isolation or revocation lifecycle. Those checks, deployment review, invitations, historical migration and cross-device chat persistence remain separately tracked. See the Step I acceptance matrix for precise evidence.
+storage isolation. J.4 adds real Chrome UI checks against a synthetic transport, including account changes and viewer controls; these do not establish live Auth isolation. The developer confirmed basic signed-in use and shared brand/persona persistence across browsers on the same account after the hotfix. The live role matrix, multi-workspace isolation, revocation lifecycle, two-browser chat acceptance, deployment review, invitations and historical migration remain separately tracked. See the Step I acceptance matrix and Step J implementation record for precise evidence.

@@ -22,12 +22,13 @@ function resolvePlatformLabel(platform) {
   return PLATFORM_LABELS[key] || platform || 'Instagram'
 }
 
-export default function SocialImageGenerator({ title, script, platform, persona }) {
+export default function SocialImageGenerator({ title, script, platform, persona, durable = false, savedResult = null, onGenerate, disabled = false, readOnly = false }) {
   const scope = useBrowserScope()
   const pendingRef = useRef(null)
   useEffect(() => () => pendingRef.current?.abort(), [scope])
   const platformLabel = resolvePlatformLabel(platform)
-  const [result, setResult] = useState(null)
+  const [localResult, setResult] = useState(null)
+  const result = durable ? savedResult : localResult
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState(false)
@@ -49,6 +50,8 @@ export default function SocialImageGenerator({ title, script, platform, persona 
   }, [result])
 
   const generate = async () => {
+    if (disabled || readOnly) return
+    if (durable) { if (onGenerate) await onGenerate(); return }
     if (pendingRef.current) return
     const pending = new AbortController()
     pendingRef.current = pending
@@ -113,7 +116,7 @@ export default function SocialImageGenerator({ title, script, platform, persona 
         <button
           type="button"
           onClick={generate}
-          disabled={loading}
+          disabled={loading || disabled || readOnly}
           className="w-full flex flex-col items-center justify-center gap-2 border border-dashed border-slate-300 rounded-lg py-8 text-slate-400 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/40 transition-colors disabled:opacity-60"
         >
           {loading ? (
@@ -128,7 +131,7 @@ export default function SocialImageGenerator({ title, script, platform, persona 
             </>
           )}
         </button>
-      ) : (
+      ) : !TemplateComponent || !dims ? <p role="status">Unsupported saved image format. Its specification remains preserved.</p> : (
         <div>
           <div
             ref={previewBoxRef}
@@ -145,7 +148,7 @@ export default function SocialImageGenerator({ title, script, platform, persona 
             <button
               type="button"
               onClick={generate}
-              disabled={loading}
+              disabled={loading || disabled || readOnly}
               className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-60"
             >
               {loading ? 'Regenerating…' : '↻ Regenerate'}

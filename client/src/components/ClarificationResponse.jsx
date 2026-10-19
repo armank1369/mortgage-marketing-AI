@@ -53,18 +53,21 @@ function emptyAnswer(question) {
   return { selected: isSingleType(question) ? '' : [], custom: '' }
 }
 
-export default function ClarificationResponse({ data, submitted, onSubmit }) {
+export default function ClarificationResponse({ data, submitted, onSubmit, savedAnswers = [], disabled = false }) {
   const questions = data?.questions || []
-  const [answers, setAnswers] = useState(() => questions.map(emptyAnswer))
+  const answerKey = JSON.stringify([questions, savedAnswers])
+  const restore = () => questions.map((question, index) => {
+    const saved = savedAnswers.find((answer) => answer.question_index === index)
+    return saved ? { selected: isSingleType(question) ? saved.selected[0] || '' : saved.selected, custom: saved.custom } : emptyAnswer(question)
+  })
+  const [answers, setAnswers] = useState(restore)
 
-  // ChatPage keys messages by array index, so an earlier message being removed (e.g. via
-  // "Regenerate") shifts every later message's index down by one — React then reuses this
-  // component instance for a different clarification round instead of remounting it, leaving
-  // `answers` sized for the old question set. Resync whenever the underlying data changes.
+  // Stable question/answer content preserves unsent selections across status polls,
+  // while committed answer records restore the actual selections after reload.
   useEffect(() => {
-    setAnswers(questions.map(emptyAnswer))
+    setAnswers(restore())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [answerKey])
 
   if (questions.length === 0) return null
 
@@ -101,7 +104,10 @@ export default function ClarificationResponse({ data, submitted, onSubmit }) {
       const answerText = parts.length > 0 ? parts.join(', ') : 'No preference — use your judgment'
       return `- ${q.question}: ${answerText}`
     })
-    onSubmit(lines.join('\n'))
+    onSubmit(lines.join('\n'), questions.map((question, index) => {
+      const answer = answers[index] || emptyAnswer(question)
+      return { question_index: index, selected: Array.isArray(answer.selected) ? answer.selected : answer.selected ? [answer.selected] : [], custom: answer.custom.trim() }
+    }))
   }
 
   return (
@@ -121,7 +127,7 @@ export default function ClarificationResponse({ data, submitted, onSubmit }) {
               customText={answers[i]?.custom || ''}
               onSelectOption={(option) => selectOption(i, option)}
               onCustomChange={(value) => setCustom(i, value)}
-              disabled={submitted}
+              disabled={submitted || disabled}
             />
           ))}
         </div>
@@ -132,6 +138,7 @@ export default function ClarificationResponse({ data, submitted, onSubmit }) {
             <button
               type="button"
               onClick={handleContinue}
+              disabled={disabled}
               className="bg-lucent-navy hover:bg-lucent-navy-light text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
             >
               Continue

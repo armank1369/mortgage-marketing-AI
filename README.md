@@ -112,8 +112,8 @@ do not establish every role, output format or production deployment gate.
 
 ### Current Limitations
 
-- The normal ChatPage still uses browser localStorage.
-- Brand profiles and persona definitions are database-backed and visible across browsers with authorized access. Chats and per-chat generation-persona selections remain browser-local; they do not synchronize between devices.
+- On the Step J feature branch, ChatPage uses durable creator-private Neon conversations, linked revisions/media, pagination and archive/restore. Live Auth/two-browser acceptance remains pending; this is not a deployment claim.
+- Scoped legacy chats remain in a read-only Local history view. Calendar and unsent input remain local; no historical import or calendar synchronization is implemented.
 - Joseph's historical data has not yet been migrated.
 - Existing SQLite data remains stored; authenticated V2 no longer uses it.
 - Live integration acceptance for the new authorization boundaries remains pending.
@@ -125,16 +125,18 @@ do not establish every role, output format or production deployment gate.
 
 ## 4. Understanding the Current Architecture
 
-The current application combines shared workspace configuration with browser-local chat history.
+The Step J feature branch combines shared workspace configuration with creator-private durable chat history. See [Step J evidence](docs/STEP_J_IMPLEMENTATION_AND_TESTING.md) for tested and unverified boundaries.
 
 ### Existing Chat Experience
 
 ```text
 React ChatPage
     |
-    +-- User/workspace-scoped browser localStorage for chat history
+    +-- Scoped browser pending-operation recovery and read-only local history
     |
-    +-- Authenticated, capability-protected Flask generation routes
+    +-- Authenticated, capability/creator-protected Flask session/operation APIs
+            |
+            +-- Neon sessions/messages and linked media specifications
             |
             +-- Authorized workspace brand profile and selected active persona from Neon
 ```
@@ -159,7 +161,7 @@ Neon PostgreSQL
 
 The second path has been implemented and tested.
 
-Brand/persona Settings and generation context now use this data layer. Normal ChatPage history is still local; connecting conversation persistence and any reviewed historical migration belongs to Step J.
+Brand/persona Settings and generation context use this data layer. Step J.2–J.4 connect normal ChatPage persistence on the feature branch. Bounded context (J.5), final live acceptance (J.7) and any separately approved historical migration remain outstanding; Save Draft is deferred.
 
 ---
 
@@ -395,8 +397,8 @@ Recommended next phases:
 1. Complete Step G live schema, revocation, Auth, and browser acceptance.
 2. Plan workspace invitation/onboarding under the approved creator-private policy.
 3. Review/finalize the Step I branch using its current acceptance report; brand/persona UI integration is implemented.
-4. Implement Step J conversation persistence, then separately plan/validate any historical-data migration.
-5. Test cross-device chat access after that persistence work; shared brand/persona configuration is already implemented and user-confirmed.
+4. Review Step J.4 UI/persistence, then approve J.5 bounded context; separately plan any historical-data migration.
+5. Complete J.7 live cross-device chat acceptance; shared brand/persona configuration is already implemented and user-confirmed.
 6. Consider long-term memory/retrieval only under a separately scoped phase.
 
 Step F is the foundation that supports these improvements.

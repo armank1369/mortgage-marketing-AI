@@ -250,7 +250,7 @@ def abandon_operation(workspace_id, session_id, member_id, key, *, acknowledged)
     return result
 
 
-def _source(cur, session_id, fields):
+def _source(cur, session_id, fields, *, excluding_request_id=None):
     if fields["action"] == "send":
         return None
     source = _message(cur, session_id, fields["source_message_id"])
@@ -294,8 +294,9 @@ def _source(cur, session_id, fields):
             raise ValidationError("Combined clarification input exceeds 16000 characters.")
         cur.execute("SELECT id FROM public.chat_message WHERE session_id=%s AND source_message_id=%s "
                     "AND role='user' AND kind='operation' AND structured_data->'input'->>'action'='clarify' "
-                    "AND structured_data->'operation'->>'state' IN ('running','unknown','succeeded') LIMIT 1",
-                    (session_id, source["id"]))
+                    "AND structured_data->'operation'->>'state' IN ('running','unknown','succeeded') "
+                    + ("AND id<>%s " if excluding_request_id else "") + "LIMIT 1",
+                    (session_id, source["id"], excluding_request_id) if excluding_request_id else (session_id, source["id"]))
         if cur.fetchone():
             raise ChatConflictError("clarification_already_submitted", "These questions already have submitted answers.")
     if not source.get("request_message_id"):
@@ -309,7 +310,7 @@ def _source(cur, session_id, fields):
     return source
 
 
-def _claim_locked(cur, workspace_id, session_id, member_id, fields):
+def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generation_input=None, persona_snapshot=None):
     old = _request(cur, session_id, fields["operation_key"])
     digest = input_hash(fields)
     if old:
@@ -329,11 +330,19 @@ def _claim_locked(cur, workspace_id, session_id, member_id, fields):
     source = _source(cur, session_id, fields)
     snapshot = (active_persona(cur, workspace_id, fields["persona_id"]) if fields["action"] in PROVIDER_ACTIONS
                 else deepcopy(source["structured_data"].get("persona_snapshot")))
+    if persona_snapshot is not None:
+        if (not isinstance(persona_snapshot, dict) or set(persona_snapshot) != {"id", "name", "slug"}
+                or persona_snapshot["id"] != fields.get("persona_id")
+                or any(not isinstance(v, str) or not v for v in persona_snapshot.values())):
+            raise ValidationError("Invalid server persona snapshot.")
+        snapshot = deepcopy(persona_snapshot)
     now = datetime.now(timezone.utc).isoformat()
     envelope = {"schema_version": 1, "input": fields, "input_hash": digest,
                 "persona_snapshot": snapshot, "operation": {
                     "state": "running", "claim_token": str(uuid4()), "started_at": now,
                     "last_progress_at": now, "response_message_id": None, "safe_error_code": None}}
+    if generation_input is not None:
+        envelope["generation_input"] = deepcopy(generation_input)
     if source:
         envelope["original_request_id"] = (source["structured_data"].get("original_request_id") or
                                            str(source["request_message_id"]))
@@ -348,7 +357,7 @@ def _claim_locked(cur, workspace_id, session_id, member_id, fields):
     return row, True
 
 
-def claim_operation(workspace_id, session_id, member_id, data):
+def claim_operation(workspace_id, session_id, member_id, data, *, generation_input=None, persona_snapshot=None):
     """Internal only. J.3 must resolve Step I configuration before a NEW provider claim.
 
     Only the caller receiving created=True may dispatch, after this function commits.
@@ -359,7 +368,8 @@ def claim_operation(workspace_id, session_id, member_id, data):
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, *capabilities)
         owned_session(cur, workspace_id, session_id, member_id, lock=True)
-        row, created = _claim_locked(cur, workspace_id, session_id, member_id, fields)
+        row, created = _claim_locked(cur, workspace_id, session_id, member_id, fields,
+                                    generation_input=generation_input, persona_snapshot=persona_snapshot)
         result = {"created": created, "request": deepcopy(row), "status": _status(cur, row)}
     return result  # Contains private claim token: service use only, never jsonify.
 

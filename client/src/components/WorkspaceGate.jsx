@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BrowserScopeContext } from '../context/BrowserScope.js'
+import { WorkspaceAccessContext } from '../context/WorkspaceAccess.js'
 import { authClient } from '../lib/neon/neon.js'
 import { workspaceApi, getWorkspaces, onWorkspaceAccessError, apiErrorMessage } from '../lib/api.js'
 
@@ -68,7 +69,9 @@ export default function WorkspaceGate({ children }) {
       )}
       {state.selected && (
         <BrowserScopeContext.Provider key={JSON.stringify([userId, state.selected])} value={JSON.stringify([userId, state.selected])}>
-          {children}
+          <WorkspaceAccessContext.Provider value={{ role: state.workspaces.find((row) => row.workspace_id === state.selected)?.role }}>
+            {children}
+          </WorkspaceAccessContext.Provider>
         </BrowserScopeContext.Provider>
       )}
     </>

@@ -3,7 +3,8 @@
 Status: plan approved by the owner's explicit implementation request on 2026-10-18
 (America/Los_Angeles). Execution remains phase-gated. J.1 was completed and the
 owner subsequently approved proceeding with J.2, including test guidance and
-database preparation. Review J.2 before J.3. Earlier DRAFT/UNAPPROVED labels in the quoted
+database preparation, followed by explicit approval to implement J.3 and J.4.
+Stop after J.4 for review before J.5. Earlier DRAFT/UNAPPROVED labels in the quoted
 proposal are superseded by that request, not by automatic approval of later gates.
 
 Baseline: `0f59617be5b1eb1c7487f523a48ed78a4c58767c`.
@@ -76,12 +77,24 @@ indistinguishable 404; stale revision/busy/key-body mismatch: 409 with stable co
 stale metadata: 412; missing precondition: 428; outages: sanitized 503.
 Private conversation/status responses: `Cache-Control: no-store`.
 
-J.2 phase boundary: the operation HTTP endpoint implements `shorten`; provider-backed
-actions return 501 `durable_generation_not_ready` after guards/ownership, without
-claiming or dispatching. Internal claim/completion primitives accept synthetic
-post-compliance outputs in tests. J.3 will supply actual provider orchestration.
+Historical J.2 boundary: provider actions returned 501 without claiming/dispatching.
+J.3 replaces that temporary boundary with actual durable provider orchestration.
+Manual provider-backed POSTs now incur paid calls when configured; tests inject a
+fake provider. GET history/status and deterministic shortening do not invoke AI.
 Internal `original_request_id` provenance in v1 envelopes preserves the original
 user task across revision chains; it is checked against the same session.
+J.3 also stores server-derived `generation_input` in existing request JSONB so
+regeneration preserves clarification answers and media uses its authorized stored
+publication source. Historical persona snapshots reflect the resolved context used
+for generation, while active-persona validation is repeated at claim time.
+
+POST results: 200 succeeded; 202 running; 409 abandoned; 429 known rate limit;
+502 other known generation failure; 503 uncertain outcome. The response contains
+state, safe_error_code and Location for status reconciliation. GET status remains
+read-only/200. Empty/truncated or empty-post output fails rather than becoming a
+successful saved draft. Existing compliant text fallback remains for malformed
+campaign JSON. Persistence may retry the same in-memory completion twice; it never
+repeats the provider to repair a failed save.
 
 ## 3. Authorization and operation lifecycle
 

@@ -5,7 +5,7 @@ import SocialImageGenerator from './socialImage/SocialImageGenerator'
 import { useCalendar } from '../context/CalendarContext'
 import { bestPostingTime } from '../utils/postingTimes'
 
-function PostCard({ post, nmls, persona, batchId, complianceFlags }) {
+function PostCard({ post, nmls, persona, batchId, complianceFlags, imageProps }) {
   const { entries, upsertEntries, isBatchSaved } = useCalendar()
   const saved = isBatchSaved(batchId)
   // This post's own previously-saved entry (if any) is excluded so re-opening the picker on an
@@ -75,13 +75,14 @@ function PostCard({ post, nmls, persona, batchId, complianceFlags }) {
           platform={post.platform}
           persona={persona}
           nmls={nmls}
+          {...imageProps}
         />
       )}
     </ContentBriefCard>
   )
 }
 
-export default function PostsResponse({ data, nmls, persona, batchId, complianceFlags = [] }) {
+export default function PostsResponse({ data, nmls, persona, batchId, complianceFlags = [], imagePropsFor = () => ({}) }) {
   const posts = data?.posts || []
   if (posts.length === 0) return null
 
@@ -95,7 +96,7 @@ export default function PostsResponse({ data, nmls, persona, batchId, compliance
         {data?.intro && <p className="text-sm text-slate-600 mb-4 leading-relaxed">{data.intro}</p>}
         <div className="space-y-4">
           {posts.map((post, i) => (
-            <PostCard key={i} post={post} nmls={nmls} persona={persona} batchId={`${batchId}-${i}`} complianceFlags={complianceFlags} />
+            <PostCard key={i} post={post} nmls={nmls} persona={persona} batchId={`${batchId}-${i}`} complianceFlags={complianceFlags} imageProps={imagePropsFor(i)} />
           ))}
         </div>
       </Section>

@@ -1,13 +1,14 @@
-"""HTTP adapters for J.2. Provider-backed operations remain disabled until J.3."""
-from flask import Blueprint, jsonify, request, g
+"""Creator-private durable chat HTTP adapters."""
+from flask import Blueprint, jsonify, request, g, current_app
 
 from auth.workspace_context import require_workspace
 from auth.permissions import require_capability, check_capability
-from errors import ValidationError, GenerationPersistenceNotReadyError
+from errors import ValidationError
 from repositories import chat_persistence_repository as chats
 from services.chat_contract import (create_fields, patch_fields, operation_fields, only,
                                     page_limit, decode_cursor, MAX_BODY_BYTES, PROVIDER_ACTIONS)
 from validation import json_object, uuid_string
+from services.generation_operations import execute_operation, response_status
 
 blueprint = Blueprint("durable_chats", __name__)
 
@@ -78,12 +79,14 @@ def submit(session_id):
     session_id = uuid_string(session_id, "session_id")
     if fields["action"] in PROVIDER_ACTIONS:
         check_capability(g.workspace_context, "ai:generate")
-        # J.2 must not leave a running claim without an implemented dispatcher.
-        # Verify private ownership, then report the explicit phase boundary.
-        chats.get_session(g.workspace_id, session_id, member_id(), limit=1)
-        raise GenerationPersistenceNotReadyError()
-    result = chats.shorten_operation(g.workspace_id, session_id, member_id(), fields)
-    return jsonify(result), 200 if result["state"] == "succeeded" else 202
+        result = execute_operation(g.workspace_id, session_id, member_id(), fields,
+                                   current_app.extensions["generation_runtime"])
+    else:
+        result = chats.shorten_operation(g.workspace_id, session_id, member_id(), fields)
+    response = jsonify(result)
+    response.status_code = response_status(result)
+    response.headers["Location"] = f"/api/chat/sessions/{session_id}/operations/{fields['operation_key']}"
+    return response
 
 
 @blueprint.route("/api/chat/sessions/<session_id>/operations/<operation_key>", methods=["GET"])
