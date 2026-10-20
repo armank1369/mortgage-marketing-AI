@@ -41,6 +41,29 @@ is available at the bottom. The existing Archive and Local history views remain
 accessible. Setup offers Back to chats without creating or changing a conversation.
 
 
+## Plain-language brand inputs
+
+Keywords, catchphrases, banned words and values now use tag inputs. Enter or Add
+commits a complete word/phrase to the draft; its remove button deletes that tag.
+Commas stay part of a phrase. Duplicate additions are ignored without changing
+existing saved entries. Limits remain 40 items and 200 Unicode characters per
+item, with visible counts and plain-language errors. Core values use the same
+control in the persona guidelines form.
+
+Writing examples use separate editable sample cards and a New writing example
+field. Enter adds a sample; Shift+Enter inserts a paragraph break. Additions are
+serialized automatically. Existing arrays of text or objects and object-shaped
+records retain their format and unrelated metadata. Unfamiliar saved structures
+are displayed read-only as labeled content; no user needs to edit syntax to keep
+or remove them. No automatic flattening or replacement occurs.
+
+Enter never submits either configuration form. The existing Save brand profile /
+Set Brand Guidelines action persists the draft, including any text still awaiting
+Enter, so clicking Save cannot silently lose the last phrase/example. Failed saves
+retain the draft. This changes no database schema or endpoint: word lists keep
+string-array payloads and writing examples keep their existing JSON-compatible
+payloads. No live SQL inspection or migration is needed.
+
 ## Feature parity and intentional differences
 
 | Presentation-era behavior / source | Current implementation / storage | Patch outcome |
@@ -142,10 +165,10 @@ Final local checks:
 | Command | Result |
 | --- | --- |
 | `.\server\venv\Scripts\python.exe -m pytest server/tests -q` | 521 passed, 36 skipped (opt-in integration cases) |
-| `npm --prefix client test` | 106 passed |
+| `npm --prefix client test` | 112 passed |
 | `npm --prefix client run lint` | Passed; three existing Fast Refresh warnings in unchanged components |
 | `npm --prefix client run build` | Passed; existing large-bundle advisory |
-| `npm --prefix client run test:chat-browser` | Passed, including persona creation, numbered choices, slider keyboard/drag bounds, partial-save recovery, stacked navigation, configuration round trips, custom-key preservation, JSON export and 390px layout |
+| `npm --prefix client run test:chat-browser` | Passed, including tag Enter/add/remove/deduplication/limits, pending-text saves, writing-sample editing, read-only controls, persona creation, numbered choices, slider bounds, partial-save recovery, stacked navigation, JSON export and 390px layout |
 | `git diff --check` | Passed |
 
 Backend tests

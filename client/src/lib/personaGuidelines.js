@@ -19,7 +19,7 @@ export function validAgeRange(value) {
 }
 export function guidelinesDraft(persona, brand) {
   const audience = persona.audience_profile || {}
-  return { coreValues: (brand?.values || []).join('\n'), tone: { ...brand?.tone },
+  return { coreValues: [...(brand?.values || [])], tone: { ...brand?.tone },
     audienceRaw: JSON.stringify(audience, null, 2), guidance: persona.prompt_guidance || '',
     audienceLines: Object.fromEntries(AUDIENCE_FIELDS.map(([key]) => [key, Array.isArray(audience[key]) ? audience[key].join('\n') : ''])) }
 }
@@ -29,7 +29,7 @@ export function guidelinePatches(persona, brand, draft) {
   const personaPatch = {}, brandPatch = {}
   if (JSON.stringify(audience) !== JSON.stringify(persona.audience_profile || {})) personaPatch.audience_profile = audience
   if (draft.guidance !== (persona.prompt_guidance || '')) personaPatch.prompt_guidance = draft.guidance
-  if (draft.coreValues !== (brand?.values || []).join('\n')) brandPatch.values = draft.coreValues.split('\n').map((line) => line.trim()).filter(Boolean)
+  if (JSON.stringify(draft.coreValues) !== JSON.stringify(brand?.values || [])) brandPatch.values = draft.coreValues
   if (JSON.stringify(draft.tone) !== JSON.stringify(brand?.tone || {})) brandPatch.tone = draft.tone
   return { personaPatch: validatePersonaFields(personaPatch), brandPatch: validateBrandFields(brandPatch) }
 }

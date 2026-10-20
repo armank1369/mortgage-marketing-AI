@@ -31,7 +31,7 @@ test('legacy audience controls round-trip through current API fields while prese
 test('number choices and core values patch shared brand only without changing voice or identity', () => {
   const draft = guidelinesDraft(persona, brand)
   draft.tone = { ...draft.tone, professional: 5, serious: 3 }
-  draft.coreValues = 'Transparency\nAccuracy'
+  draft.coreValues = ['Transparency', 'Accuracy']
   const { personaPatch, brandPatch } = guidelinePatches(persona, brand, draft)
   assert.deepEqual(personaPatch, {})
   assert.deepEqual(brandPatch.values, ['Transparency', 'Accuracy'])

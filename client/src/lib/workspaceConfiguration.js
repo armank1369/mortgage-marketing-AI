@@ -60,7 +60,7 @@ export function validateBrandFields(fields) {
   const result = {}
   for (const [key, value] of Object.entries(fields)) {
     if (['values', 'keywords', 'catchphrases', 'banned_words'].includes(key)) {
-      if (!Array.isArray(value) || value.length > 40) throw new Error('Use at most 40 lines, with 200 characters per line.')
+      if (!Array.isArray(value) || value.length > 40) throw new Error('Use at most 40 items, with 200 characters per item.')
       result[key] = value.map((item) => text(item, 200)).filter(Boolean)
     } else if (['tone', 'blog_examples'].includes(key)) {
       result[key] = boundedJson(value, key === 'tone' ? object : (item) => object(item) || Array.isArray(item), key === 'tone' ? 4000 : 8000)

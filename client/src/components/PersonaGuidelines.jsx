@@ -10,6 +10,8 @@ import { INCOME_OPTIONS, EDUCATION_OPTIONS, personaInitials, parseAudience, vali
 import BrandSetupSection from './BrandSetupSection.jsx'
 import ToneScales from './ToneScales.jsx'
 import DualRangeSlider from './DualRangeSlider.jsx'
+import TagInput from './TagInput.jsx'
+import { addTag } from '../lib/brandInputs.js'
 
 const fieldClass = 'w-full rounded-lg border border-slate-300 bg-slate-50/50 px-3 py-2.5 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-700 disabled:text-slate-500'
 
@@ -17,6 +19,7 @@ export default function PersonaGuidelines({ persona, onBack, onDone, startChat =
   const scope = useBrowserScope()
   const { brand, setBrand, setPersonas, canWrite, error: configError } = useWorkspaceData()
   const [draft, setDraft] = useState(() => guidelinesDraft(persona, brand))
+  const [pendingValue, setPendingValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const controller = useRef(null)
@@ -43,7 +46,7 @@ export default function PersonaGuidelines({ persona, onBack, onDone, startChat =
     setError('')
     let audienceSaved = false
     try {
-      const { personaPatch, brandPatch } = guidelinePatches(persona, brand, draft)
+      const { personaPatch, brandPatch } = guidelinePatches(persona, brand, { ...draft, coreValues: addTag(draft.coreValues, pendingValue, 'Core values') })
       if (Object.keys(brandPatch).length && !brand?.exists) throw Error('A workspace brand profile must be provisioned before saving shared brand settings.')
       const pending = new AbortController(); controller.current = pending; setSaving(true)
       let savedPersona = persona
@@ -74,9 +77,8 @@ export default function PersonaGuidelines({ persona, onBack, onDone, startChat =
     {!canWrite && <p className="mb-5 text-xs text-slate-500">Your role can review these guidelines. An owner or administrator can edit them.</p>}
     <fieldset disabled={disabled}>
       <BrandSetupSection number="01" title="Brand Voice" note="Shared across all personas in this workspace.">
-        <label className="block text-sm font-semibold text-slate-900" htmlFor="guidelines-values">Core values</label>
-        <p className="mb-3 mt-1 text-xs text-slate-500">What principles guide everything your brand does? Enter one value per line.</p>
-        <textarea id="guidelines-values" aria-label="Core values" rows={4} maxLength={8040} className={fieldClass} value={draft.coreValues} placeholder="e.g. Transparency, accuracy, responsiveness…" disabled={!brand?.exists || disabled} onChange={(event) => setDraft({ ...draft, coreValues: event.target.value })} />
+        <p className="mb-3 text-xs text-slate-500">What principles guide everything your brand does?</p>
+        <TagInput label="Core values" value={draft.coreValues} pending={pendingValue} onPendingChange={setPendingValue} disabled={!brand?.exists || disabled} placeholder="e.g. Transparency" onChange={(value) => setDraft({ ...draft, coreValues: value })} />
       </BrandSetupSection>
       <BrandSetupSection number="02" title="Tone of Voice" note="Shared across all personas in this workspace.">
         <ToneScales value={draft.tone} disabled={disabled || !brand?.exists} onChange={(key, value) => { const tone = { ...draft.tone }; if (value === undefined) delete tone[key]; else tone[key] = value; setDraft({ ...draft, tone }) }} />
