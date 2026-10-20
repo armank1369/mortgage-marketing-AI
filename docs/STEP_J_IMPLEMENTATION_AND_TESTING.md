@@ -1,5 +1,7 @@
 # Step J implementation and testing record
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 Updated: 2026-10-18 (America/Los_Angeles).
 Contract: [STEP-J-v1](STEP_J_APPROVED_PLAN.md).
 Current phase: **J.5 implementation and J.7 automated finalization complete;

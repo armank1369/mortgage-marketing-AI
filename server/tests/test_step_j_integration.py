@@ -140,7 +140,7 @@ def test_real_explicit_uncertain_replacement_fences_old_worker(durable_session):
     assert repo.get_operation(wid, sid, mid, key)["state"] == "abandoned"
 
 
-def test_real_metadata_conflict_archive_restore_and_privacy(durable_session):
+def test_real_metadata_conflict_archive_restore_and_sharing(durable_session):
     wid, sid, mid, _, session = durable_session
     renamed = repo.patch_session(wid, sid, mid, {"title": "Renamed synthetic"}, session["etag"])
     with pytest.raises(PreconditionFailedError):
@@ -153,6 +153,33 @@ def test_real_metadata_conflict_archive_restore_and_privacy(durable_session):
         cur.execute("INSERT INTO public.workspace_member (workspace_id,auth_user_id,role) VALUES (%s,%s,'admin') RETURNING id",
                     (wid, "synthetic-step-j-" + uuid4().hex))
         admin = str(cur.fetchone()["id"])
-    with pytest.raises(NotFoundError):
-        repo.get_session(wid, sid, admin)
-    assert repo.list_sessions(wid, admin)["sessions"] == []
+    assert repo.get_session(wid, sid, admin)["created_by_member_id"] == mid
+    assert repo.list_sessions(wid, admin)["sessions"][0]["id"] == sid
+    current = repo.get_session(wid, sid, admin)
+    archived = repo.patch_session(wid, sid, admin, {"archived": True}, current["etag"])
+    assert not repo.list_sessions(wid, mid)["sessions"]
+    repo.patch_session(wid, sid, mid, {"archived": False}, archived["etag"])
+
+
+def test_real_different_members_compete_for_same_session_lock(durable_session, monkeypatch):
+    from threading import Lock
+    wid, sid, mid, persona, _ = durable_session
+    with get_db_cursor(commit=True) as cur:
+        cur.execute("INSERT INTO public.workspace_member (workspace_id,auth_user_id,role) VALUES (%s,%s,'member') RETURNING id",
+                    (wid, "synthetic-collaborator-" + uuid4().hex))
+        collaborator = str(cur.fetchone()["id"])
+    members, assignment = iter([mid, collaborator]), Lock()
+    def submit():
+        with assignment:
+            actor = next(members)
+        try:
+            claim = repo.claim_operation(wid, sid, actor, operation(persona))
+            return actor, claim["created"]
+        except ChatConflictError as error:
+            return actor, error.error_code
+    outcomes = parallel_connections(monkeypatch, submit)
+    assert {actor for actor, _ in outcomes} == {mid, collaborator}
+    assert sorted(str(outcome) for _, outcome in outcomes) == ["True", "operation_in_progress"]
+    messages = repo.get_session(wid, sid, collaborator)["messages"]
+    assert len(messages) == 1
+    assert messages[0]["author_member_id"] == next(actor for actor, outcome in outcomes if outcome is True)

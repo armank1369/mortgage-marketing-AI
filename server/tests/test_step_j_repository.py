@@ -69,16 +69,16 @@ class MemorySQL:
         elif q.startswith("select") and "from public.chat_session" in q:
             if "where id=%s" in q:
                 row = self.sessions.get(params[0])
-                if row and len(params) > 1 and (row["workspace_id"], row["created_by_member_id"]) != tuple(params[1:3]):
+                if row and len(params) > 1 and row["workspace_id"] != params[1]:
                     row = None
                 if row and "archived_at is null" in q and row["archived_at"]:
                     row = None
                 self.rows = [row] if row else []
             else:
-                rows = [r for r in self.sessions.values() if (r["workspace_id"], r["created_by_member_id"]) == tuple(params[:2])]
+                rows = [r for r in self.sessions.values() if r["workspace_id"] == params[0]]
                 rows = [r for r in rows if bool(r["archived_at"]) == ("archived_at is not null" in q)]
                 if "(updated_at,id)<" in q:
-                    rows = [r for r in rows if (r["updated_at"], r["id"]) < tuple(params[2:4])]
+                    rows = [r for r in rows if (r["updated_at"], r["id"]) < tuple(params[1:3])]
                 self.rows = sorted(rows, key=lambda r: (r["updated_at"], r["id"]), reverse=True)[:params[-1]]
         elif q.startswith("insert into public.chat_session"):
             sid, wid, mid, title, persona = params
@@ -198,27 +198,46 @@ def test_create_replay_does_not_overwrite_or_require_deleted_persona(store):
     assert len(store.sessions) == 1
 
 
-@pytest.mark.parametrize("role", ["admin", "owner", "member"])
-def test_foreign_creator_denied_for_all_reads_and_writes(store, role):
+@pytest.mark.parametrize("role", ["admin", "owner", "developer", "member"])
+def test_workspace_collaborator_can_read_edit_and_continue(store, role):
     store.members[OTHER] = dict(store.members[M], id=OTHER, role=role)
-    for operation in [lambda: repo.get_session(W, S, OTHER), lambda: repo.patch_session(W, S, OTHER, {"title": "Leak"}, metadata_etag(store.sessions[S])),
-                      lambda: repo.claim_operation(W, S, OTHER, send()), lambda: repo.create_session(W, S, OTHER, title="Leak", persona_id=P)]:
+    assert repo.get_session(W, S, OTHER)["messages"] == []
+    assert repo.list_sessions(W, OTHER)["sessions"][0]["id"] == S
+    renamed = repo.patch_session(W, S, OTHER, {"title": "Shared"}, metadata_etag(store.sessions[S]))
+    assert renamed["title"] == "Shared"
+    replay, created = repo.create_session(W, S, OTHER, title="Ignored", persona_id=P)
+    assert not created and replay["created_by_member_id"] == M
+    claim = repo.claim_operation(W, S, OTHER, send())
+    assert claim["request"]["author_member_id"] == OTHER
+    assert store.sessions[S]["created_by_member_id"] == M
+    with pytest.raises(ChatConflictError, match="active operation"):
+        repo.claim_operation(W, S, M, send())
+
+
+def test_foreign_workspace_denied_for_reads_and_writes(store):
+    store.sessions[S]["workspace_id"] = OTHER
+    for operation in [lambda: repo.get_session(W, S, M),
+                      lambda: repo.patch_session(W, S, M, {"title": "Leak"}, metadata_etag(store.sessions[S])),
+                      lambda: repo.claim_operation(W, S, M, send()),
+                      lambda: repo.create_session(W, S, M, title="Leak", persona_id=P)]:
         with pytest.raises(NotFoundError):
             operation()
-    assert repo.list_sessions(W, OTHER)["sessions"] == []
+    assert repo.list_sessions(W, M)["sessions"] == []
     assert not store.messages
 
 
-def test_member_role_is_refreshed_and_null_creator_is_not_adopted(store):
-    store.members[M]["role"] = "viewer"
-    assert repo.get_session(W, S, M)["messages"] == []
+def test_member_role_is_refreshed_and_null_creator_is_preserved(store):
+    store.members[OTHER] = dict(store.members[M], id=OTHER, role="viewer")
+    assert repo.get_session(W, S, OTHER)["messages"] == []
+    assert repo.list_sessions(W, OTHER)["sessions"][0]["id"] == S
     with pytest.raises(PermissionDeniedError):
-        repo.claim_operation(W, S, M, send())
-    store.members[M]["role"] = "member"
+        repo.claim_operation(W, S, OTHER, send())
+    with pytest.raises(PermissionDeniedError):
+        repo.patch_session(W, S, OTHER, {"title": "Forbidden"}, metadata_etag(store.sessions[S]))
     store.sessions[S]["created_by_member_id"] = None
-    with pytest.raises(NotFoundError):
-        repo.get_session(W, S, M)
-    assert repo.list_sessions(W, M)["sessions"] == []
+    assert repo.get_session(W, S, M)["created_by_member_id"] is None
+    assert repo.list_sessions(W, M)["sessions"][0]["id"] == S
+    assert store.sessions[S]["created_by_member_id"] is None
 
 
 def test_claim_replay_body_conflict_and_busy_session(store):
@@ -483,10 +502,37 @@ def test_cross_session_source_does_not_leak_or_write(store):
     assert len(store.messages) == 2
 
 
-def test_mutation_locks_membership_before_owned_session(store):
+def test_mutation_locks_membership_before_workspace_session(store):
     store.calls.clear()
     repo.claim_operation(W, S, M, send())
     assert "from public.workspace_member" in store.calls[0][0] and "for share of wm" in store.calls[0][0]
     assert "from public.chat_session" in store.calls[1][0] and "for update" in store.calls[1][0]
-    assert "created_by_member_id=%s" in store.calls[1][0]
-    assert store.calls[1][1] == (S, W, M)
+    assert "workspace_id=%s" in store.calls[1][0]
+    assert "created_by_member_id=%s" not in store.calls[1][0]
+    assert store.calls[1][1] == (S, W)
+
+
+def test_collaborator_metadata_conflict_and_archive_visible_to_every_member(store):
+    store.members[OTHER] = dict(store.members[M], id=OTHER)
+    tag = metadata_etag(store.sessions[S])
+    renamed = repo.patch_session(W, S, OTHER, {"title": "Team edit"}, tag)
+    with pytest.raises(PreconditionFailedError):
+        repo.patch_session(W, S, M, {"title": "Stale"}, tag)
+    archived = repo.patch_session(W, S, M, {"archived": True}, renamed["etag"])
+    assert repo.list_sessions(W, OTHER)["sessions"] == []
+    assert repo.list_sessions(W, OTHER, archived=True)["sessions"][0]["id"] == S
+    assert repo.get_session(W, S, OTHER)["archived_at"]
+    restored = repo.patch_session(W, S, OTHER, {"archived": False}, archived["etag"])
+    assert restored["archived_at"] is None
+    assert repo.list_sessions(W, M)["sessions"][0]["id"] == S
+
+
+def test_departed_creator_does_not_hide_history_but_cannot_finish_provider_work(store):
+    store.members[OTHER] = dict(store.members[M], id=OTHER)
+    claim = repo.claim_operation(W, S, M, send())
+    store.members.pop(M)
+    assert repo.get_session(W, S, OTHER)["created_by_member_id"] == M
+    assert repo.list_sessions(W, OTHER)["sessions"][0]["id"] == S
+    with pytest.raises(WorkspaceAccessDeniedError):
+        finish(claim)
+    assert len(store.messages) == 1

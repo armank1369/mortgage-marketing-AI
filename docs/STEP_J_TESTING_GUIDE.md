@@ -1,5 +1,7 @@
 # Step J testing and final acceptance
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 J.2/J.3 implement backend APIs; J.4 connects the normal Chat page to durable sessions
 and operations. J.5 now adds bounded same-conversation context. No migration or
 additional owner-run Neon query is required. The agent completed J.7 automated

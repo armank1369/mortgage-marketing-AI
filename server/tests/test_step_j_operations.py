@@ -42,14 +42,14 @@ class GenerationSQL(MemorySQL):
 
     def execute(self, sql, params=()):
         q = " ".join(sql.lower().split())
-        if q.startswith("with creator_ideas as"):
+        if q.startswith("with workspace_ideas as"):
             self.calls.append((q, params))
             latest = {}
             for row in self.messages.values():
                 session = self.sessions.get(row['session_id'], {})
                 envelope = row.get('structured_data') or {}
                 request = self.messages.get(row.get('request_message_id'), {})
-                if (session.get('workspace_id') != params[0] or session.get('created_by_member_id') != params[1]
+                if (session.get('workspace_id') != params[0]
                         or row['role'] != 'assistant' or envelope.get('schema_version') != 1
                         or envelope.get('type') not in {'text', 'posts', 'campaign'}
                         or request.get('structured_data', {}).get('operation', {}).get('state') != 'succeeded'):
@@ -58,7 +58,7 @@ class GenerationSQL(MemorySQL):
                 prior = latest.get(root)
                 if not prior or (row['created_at'], row['id']) > (prior['created_at'], prior['id']):
                     latest[root] = row
-            self.rows = sorted((r for r in latest.values() if r['id'] != params[2]), key=lambda r: (r['created_at'], r['id']), reverse=True)[:12]
+            self.rows = sorted((r for r in latest.values() if r['id'] != params[1]), key=lambda r: (r['created_at'], r['id']), reverse=True)[:12]
             return
         if q.startswith("with latest as"):
             self.calls.append((q, params))
@@ -141,11 +141,11 @@ def result(value="Educational documentation guidance.", *, stop_reason="end_turn
                            model="synthetic-model-returned", stop_reason=stop_reason)
 
 
-def run(world, fields=None, provider=None):
+def run(world, fields=None, provider=None, *, member_id=M):
     db, _ = world
     fields = fields or send()
     create = provider or Mock(return_value=result())
-    response = operations.execute_operation(W, S, M, fields, operations.GenerationRuntime(create=create, model="synthetic-model"))
+    response = operations.execute_operation(W, S, member_id, fields, operations.GenerationRuntime(create=create, model="synthetic-model"))
     return response, create
 
 
@@ -461,3 +461,56 @@ def test_provider_stage_cannot_be_claimed_twice_or_advanced_without_result(world
     with pytest.raises(ChatConflictError):
         runs.start_run(*args, model="synthetic", system=system, stage=1)
     assert len(world[0].runs) == 1 and world[0].runs[run_id]["status"] == "started"
+
+
+@pytest.mark.parametrize("action", ["send", "regenerate", "clarify", "video", "social_image", "shorten"])
+def test_collaborator_can_continue_and_revise_another_members_output(world, action):
+    db, _ = world
+    db.members[OTHER] = dict(db.members[M], id=OTHER)
+    if action == "clarify":
+        original, _ = run(world, provider=Mock(return_value=result(fixture("clarification")["clarification"])))
+    elif action in {"video", "social_image"}:
+        original, _ = run(world, send(message="Create a campaign"), Mock(side_effect=[result({"proceed": True}), result(fixture("campaign")["campaign"])]))
+    else:
+        original, _ = run(world)
+    before = deepcopy(db.messages[original["response"]["id"]])
+    fields = send(action=action)
+    if action != "send":
+        fields.pop("message")
+        fields["source_message_id"] = original["response"]["id"]
+    if action == "shorten":
+        fields.pop("persona_id")
+    if action == "clarify":
+        fields["answers"] = [{"question_index": 0, "selected": ["Instagram"], "custom": ""}]
+    if action in {"video", "social_image"}:
+        fields["target"] = {"collection": "content_calendar", "index": 0}
+        payload = fixture(action)
+        raw = payload["video"] if action == "video" else {"template": payload["template"], "slots": payload["slots"]}
+    else:
+        raw = "A collaborator followup."
+    saved, provider = run(world, fields, Mock(return_value=result(raw)), member_id=OTHER)
+    assert saved["state"] == "succeeded"
+    assert db.messages[saved["request_message_id"]]["author_member_id"] == OTHER
+    assert db.sessions[S]["created_by_member_id"] == M
+    assert db.messages[original["response"]["id"]] == before
+    assert chats.get_operation(W, S, M, fields["operation_key"])["response"] == saved["response"]
+    replay, _ = run(world, fields, provider, member_id=M)
+    assert replay == saved
+    assert provider.call_count == (0 if action == "shorten" else 1)
+
+
+def test_shared_chat_claim_cannot_change_worker_identity(world):
+    db, _ = world
+    db.members[OTHER] = dict(db.members[M], id=OTHER)
+    fields = send()
+    claim = chats.claim_operation(W, S, M, fields)
+    token = claim["request"]["structured_data"]["operation"]["claim_token"]
+    with pytest.raises(ChatConflictError, match="original worker"):
+        chats.complete_operation(W, S, OTHER, fields["operation_key"], token, {"type": "text", "response": "Invalid"})
+    with pytest.raises(ChatConflictError, match="original worker"):
+        chats.progress_operation(W, S, OTHER, fields["operation_key"], token)
+    assert chats.get_operation(W, S, OTHER, fields["operation_key"])["state"] == "running"
+    chats.progress_operation(W, S, M, fields["operation_key"], token, state="unknown")
+    chats.abandon_operation(W, S, OTHER, fields["operation_key"], acknowledged=True)
+    with pytest.raises(ChatConflictError):
+        chats.complete_operation(W, S, M, fields["operation_key"], token, {"type": "text", "response": "Fenced"})

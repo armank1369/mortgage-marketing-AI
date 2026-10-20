@@ -307,3 +307,23 @@ test('a delayed running status cannot resurrect pending work after a saved resub
   assert.ok(c.operations().every((op) => ['succeeded', 'failed', 'abandoned'].includes(op.state)))
   c.stop()
 })
+
+
+test('idle reconciliation refreshes shared sidebar and active history without replacing unsaved selection', async () => {
+  const f = fixture(), c = f.make()
+  await c.start()
+  const draft = c.getSnapshot().active
+  f.sessions.set('shared', { id: 'shared', title: 'Teammate chat', default_persona_id: persona, etag: '"shared"' })
+  f.messages.set('shared', [{ id: 'first', role: 'user', content: 'From teammate', created_at: '2026-01-01' }])
+  await c.reconcile()
+  assert.equal(c.getSnapshot().sessions[0].id, 'shared')
+  assert.deepEqual(c.getSnapshot().active, draft)
+  await c.open('shared')
+  f.messages.get('shared').push({ id: 'second', role: 'user', content: 'Another followup', created_at: '2026-01-02' })
+  f.sessions.get('shared').title = 'Renamed by teammate'
+  await c.reconcile()
+  assert.equal(c.getSnapshot().active.title, 'Renamed by teammate')
+  assert.equal(c.getSnapshot().messages.length, 2)
+  assert.equal(f.calls.filter(call => call.method !== 'GET').length, 0)
+  c.stop()
+})

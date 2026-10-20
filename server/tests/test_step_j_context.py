@@ -116,9 +116,9 @@ def test_failed_pending_system_tool_media_and_foreign_session_rows_are_excluded(
     assert "FAILED_SECRET" not in str(messages) and "EXCLUDED_SECRET" not in str(messages)
 
 
-def test_foreign_owner_denied_before_context_query_or_provider(world):
+def test_foreign_workspace_denied_before_context_query_or_provider(world):
     db, _ = world
-    db.sessions[S]["created_by_member_id"] = OTHER
+    db.sessions[S]["workspace_id"] = OTHER
     before = len(db.calls)
     provider = Mock(side_effect=AssertionError("must not invoke"))
     with pytest.raises(Exception) as failure:

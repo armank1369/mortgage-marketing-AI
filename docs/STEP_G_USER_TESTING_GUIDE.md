@@ -1,5 +1,7 @@
 # Step G: step-by-step testing guide
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 For a teammate starting on another computer without Codex, begin with [the teammate guide](STEP_G_TEAMMATE_TESTING_GUIDE.md). This document supplies the advanced API and database checks.
 
 This guide tests the local `codex/step-g-workspace-authorization` branch. It does not

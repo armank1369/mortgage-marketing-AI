@@ -1,5 +1,7 @@
 # Step J frozen execution contract — STEP-J-v1
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 Status: plan approved by the owner's explicit implementation request on 2026-10-18
 (America/Los_Angeles). Execution remains phase-gated. J.1 was completed and the
 owner subsequently approved proceeding with J.2, including test guidance and

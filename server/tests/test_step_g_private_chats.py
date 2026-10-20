@@ -20,28 +20,30 @@ def cursor(monkeypatch):
     @contextmanager
     def open_cursor():
         yield cur
-    monkeypatch.setattr(chats, 'get_db_cursor', open_cursor)
     monkeypatch.setattr(chats, 'get_db_transaction', open_cursor)
     return cur
 
 
-def test_private_read_predicates_and_no_messages_after_denial(cursor):
-    cursor.fetchone.return_value = None
+def test_workspace_read_predicates_and_no_messages_after_denial(cursor):
+    cursor.fetchone.side_effect = [MEMBER, None]
     assert chats.get_chat_session_messages(W, S, M) is None
-    cursor.execute.assert_called_once()
+    assert cursor.execute.call_count == 2
     sql, args = cursor.execute.call_args.args
-    assert args == (S, W, M)
-    assert 'created_by_member_id = %s' in sql
+    assert args == (S, W)
+    assert 'workspace_id = %s' in sql
+    assert 'created_by_member_id = %s' not in sql
     assert 'archived_at IS NULL' in sql
     cursor.fetchall.assert_not_called()
 
 
-def test_private_list_requires_creator(cursor):
+def test_shared_list_requires_workspace_membership(cursor):
+    cursor.fetchone.return_value = MEMBER
     cursor.fetchall.return_value = []
     assert chats.list_chat_sessions(W, M) == []
     sql, args = cursor.execute.call_args.args
-    assert args == (W, M, 50)
-    assert 'created_by_member_id = %s' in sql
+    assert args == (W, 50)
+    assert 'workspace_id = %s' in sql
+    assert 'created_by_member_id = %s' not in sql
 
 
 def test_foreign_member_cannot_create(cursor):

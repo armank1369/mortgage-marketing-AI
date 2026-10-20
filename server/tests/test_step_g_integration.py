@@ -21,21 +21,21 @@ def add_member(workspace_id, role='member'):
 
 
 @pytest.mark.parametrize('other_role', ['member', 'owner', 'admin'])
-def test_other_members_even_admins_cannot_read_private_chat(dev_workspace_id, member_id, other_role):
+def test_other_members_can_read_workspace_chat(dev_workspace_id, member_id, other_role):
     other, _ = add_member(dev_workspace_id, other_role)
     session = chats.create_chat_session_with_message(dev_workspace_id, 'Private synthetic', 'Hello', author_member_id=member_id)
-    assert chats.get_chat_session_messages(dev_workspace_id, session['id'], other) is None
-    assert chats.list_chat_sessions(dev_workspace_id, other) == []
+    assert chats.get_chat_session_messages(dev_workspace_id, session['id'], other)['id'] == session['id']
+    assert any(row['id'] == session['id'] for row in chats.list_chat_sessions(dev_workspace_id, other))
     own = chats.get_chat_session_messages(dev_workspace_id, session['id'], member_id)
     assert str(own['created_by_member_id']) == member_id
     assert str(own['messages'][0]['author_member_id']) == member_id
 
 
-def test_unattributed_and_archived_chats_stay_hidden(dev_workspace_id, member_id):
+def test_unattributed_chat_visible_and_legacy_archive_hidden(dev_workspace_id, member_id):
     with get_db_cursor(commit=True) as cur:
         cur.execute("INSERT INTO public.chat_session (workspace_id,title) VALUES (%s,'Unattributed synthetic') RETURNING id", (dev_workspace_id,))
         orphan = str(cur.fetchone()['id'])
-    assert chats.get_chat_session_messages(dev_workspace_id, orphan, member_id) is None
+    assert chats.get_chat_session_messages(dev_workspace_id, orphan, member_id)["created_by_member_id"] is None
     session = chats.create_chat_session_with_message(dev_workspace_id, 'Archive synthetic', 'Hello', author_member_id=member_id)
     with get_db_cursor(commit=True) as cur:
         cur.execute("UPDATE public.chat_session SET archived_at=now() WHERE id=%s", (session['id'],))

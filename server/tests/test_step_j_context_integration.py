@@ -43,10 +43,12 @@ def test_real_context_snapshot_latest_revision_boundary_and_session_isolation(ge
         cur.execute("INSERT INTO public.workspace_member (workspace_id,auth_user_id,role) VALUES (%s,%s,'admin') RETURNING id",
                     (wid, "synthetic-context-admin-" + uuid4().hex))
         admin = str(cur.fetchone()["id"])
-    denied_provider = Mock(side_effect=AssertionError("must not dispatch"))
-    with pytest.raises(NotFoundError):
-        execute((wid, sid, admin, persona, {}), operation(persona), denied_provider)
-    denied_provider.assert_not_called()
+    collaborator_provider = Mock(return_value=provider_result("Shared workspace followup."))
+    shared = execute((wid, sid, admin, persona, {}), operation(persona), collaborator_provider)
+    assert shared["state"] == "succeeded"
+    detail = chats.get_session(wid, sid, admin)
+    assert detail["created_by_member_id"] == mid
+    assert next(m for m in detail["messages"] if m["id"] == shared["request_message_id"])["author_member_id"] == admin
 
 
 def _interrupted_worker(session, fields, entered, release):

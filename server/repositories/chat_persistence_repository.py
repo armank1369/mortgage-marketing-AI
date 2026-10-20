@@ -1,6 +1,6 @@
 """Step J durable primitives. Short transactions; never imports/calls an AI provider.
 
-All mutations lock membership before the creator-scoped session. Completion is an
+All mutations lock membership before the workspace-scoped session. Completion is an
 internal service API, never an HTTP endpoint. JSON claim tokens are server-only.
 """
 from copy import deepcopy
@@ -47,13 +47,12 @@ def lock_member(cur, workspace_id, member_id, *capabilities):
     return member
 
 
-def owned_session(cur, workspace_id, session_id, member_id, *, lock=False, include_archived=False):
+def workspace_session(cur, workspace_id, session_id, *, lock=False, include_archived=False):
     cur.execute(f"SELECT {SESSION_COLUMNS} FROM public.chat_session "
-                "WHERE id=%s AND workspace_id=%s AND created_by_member_id=%s "
+                "WHERE id=%s AND workspace_id=%s "
                 + ("" if include_archived else "AND archived_at IS NULL ")
                 + ("FOR UPDATE" if lock else "FOR SHARE"),
-                (uuid_string(session_id, "session_id"), uuid_string(workspace_id, "workspace_id"),
-                 uuid_string(member_id, "member_id")))
+                (uuid_string(session_id, "session_id"), uuid_string(workspace_id, "workspace_id")))
     row = cur.fetchone()
     if not row:
         raise NotFoundError("Conversation not found.")
@@ -80,11 +79,11 @@ def create_session(workspace_id, session_id, member_id, *, title, persona_id):
     session_id = uuid_string(session_id, "session_id")
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:create")
-        # Check ownership before resolving persona on an idempotent replay.
+        # Check workspace before resolving persona on an idempotent replay.
         cur.execute(f"SELECT {SESSION_COLUMNS} FROM public.chat_session WHERE id=%s FOR UPDATE", (session_id,))
         existing = cur.fetchone()
         if existing:
-            if str(existing["workspace_id"]) != workspace_id or str(existing["created_by_member_id"]) != member_id:
+            if str(existing["workspace_id"]) != workspace_id:
                 raise NotFoundError("Conversation not found.")
             result, created = session_dto(existing), False
         else:
@@ -97,7 +96,7 @@ def create_session(workspace_id, session_id, member_id, *, title, persona_id):
                 result, created = session_dto(row), True
             else:
                 # Another connection won the absent-row race. Never overwrite it.
-                row = owned_session(cur, workspace_id, session_id, member_id, lock=True, include_archived=True)
+                row = workspace_session(cur, workspace_id, session_id, lock=True, include_archived=True)
                 result, created = session_dto(row), False
     return result, created
 
@@ -105,13 +104,13 @@ def create_session(workspace_id, session_id, member_id, *, title, persona_id):
 def list_sessions(workspace_id, member_id, *, archived=False, limit=30, cursor=None):
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:read")
-        params = [workspace_id, member_id]
+        params = [workspace_id]
         where = "AND archived_at IS NOT NULL" if archived else "AND archived_at IS NULL"
         if cursor:
             where += " AND (updated_at,id)<(%s,%s)"
             params.extend(cursor)
         cur.execute(f"SELECT {SESSION_COLUMNS} FROM public.chat_session "
-                    f"WHERE workspace_id=%s AND created_by_member_id=%s {where} "
+                    f"WHERE workspace_id=%s {where} "
                     "ORDER BY updated_at DESC,id DESC LIMIT %s", (*params, limit + 1))
         rows = cur.fetchall()
         page = enrich_sessions(cur, [dict(row) for row in rows[:limit]])
@@ -158,7 +157,7 @@ def _status(cur, request):
 def get_session(workspace_id, session_id, member_id, *, limit=50, before=None):
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:read")
-        session = owned_session(cur, workspace_id, session_id, member_id, include_archived=True)
+        session = workspace_session(cur, workspace_id, session_id, include_archived=True)
         params = [session_id]
         where = ""
         if before:
@@ -179,7 +178,7 @@ def get_session(workspace_id, session_id, member_id, *, limit=50, before=None):
 def get_operation(workspace_id, session_id, member_id, operation_key):
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:read")
-        owned_session(cur, workspace_id, session_id, member_id, include_archived=True)
+        workspace_session(cur, workspace_id, session_id, include_archived=True)
         row = _request(cur, session_id, operation_key)
         if not row:
             raise NotFoundError("Operation not found.")
@@ -193,7 +192,7 @@ def patch_session(workspace_id, session_id, member_id, fields, if_match):
         raise PreconditionRequiredError()
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:write")
-        session = owned_session(cur, workspace_id, session_id, member_id, lock=True, include_archived=True)
+        session = workspace_session(cur, workspace_id, session_id, lock=True, include_archived=True)
         if if_match != metadata_etag(session):
             raise PreconditionFailedError()
         if fields.get("archived") is True:
@@ -242,7 +241,7 @@ def _abandon(cur, row, acknowledged):
 def abandon_operation(workspace_id, session_id, member_id, key, *, acknowledged):
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:write")
-        owned_session(cur, workspace_id, session_id, member_id, lock=True)
+        workspace_session(cur, workspace_id, session_id, lock=True)
         row = _request(cur, session_id, key)
         if not row:
             raise NotFoundError("Operation not found.")
@@ -339,7 +338,7 @@ def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generatio
             raise ChatConflictError("operation_not_retryable", "The original operation is not ready for a new attempt.")
     _assert_idle(cur, session_id)
     source = _source(cur, session_id, fields)
-    session = owned_session(cur, workspace_id, session_id, member_id, lock=True)
+    session = workspace_session(cur, workspace_id, session_id, lock=True)
     assert_persona(cur, session, fields, source)
     snapshot = (active_persona(cur, workspace_id, fields["persona_id"]) if fields["action"] in PROVIDER_ACTIONS
                 else deepcopy(source["structured_data"].get("persona_snapshot")))
@@ -382,18 +381,20 @@ def claim_operation(workspace_id, session_id, member_id, data, *, generation_inp
     capabilities = ("chat:write", "ai:generate") if fields["action"] in PROVIDER_ACTIONS else ("chat:write",)
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, *capabilities)
-        owned_session(cur, workspace_id, session_id, member_id, lock=True)
+        workspace_session(cur, workspace_id, session_id, lock=True)
         row, created = _claim_locked(cur, workspace_id, session_id, member_id, fields,
                                     generation_input=generation_input, persona_snapshot=persona_snapshot, context_factory=context_factory)
         result = {"created": created, "request": deepcopy(row), "status": _status(cur, row)}
     return result  # Contains private claim token: service use only, never jsonify.
 
 
-def _owned_claim(cur, session_id, key, token):
+def _owned_claim(cur, session_id, key, token, member_id):
     row = _request(cur, session_id, key)
     if not row:
         raise NotFoundError("Operation not found.")
     operation = row["structured_data"]["operation"]
+    if str(row["author_member_id"]) != str(member_id):
+        raise ChatConflictError("operation_superseded", "Only the original worker may complete this operation.")
     if not token or operation.get("claim_token") != token or operation["state"] not in {"running", "unknown", "succeeded"}:
         raise ChatConflictError("operation_superseded", "This operation no longer owns completion.")
     return row
@@ -489,8 +490,8 @@ def complete_operation(workspace_id, session_id, member_id, key, token, response
     """Internal completion of an already normalized, post-compliance server result."""
     with get_db_transaction() as cur:
         member = lock_member(cur, workspace_id, member_id, "chat:write")
-        owned_session(cur, workspace_id, session_id, member_id, lock=True)
-        row = _owned_claim(cur, session_id, key, token)
+        workspace_session(cur, workspace_id, session_id, lock=True)
+        row = _owned_claim(cur, session_id, key, token, member_id)
         if row["structured_data"]["input"]["action"] in PROVIDER_ACTIONS:
             check_capability(member, "ai:generate")
         result = _complete_locked(cur, session_id, row, response)
@@ -504,8 +505,8 @@ def progress_operation(workspace_id, session_id, member_id, key, token, *, state
         raise ValidationError("Invalid internal operation transition.")
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:write", "ai:generate")
-        owned_session(cur, workspace_id, session_id, member_id, lock=True)
-        row = _owned_claim(cur, session_id, key, token)
+        workspace_session(cur, workspace_id, session_id, lock=True)
+        row = _owned_claim(cur, session_id, key, token, member_id)
         if row["structured_data"]["operation"]["state"] == "succeeded":
             raise ChatConflictError("operation_terminal")
         row["structured_data"]["operation"].update(state=state, safe_error_code=safe_error_code,
@@ -521,7 +522,7 @@ def shorten_operation(workspace_id, session_id, member_id, data):
         raise ValidationError("Expected shorten action.")
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:write")
-        owned_session(cur, workspace_id, session_id, member_id, lock=True)
+        workspace_session(cur, workspace_id, session_id, lock=True)
         row, created = _claim_locked(cur, workspace_id, session_id, member_id, fields)
         if not created:
             result = _status(cur, row)

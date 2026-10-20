@@ -1,5 +1,7 @@
 # Lucie legacy workflow recovery
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 Baseline: Step J `290c636`, compared with presentation-era main `43162e2`.
 This patch preserves the Steps G–J authorization, durable operation recovery,
 immutable responses and existing generation policies. No migration is required.

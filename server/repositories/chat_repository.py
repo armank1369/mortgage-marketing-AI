@@ -5,7 +5,7 @@ Enforces multi-step atomic transactions for session creation and message logging
 """
 
 from typing import List, Optional, Dict, Any
-from db.connection import get_db_cursor, get_db_transaction
+from db.connection import get_db_transaction
 from errors import NotFoundError
 from validation import uuid_string
 from logging_utils import log_db_operation, log_db_error
@@ -20,14 +20,14 @@ def list_chat_sessions(workspace_id: str, member_id: str, limit: int = 50) -> Li
                title, summary_status, started_at, updated_at
         FROM public.chat_session
         WHERE workspace_id = %s
-          AND created_by_member_id = %s
           AND archived_at IS NULL
         ORDER BY updated_at DESC, id DESC
         LIMIT %s;
     """
     try:
-        with get_db_cursor() as cur:
-            cur.execute(query, (workspace_id, uuid_string(member_id, "member_id"), limit))
+        with get_db_transaction() as cur:
+            lock_member(cur, workspace_id, member_id, "chat:read")
+            cur.execute(query, (workspace_id, limit))
             rows = cur.fetchall()
             log_db_operation(
                 "list_chat_sessions",
@@ -57,7 +57,7 @@ def get_chat_session_messages(workspace_id: str, session_id: str, member_id: str
                title, summary_status, started_at, updated_at
         FROM public.chat_session
         WHERE id = %s AND workspace_id = %s
-          AND created_by_member_id = %s AND archived_at IS NULL;
+          AND archived_at IS NULL;
     """
     message_query = """
         SELECT id, session_id, author_member_id, persona_id, role, kind,
@@ -68,8 +68,9 @@ def get_chat_session_messages(workspace_id: str, session_id: str, member_id: str
         ORDER BY created_at ASC, id ASC;
     """
     try:
-        with get_db_cursor() as cur:
-            cur.execute(session_query, (uuid_string(session_id, "session_id"), workspace_id, uuid_string(member_id, "member_id")))
+        with get_db_transaction() as cur:
+            lock_member(cur, workspace_id, member_id, "chat:read")
+            cur.execute(session_query, (uuid_string(session_id, "session_id"), workspace_id))
             session_row = cur.fetchone()
             if not session_row:
                 return None

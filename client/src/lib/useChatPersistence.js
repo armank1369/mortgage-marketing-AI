@@ -10,11 +10,15 @@ export function useChatPersistence() {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
   useEffect(() => {
     controller.start()
+    let lastRefresh = Date.now()
     const refresh = () => {
-      if (document.visibilityState !== 'hidden') controller.reconcile()
+      if (document.visibilityState !== 'hidden' && navigator.onLine !== false) {
+        lastRefresh = Date.now()
+        controller.reconcile()
+      }
     }
     const interval = setInterval(() => {
-      if (controller.operations().some((op) => !['succeeded', 'failed', 'abandoned'].includes(op.state))) refresh()
+      if (Date.now() - lastRefresh >= 15000 || controller.operations().some((op) => !['succeeded', 'failed', 'abandoned'].includes(op.state))) refresh()
     }, 2000)
     window.addEventListener('focus', refresh)
     window.addEventListener('online', refresh)

@@ -1,5 +1,7 @@
 # Step G testing for teammates — no Codex required
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 This guide assumes Windows PowerShell. If you use macOS/Linux, ask Jaime for adapted commands before starting. You need a browser and local development tools; Codex is not required. ChatGPT or Gemini can explain errors, but GitHub access alone does not let them run tests on your device.
 
 ## What changed

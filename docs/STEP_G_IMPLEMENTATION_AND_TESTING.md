@@ -1,5 +1,7 @@
 # Step G implementation and testing
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 Status as of October 10, 2026: local implementation and synthetic tests passed; live
 Neon Auth/database acceptance is incomplete. No migration, push, merge, deployment,
 production change, or historical data deletion was performed.

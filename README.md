@@ -5,9 +5,11 @@ Lucie is an AI-powered mortgage marketing assistant developed for Lucent Brokera
 
 The application helps with social media content creation, campaign planning, and marketing-related workflows while incorporating mortgage-industry compliance considerations.
 
-The application now supports authenticated accounts, creator-private persistent conversations, cross-browser reopening and bounded same-conversation context. Long-term memory remains outside the implemented scope.
+The application now supports authenticated accounts, workspace-shared persistent conversations, cross-browser reopening and bounded same-conversation context. Long-term memory remains outside the implemented scope.
 
 ## 1. Start Here
+
+**[Workspace chat sharing — current access policy and test checklist](docs/WORKSPACE_CHAT_SHARING.md)** supersedes earlier Step G/J creator-only access. Existing saved chats are shared with members of the same workspace; viewers remain read-only.
 
 For current features, architecture decisions, API/recovery behavior and limitations, read:
 
@@ -22,7 +24,7 @@ The [legacy workflow recovery patch](docs/LEGACY_RECOVERY_PATCH.md) restores
 persona selection/review, Brand Summary, audience/tone editing, sidebar metadata,
 rotating suggestions and selected-chat export. It supersedes earlier mutable
 per-chat persona behavior: persisted chats keep one persona. Recent-idea avoidance
-is limited to the current creator's chats in the selected workspace. The recovery
+covers completed outputs across the selected workspace’s chats. The recovery
 guide includes the parity matrix, API amendments and return-to-computer checklist.
 
 For the underlying brand/persona generation work, read:
@@ -138,7 +140,7 @@ contracts, recovery paths, schema mapping, decisions and remaining release gates
 
 ### Current Limitations
 
-- On the Step J feature branch, ChatPage uses durable creator-private Neon conversations, linked revisions/media, pagination and archive/restore. Live Auth/two-browser acceptance remains pending; this is not a deployment claim.
+- On the Step J feature branch, ChatPage uses durable workspace-shared Neon conversations, linked revisions/media, pagination and archive/restore. Live Auth/two-browser acceptance remains pending; this is not a deployment claim.
 - Scoped legacy chats remain in a read-only Local history view. Calendar and unsent input remain local; no historical import or calendar synchronization is implemented.
 - Joseph's historical data has not yet been migrated.
 - Existing SQLite data remains stored; authenticated V2 no longer uses it.
@@ -151,7 +153,7 @@ contracts, recovery paths, schema mapping, decisions and remaining release gates
 
 ## 4. Understanding the Current Architecture
 
-The Step J feature branch combines shared workspace configuration with creator-private durable chat history. See [Step J evidence](docs/STEP_J_IMPLEMENTATION_AND_TESTING.md) for tested and unverified boundaries.
+The Step J feature branch combines shared workspace configuration with shared durable chat history. See [Step J evidence](docs/STEP_J_IMPLEMENTATION_AND_TESTING.md) for tested and unverified boundaries.
 
 ### Existing Chat Experience
 
@@ -160,7 +162,7 @@ React ChatPage
     |
     +-- Scoped browser pending-operation recovery and read-only local history
     |
-    +-- Authenticated, capability/creator-protected Flask session/operation APIs
+    +-- Authenticated, capability/workspace-protected Flask session/operation APIs
             |
             +-- Neon sessions/messages and linked media specifications
             |
@@ -406,7 +408,7 @@ Before public production deployment, the team must:
 
 - Review authentication on existing API routes.
 - Enforce proper authorization on sensitive operations.
-- Verify the implemented creator-private policy with real accounts.
+- Verify workspace chat sharing and cross-workspace isolation with real accounts.
 - Implement safe workspace onboarding/provisioning.
 - Review deployment secrets, CORS, debug settings, rate limits, and access controls.
 - Test privacy boundaries using multiple accounts.
@@ -421,7 +423,7 @@ Sensitive client and mortgage-related information should not be used as syntheti
 Recommended next phases:
 
 1. Complete Step G live schema, revocation, Auth, and browser acceptance.
-2. Plan workspace invitation/onboarding under the approved creator-private policy.
+2. Plan workspace invitation/onboarding under the workspace membership policy.
 3. Review/finalize the Step I branch using its current acceptance report; brand/persona UI integration is implemented.
 4. Review Step J finalization and the separately tracked UI refinements; plan any historical-data migration separately.
 5. Complete remaining J.7 live identity/provider/runtime gates; the owner reported successful multiple-browser chat use after J.4.

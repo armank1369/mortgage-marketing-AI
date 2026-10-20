@@ -106,7 +106,7 @@ def prepare_operation(workspace_id, session_id, member_id, data):
     fields = operation_fields(data)
     with get_db_transaction() as cur:
         chats.lock_member(cur, workspace_id, member_id, "chat:write", "ai:generate")
-        session = chats.owned_session(cur, workspace_id, session_id, member_id, lock=True)
+        session = chats.workspace_session(cur, workspace_id, session_id, lock=True)
         existing = chats._request(cur, session_id, fields["operation_key"])
         if existing:
             if existing["structured_data"]["input_hash"] != input_hash(fields):
@@ -138,14 +138,14 @@ def prepare_operation(workspace_id, session_id, member_id, data):
         else:
             result = _media_input(cur, session_id, fields, source)
         if result["kind"] == "chat":
-            result["recent_ideas"] = capture_recent_ideas(cur, workspace_id, member_id, str(source["id"]) if source else None)
+            result["recent_ideas"] = capture_recent_ideas(cur, workspace_id, str(source["id"]) if source else None)
     return {"generation_input": result}
 
 
 def _authorize_claim(cur, workspace_id, session_id, member_id, key, token):
     chats.lock_member(cur, workspace_id, member_id, "chat:write", "ai:generate")
-    chats.owned_session(cur, workspace_id, session_id, member_id, lock=True)
-    row = chats._owned_claim(cur, session_id, key, token)
+    chats.workspace_session(cur, workspace_id, session_id, lock=True)
+    row = chats._owned_claim(cur, session_id, key, token, member_id)
     return row
 
 

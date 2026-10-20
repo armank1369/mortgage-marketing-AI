@@ -1,6 +1,6 @@
 """Bounded, untrusted same-conversation projection captured under the session lock.
 
-The caller must authorize membership, capabilities and creator ownership first.
+The caller must authorize membership, capabilities and workspace access first.
 No provider calls, writes, summaries, cross-session lookups or publication mutation.
 """
 from services.chat_contract import canonical

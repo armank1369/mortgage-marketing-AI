@@ -1,4 +1,4 @@
-"""Creator-private durable chat HTTP adapters."""
+"""Workspace-shared durable chat HTTP adapters."""
 from flask import Blueprint, jsonify, request, g, current_app
 
 from auth.workspace_context import require_workspace

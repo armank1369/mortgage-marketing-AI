@@ -1,5 +1,7 @@
 # Step J — current feature, contract and decision reference
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 This is the current Step J reference for users, maintainers and future executors.
 The [approved plan](STEP_J_APPROVED_PLAN.md) records the agreed scope;
 the [implementation record](STEP_J_IMPLEMENTATION_AND_TESTING.md) preserves

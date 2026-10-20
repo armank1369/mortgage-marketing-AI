@@ -103,15 +103,14 @@ def test_recent_ideas_scope_revisions_and_exclusion(world):
         return repo.complete_operation(W, S, M, data['operation_key'], claim['request']['structured_data']['operation']['claim_token'],
                                        {'type': 'text', 'response': content})['response']
     response = save('First concept')
-    assert capture_recent_ideas(db, W, M) == ['First concept']
-    assert capture_recent_ideas(db, OTHER, M) == []
-    assert capture_recent_ideas(db, W, OTHER) == []
-    assert capture_recent_ideas(db, W, M, response['id']) == []
+    assert capture_recent_ideas(db, W) == ['First concept']
+    assert capture_recent_ideas(db, OTHER) == []
+    assert capture_recent_ideas(db, W, response['id']) == []
     data = {'operation_key': str(uuid4()), 'action': 'regenerate', 'persona_id': P, 'source_message_id': response['id']}
     claim = repo.claim_operation(W, S, M, data)
     repo.complete_operation(W, S, M, data['operation_key'], claim['request']['structured_data']['operation']['claim_token'],
                             {'type': 'text', 'response': 'Replacement concept'})
-    assert capture_recent_ideas(db, W, M) == ['Replacement concept']
+    assert capture_recent_ideas(db, W) == ['Replacement concept']
 
 
 def test_claim_rechecks_selection_after_preparation(world):
@@ -142,11 +141,11 @@ def test_recent_ideas_reach_generation_without_extra_provider_calls(world):
     assert first['state'] == second['state'] == 'succeeded'
     assert first_provider.call_count == second_provider.call_count == 1
     kwargs = second_provider.call_args.kwargs
-    assert 'Recent ideas from this creator' in json.dumps(kwargs['system'])
+    assert 'Recent ideas from this workspace' in json.dumps(kwargs['system'])
     assert 'Educational documentation guidance.' in json.dumps(kwargs['system'])
 
 
-def test_failed_and_foreign_completed_ideas_are_excluded(world):
+def test_failed_and_foreign_workspace_ideas_excluded_but_collaborator_ideas_shared(world):
     from tests.test_step_j_operations import run
     db, _ = world
     saved, _ = run(world)
@@ -162,4 +161,4 @@ def test_failed_and_foreign_completed_ideas_are_excluded(world):
         response['structured_data'].pop('original_request_id', None)
         response['structured_data']['payload']['response'] = f'Foreign or failed {index}'
         db.messages[request_id], db.messages[response_id] = request, response
-    assert capture_recent_ideas(db, W, M) == ['Educational documentation guidance.']
+    assert set(capture_recent_ideas(db, W)) == {'Foreign or failed 1', 'Educational documentation guidance.'}

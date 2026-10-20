@@ -27,9 +27,10 @@ const presentation = (session) => {
     content_types: [...new Set(messages.filter(m=>m.role==='assistant').map(m=>m.structured_data?.type).filter(Boolean))],
     persona_state: ids.size > 1 || [...ids].some(id=>id!==session.default_persona_id) ? 'mixed' : !session.default_persona_id || messages.some(m=>m.role==='assistant' && !m.persona_id) ? 'ambiguous' : persona ? 'available' : 'unavailable' }
 }
-window.__stepJ = { db, mode: 'text', account: 'account-a', role: 'owner', save }
-window.__stepJ.api = { getWorkspace: () => 'workspace-a', async send(config, { expectedScope }) {
-  const user = JSON.parse(expectedScope)[0]
+window.__stepJ = { db, mode: 'text', account: 'account-a', role: 'owner', workspace: 'workspace-a', save }
+window.__stepJ.api = { getWorkspace: () => window.__stepJ.workspace, async send(config, { expectedScope }) {
+  const [user, workspace] = JSON.parse(expectedScope)
+  if (workspace !== window.__stepJ.workspace) return reject(403, "workspace_access_denied")
   const { url, method, data } = config
   db.calls.push({ url, method, data }); save()
   if (url.startsWith('/api/brand-profile') && method === 'PUT') { if(window.__stepJ.failBrand) return reject(503, 'database_unavailable'); db.brand = { ...db.brand, ...data }; save(); return { data: db.brand } }
@@ -37,20 +38,22 @@ window.__stepJ.api = { getWorkspace: () => 'workspace-a', async send(config, { e
     const row = { ...(db.personas || []).find(p => url.endsWith(p.id)), ...data, id: method === 'POST' ? crypto.randomUUID() : url.split('/').at(-1), is_starter: false }
     db.personas = [...(db.personas || []).filter(p => p.id !== row.id), row]; save(); return { data: row }
   }
+  if (window.__stepJ.role === 'viewer' && method !== 'GET') return reject(403, 'permission_denied')
   if (!url.startsWith('/api/chat/sessions')) throw Error('Unexpected stateless/provider request')
   const [path] = url.split('?'), parts = path.split('/'), id = parts[4], key = parts[6]
   if (url.includes('?version=2&archived=')) {
     const query = new URLSearchParams(url.split('?')[1]), offset = Number(query.get('cursor') || 0)
-    const list = Object.values(db.sessions).filter((s) => s.owner === user && !!s.archived_at === (query.get('archived') === 'true')).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    const list = Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === (query.get('archived') === 'true')).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     return { data: { sessions: list.slice(offset, offset + 30).map(presentation), next_cursor: list.length > offset + 30 ? String(offset + 30) : null } }
   }
   if (method === 'PUT') {
-    if (db.sessions[id] && db.sessions[id].owner !== user) return reject(404, 'not_found')
-    db.sessions[id] ||= { id, owner: user, title: data.title, default_persona_id: data.persona_id, updated_at: nextTime(), etag: '"initial"' }
+    if (db.sessions[id] && db.sessions[id].workspace_id !== workspace) return reject(404, 'not_found')
+    db.sessions[id] ||= { id, owner: user, created_by_member_id: user, workspace_id: workspace, title: data.title, default_persona_id: data.persona_id, updated_at: nextTime(), etag: '"initial"' }
     db.messages[id] ||= []; save(); return { data: db.sessions[id] }
   }
   const session = db.sessions[id]
-  if (!session || session.owner !== user) return reject(404, 'not_found')
+  if (!session || session.workspace_id !== workspace) return reject(404, 'not_found')
+  db.messages[id] ||= []
   if (method === 'PATCH') {
     if ('default_persona_id' in data && data.default_persona_id !== session.default_persona_id) return reject(409, 'persona_locked')
     if (config.headers['If-Match'] !== session.etag) return reject(412, 'stale_metadata')
@@ -73,7 +76,7 @@ window.__stepJ.api = { getWorkspace: () => 'workspace-a', async send(config, { e
       db.messages[id].find((r) => r.structured_data?.input?.operation_key === data.retry_of).structured_data.operation.state = 'abandoned'
     }
     const state = window.__stepJ.mode === 'unknown' ? 'unknown' : 'succeeded'
-    const request = { id: crypto.randomUUID(), persona_id: data.persona_id, role: 'user', kind: 'operation', source_message_id: data.source_message_id,
+    const request = { id: crypto.randomUUID(), author_member_id: user, persona_id: data.persona_id, role: 'user', kind: 'operation', source_message_id: data.source_message_id,
       created_at: nextTime(), content: data.message || data.action,
       structured_data: { schema_version: 1, input: data, operation: { state } } }
     db.messages[id].push(request)
@@ -112,9 +115,11 @@ function Harness() {
   const [personas, setPersonas] = useState(() => db.personas ||= [{ ...snapshot, description: 'An education-focused audience looking for clear mortgage guidance and practical next steps.', audience_profile: { custom: { preserve: true } }, prompt_guidance: 'Explain clearly' }])
   window.__stepJ.openConfiguration = () => setConfigurationOpen(true)
   save()
-  const [access, setAccess] = useState({ account: 'account-a', role: 'owner' })
-  window.__stepJ.switchAccount = (account, role = 'owner') => setAccess({ account, role })
-  const scope = JSON.stringify([access.account, 'workspace-a'])
+  const [access, setAccess] = useState({ account: 'account-a', role: 'owner', workspace: 'workspace-a' })
+  window.__stepJ.role = access.role
+  window.__stepJ.workspace = access.workspace
+  window.__stepJ.switchAccount = (account, role = 'owner', workspace = 'workspace-a') => setAccess({ account, role, workspace })
+  const scope = JSON.stringify([access.account, access.workspace])
   return React.createElement(BrowserRouter, null,
     React.createElement(BrowserScopeContext.Provider, { key: scope, value: scope },
       React.createElement(WorkspaceAccessContext.Provider, { value: { role: access.role } },

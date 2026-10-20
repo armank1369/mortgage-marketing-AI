@@ -1,5 +1,7 @@
 # Step J finalization — persistence and bounded conversation context
 
+> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+
 Date: 2026-10-18 (America/Los_Angeles).
 Post-acceptance code/documentation sweep: 2026-10-18 (America/Los_Angeles).
 Branch: `codex/step-j-chat-persistence`.

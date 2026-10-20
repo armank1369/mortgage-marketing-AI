@@ -1,19 +1,19 @@
-"""Bounded advisory ideas from this creator only. Caller holds authorization."""
+"""Bounded advisory ideas from this workspace. Caller holds authorization."""
 import json
 
 RECENT_IDEAS_SQL = """
-WITH creator_ideas AS (
+WITH workspace_ideas AS (
  SELECT DISTINCT ON (COALESCE(a.structured_data->>'original_request_id',a.request_message_id::text))
    a.id, a.created_at, a.structured_data
  FROM public.chat_session s JOIN public.chat_message a ON a.session_id=s.id
  JOIN public.chat_message q ON q.id=a.request_message_id AND q.session_id=s.id
- WHERE s.workspace_id=%s AND s.created_by_member_id=%s AND a.role='assistant'
+ WHERE s.workspace_id=%s AND a.role='assistant'
    AND q.role='user' AND q.structured_data->'operation'->>'state'='succeeded'
    AND a.structured_data->>'schema_version'='1'
    AND a.structured_data->>'type' IN ('text','posts','campaign')
  ORDER BY COALESCE(a.structured_data->>'original_request_id',a.request_message_id::text), a.created_at DESC,a.id DESC
 )
-SELECT * FROM creator_ideas WHERE (%s::uuid IS NULL OR id<>%s::uuid)
+SELECT * FROM workspace_ideas WHERE (%s::uuid IS NULL OR id<>%s::uuid)
 ORDER BY created_at DESC,id DESC LIMIT 12
 """
 
@@ -47,6 +47,6 @@ def extract_ideas(rows):
     return ideas
 
 
-def capture_recent_ideas(cur, workspace_id, member_id, source_id=None):
-    cur.execute(RECENT_IDEAS_SQL, (workspace_id, member_id, source_id, source_id))
+def capture_recent_ideas(cur, workspace_id, source_id=None):
+    cur.execute(RECENT_IDEAS_SQL, (workspace_id, source_id, source_id))
     return extract_ideas(cur.fetchall())

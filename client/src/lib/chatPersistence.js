@@ -204,6 +204,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
         try { applyStatus(activeId, await request(`${base}/${activeId}/operations/${op.operation_key}`)) } catch (err) { report(err) }
       }
       if (state.active && !state.active.unsaved) await open(state.active.id, false, true)
+      await list()
     } finally { polling = false }
   }
   function operations() {
