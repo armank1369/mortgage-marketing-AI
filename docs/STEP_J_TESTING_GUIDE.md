@@ -12,6 +12,11 @@ automated tests below use fake provider responses and incur no AI charges. Do no
 run manual send/clarify/regenerate/video/social_image operations without paid-call
 approval. Creation/metadata/read/archive examples below remain model-free.
 
+Current dependency installation is in the [README](../README.md#clone-and-install).
+Commands below use `server/.venv`; substitute `server/venv` consistently if using
+an older checkout’s environment. Current behavior is in the [UI guide](CURRENT_UI_GUIDE.md)
+and [workspace-sharing report](WORKSPACE_CHAT_SHARING.md).
+
 ## J.4 UI checks — safe to run without a database or paid calls
 
 From repository root:
@@ -36,7 +41,9 @@ Screenshots go to the OS temporary directory (or `STEP_J_SCREENSHOT_DIR`).
 
 For an optional normal-app review, open an existing saved conversation and refresh it:
 reads do not regenerate. Check Previous versions, Archive/Restore, Rename, explicit
-Generation persona selection, Load earlier messages and Local history. Verify old
+persona card/review/confirmation, the locked persona badge and Brand Summary,
+numbered tone choices, optional age slider, tags/writing-example cards, Load earlier
+messages, complete JSON export and Local history. Verify old
 local chats are read-only and Calendar remains local. New Chat creates no remote
 placeholder until Send. Send, Continue, Regenerate and media generation in the normal
 app can make paid calls; use the synthetic browser command for free functional checks.
@@ -105,10 +112,10 @@ acceptance is needed before declaring the database path verified.
 From repository root:
 
 ```powershell
-.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_repository.py server/tests/test_step_j_routes.py server/tests/test_step_j_contract.py server/tests/test_step_g_private_chats.py server/tests/test_step_g_authorization.py -q
-.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_operations.py server/tests/test_step_i_routes.py server/tests/test_step_i_compliance.py -q
-.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_context.py server/tests/test_step_i_context.py server/tests/test_step_i_routes.py -q
-.\server\venv\Scripts\python.exe -m pytest server/tests -q
+.\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_repository.py server/tests/test_step_j_routes.py server/tests/test_step_j_contract.py server/tests/test_step_g_private_chats.py server/tests/test_step_g_authorization.py -q
+.\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_operations.py server/tests/test_step_i_routes.py server/tests/test_step_i_compliance.py -q
+.\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_context.py server/tests/test_step_i_context.py server/tests/test_step_i_routes.py -q
+.\server\.venv\Scripts\python.exe -m pytest server/tests -q
 git diff --check
 ```
 
@@ -134,7 +141,7 @@ The owner follow-up run used this process-only setup and all five live tests pas
 see the implementation record. No need to rerun them unless code/target changes.
 
 ```powershell
-.\server\venv\Scripts\python.exe -m pytest server/tests/test_step_j_integration.py server/tests/test_step_j_generation_integration.py server/tests/test_step_j_context_integration.py --run-integration -m integration -q
+.\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_integration.py server/tests/test_step_j_generation_integration.py server/tests/test_step_j_context_integration.py --run-integration -m integration -q
 ```
 
 The five tests cover:
@@ -262,7 +269,7 @@ is no public assistant-seeding endpoint for preparing a manual shortening exampl
 | Phase | What will need verification | What to prepare now |
 | --- | --- | --- |
 | J.3 | Implemented and tested with synthetic provider/real SQL. Paid-provider behavior still needs separately approved smoke. | No ai_run pre-insertion or schema change. Reuse existing synthetic test target if code changes. |
-| J.4 | Implemented; synthetic Chrome UI checks pass and owner reported positive multiple-browser use. Full live foreign-creator/admin/workspace/role denial remains a separate gate. | Existing test accounts and explicit selected persona. No extra SQL or migration. |
+| J.4 | Implemented; synthetic Chrome UI checks pass and owner reported positive multiple-browser use. Live same-workspace collaboration and foreign-workspace/viewer-write denial remain separate gates. | Existing test accounts and explicit selected persona. No extra SQL or migration. |
 | J.5 | Implemented; scoped real SQL and synthetic provider request tests pass, including revisions, original-task boundaries, Unicode limits and foreign-session exclusion | Optional owner UI follow-up review; no embeddings, vector extension, summary table or migration. |
 | J.7 | Automated regressions, real independent-connection/process interruption tests and synthetic PNG export passed. Remaining live identity/provider/runtime gates are recorded separately. | Existing test identities, actual Render worker/start-command and proxy timeout settings, and separate paid-call approval/budget before agent-run paid smoke. |
 

@@ -6,6 +6,9 @@ Baseline: Step J `290c636`, compared with presentation-era main `43162e2`.
 This patch preserves the Steps G–J authorization, durable operation recovery,
 immutable responses and existing generation policies. No migration is required.
 
+For the current end-user walkthrough, see [UI and workflow](CURRENT_UI_GUIDE.md).
+For fresh-checkout commands, use the [README](../README.md#clone-and-install).
+
 ## Screenshot-driven UI revision
 
 The follow-up UI revision uses main's actual `PreferenceSetup.jsx`,
@@ -83,7 +86,7 @@ payloads. No live SQL inspection or migration is needed.
 | Loading phrases / tips | Durable operation state UI | Gentle reduced-motion-aware animation; actual running/checking/unknown status stays authoritative |
 | Posts, campaigns, clarifications, carousels, video and social image | Existing renderers and Step J message envelopes | Retained; regression/browser checks cover saved outputs and revisions |
 | Calendar / Save to Calendar | Existing `CalendarContext`, browser storage | Retained; still browser-local |
-| Cross-chat repeated-idea suppression: August session log / SQLite | `recent_ideas.py`; authorized creator-owned Neon sessions | Restored with narrower visibility: same creator and workspace only; never other creators' chats |
+| Cross-chat repeated-idea suppression: August session log / SQLite | `recent_ideas.py`; authorized workspace Neon sessions | Restored and extended by the sharing patch: all creators within the selected workspace; no other workspaces |
 | Experimental history download: `chat-memory-save-button` | Paginated authorized v2 reads / scoped local history | Selected-chat JSON export; includes structured outputs, revisions, flags and historical persona snapshots |
 | Delete / Clear | Step J Archive and Restore | Retained; no destructive delete or history reassignment |
 
@@ -115,7 +118,7 @@ payloads. No live SQL inspection or migration is needed.
   guarantee when another browser is actively appending messages.
 - Idea context reads the latest 12 completed text/post/campaign results, retaining
   only the latest revision per original request. It excludes the regenerated source,
-  failed work and foreign owners/workspaces; extracts at most 25 concepts within
+  failed work and foreign workspaces; extracts at most 25 concepts within
   8 KiB of UTF-8 JSON; and supplies them as untrusted advisory context. It makes no
   extra model call and does not replace or enlarge the Step J same-chat history
   budget. It guides generation, rather than guaranteeing semantic uniqueness.

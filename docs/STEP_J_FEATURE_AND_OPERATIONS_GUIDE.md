@@ -1,8 +1,10 @@
 # Step J — current feature, contract and decision reference
 
-> Access-policy update: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md) supersedes creator-private chat access and creator-only recent-idea retrieval described below. Existing same-workspace chats are shared; historical test results remain historical.
+> Current access policy: [Workspace chat sharing](WORKSPACE_CHAT_SHARING.md). UI controls and user-facing steps are in the [UI guide](CURRENT_UI_GUIDE.md); older plans and acceptance records remain historical.
 
-This is the current Step J reference for users, maintainers and future executors.
+This is the current Step J reference for users, maintainers and future executors,
+including the UI hotfixes and workspace sharing. See the [UI guide](CURRENT_UI_GUIDE.md)
+for setup controls and the [README](../README.md) for current clone/install commands.
 The [approved plan](STEP_J_APPROVED_PLAN.md) records the agreed scope;
 the [implementation record](STEP_J_IMPLEMENTATION_AND_TESTING.md) preserves
 chronological evidence; [finalization](STEP_J_FINALIZATION.md) records current
@@ -13,18 +15,22 @@ are historical context, not instructions to repeat migrations, preflight or seed
 
 | Feature | Current behavior |
 | --- | --- |
-| New Chat | An unsaved local composer. No remote session is created until first Send. A UUID and pending request are stored before dispatch. |
+| New Chat | Persona cards → guideline review → explicit confirmation → unsaved local composer. No remote session is created until first Send. A UUID and pending request are stored before dispatch. |
 | Conversation list | Scrollable active/archive views; initial 30 sessions, Load more with a cursor. Refresh can return the first page again. There is no three-slot limit. |
 | History | Latest 50 messages first, displayed in chronological order; Load earlier retrieves older pages. Read/reopen never generates output. |
-| Rename/persona | Server metadata edits protected by If-Match. Persona must be explicitly selected from current workspace configuration for new generation. |
-| Archive / Clear | Reversible archive followed by a new unsaved composer. Archive view supports Restore. No hard-delete API. Unresolved work blocks archive. |
-| Regenerate | New linked alternative using the stored original task and the currently selected persona. Old output remains under Previous versions. |
+| Rename/persona | Title edits use If-Match. Saved persona UUID is immutable; changing/clearing returns 409 persona_locked, same-value patches are harmless. Use a new chat for another audience. |
+| Archive / Clear | Workspace-wide reversible archive followed by persona selection for a new unsaved chat. Archive view supports Restore. No hard-delete API. Unresolved work blocks archive. |
+| Regenerate | New linked alternative using the stored original task and the chat’s locked persona with current configuration. Old output remains under Previous versions. |
 | Make it shorter | Deterministic server operation for plain text, preserving the complete original disclosure and flags. No provider call or ai_run. |
 | Clarification | Selected options/custom text become a linked user record. Reload restores choices and submitted state; the server composes original task plus answers. |
 | Campaign video | Saved linked assistant artifact for a validated calendar item. Generation/regeneration preserves the original campaign payload. |
 | Social image | Saved template/slots/business identity/disclosure/render-version specification. The browser renders and exports PNG locally; Step J does not store binary images or invent uploaded URLs. |
 | Media versions | Regeneration uses the saved artifact as source. A stale browser using the parent again receives stale_source before any provider call. Older independently saved sibling attempts remain visible as previous versions. |
 | Local history | Read-only scoped legacy browser chats. Existing scoped/unscoped keys remain unchanged; unscoped legacy records stay hidden. No automatic upload, reassignment, merge or deletion. |
+| Brand setup | Legacy persona cards/review, four numbered tone rows, optional age slider/income/education, tag inputs and writing-example cards. Brand values/tone are shared; audience guidance belongs to the selected persona. |
+| Brand Summary | Header dialog shows current persona/audience/brand configuration; saved message labels retain historical snapshots. |
+| Sidebar and suggestions | Stacked Chat/Calendar/New Chat, persona/preview/type labels, and three suggestions per category with More. |
+| Export chat | Versioned JSON with every history page, structured outputs, revisions, snapshots and flags; failures do not create partial downloads. No import endpoint. |
 | Calendar | Existing browser-local scheduling remains, using durable message IDs as batch keys. It does not synchronize across devices. Saving another revision uses that revision's distinct ID. |
 
 Text, posts, clarification, campaign, video and social-image outputs retain their
@@ -48,21 +54,21 @@ do not delete old history keys to resolve an operation.
 ## 2. Privacy and authority
 
 Every request verifies JWT identity, selected-workspace membership and capabilities.
-Every conversation read/write/source/status also requires creator ownership in that
-workspace. Owner/admin roles do not grant access to someone else's private chat.
-Null historical creators are not backfilled or assigned to the current user.
+Every conversation read/write/source/status checks the selected authorized workspace.
+Its members can access each other's saved chats; creator identity is attribution.
+Null historical creators are visible in their workspace but never backfilled.
 
 | Capability | Owner/admin/developer/member | Viewer |
 | --- | --- | --- |
-| chat:read | Own conversations only | Own conversations only |
+| chat:read | Workspace conversations | Workspace conversations |
 | chat:create | Yes | No |
-| chat:write | Own metadata/revisions/archive/recovery | No |
+| chat:write | Workspace metadata/revisions/archive/recovery | No |
 | ai:generate | Yes, also chat:write for durable generation | No |
 
 This does not change configuration-edit policy: member cannot edit brand/personas,
 and developer configuration writes remain restricted by environment. UI role controls
 are advisory; the repository refreshes role/membership under a short lock. All
-mutations lock membership before session. Ownership/capabilities/fencing are checked
+mutations lock membership before session. Workspace scope/capabilities/fencing are checked
 again before provider stages and completion. No DB connection is held during AI calls.
 RLS was not added; application predicates remain mandatory. Optional revoked_at
 compatibility does not implement the absent soft-revocation lifecycle.
@@ -70,7 +76,7 @@ compatibility does not implement the absent soft-revocation lifecycle.
 Source messages and request links must belong to the same authorized session.
 Foreign/missing records are indistinguishable 404s. Browser fields cannot establish
 author, role, ownership, normalized output, claim state, flags or trusted history.
-Private chat/status responses, including errors, use Cache-Control: no-store.
+Authenticated chat/status responses, including errors, use Cache-Control: no-store.
 Account/workspace changes abort waiting and reject stale responses; aborting the
 browser does not cancel a server/provider attempt already running.
 
@@ -81,10 +87,10 @@ UUIDs are server-validated; timestamps are server-generated. Limits are server l
 
 | Method/path | Request/response |
 | --- | --- |
-| PUT /api/chat/sessions/{client_uuid} | Body `{title,persona_id}`. 201 new / 200 existing owned ID. Replay returns current metadata without overwriting it. Foreign collision: 404. |
+| PUT /api/chat/sessions/{client_uuid} | Body `{title,persona_id}`. 201 new / 200 existing same-workspace ID. Replay returns current metadata without overwriting it. Foreign collision: 404. |
 | POST /api/chat/sessions | Legacy initial-message creation retained for compatibility. The durable UI uses idempotent PUT instead. |
 | GET /api/chat/sessions?version=2&archived=false&limit=30&cursor=... | `{sessions,next_cursor}`; archived true selects Archive. Sort updated_at DESC, id DESC; max 100. Unversioned list retains its old array shape. |
-| GET /api/chat/sessions/{id}?version=2&limit=50&before=... | Metadata/etag, ascending `(created_at,id)` messages, before_cursor and unresolved operation statuses. Max 100. Own archived history is readable. |
+| GET /api/chat/sessions/{id}?version=2&limit=50&before=... | Metadata/etag, ascending `(created_at,id)` messages, before_cursor and unresolved operation statuses. Max 100. Workspace archived history is readable. |
 | PATCH /api/chat/sessions/{id} | Body may contain only title/default_persona_id/archived. Require If-Match metadata ETag. Return updated metadata/etag. |
 | POST /api/chat/sessions/{id}/operations | Submit the typed action below. Provider operations remain synchronous. No generic assistant/system/tool-message insertion endpoint. |
 | GET /api/chat/sessions/{id}/operations/{key} | Read operation state and committed response; never call the provider. |
@@ -94,7 +100,10 @@ Metadata ETag hashes canonical title/default persona/archive state under the ses
 lock. It is not a history version; adding messages alone does not invalidate it.
 Missing If-Match returns 428; stale metadata returns 412. Session metadata includes
 id, workspace_id, created_by_member_id, default_persona_id, title, summary_status,
-started_at, updated_at, archived_at and etag. summary_status is an existing field,
+started_at, updated_at, archived_at and etag. V2 list/detail reads also expose
+read-only persona_name, preview, content_types and persona_state derived server-side
+through page-scoped queries; full-history persona checks are not page-limited.
+summary_status is an existing field,
 not evidence of a new background summarization job.
 
 Operation request:
@@ -116,7 +125,10 @@ Operation request:
 | shorten | source_message_id of current text revision; omit persona_id (historical persona is retained) |
 | video / social_image | source_message_id of stored parent or current artifact; target `{collection:"posts" or "content_calendar",index:nonnegative integer}` identifies a validated item. Media regeneration must retain its target. |
 
-All provider actions require persona_id. Source actions reject browser message text.
+All provider actions require persona_id matching the locked session and any source.
+Mixed/ambiguous histories and unavailable personas block new provider work; historical
+reads/export/archive remain available. Existing replay still precedes current configuration
+and selection checks. Source actions reject browser message text.
 Unknown fields/type mismatches return 400. Server title length: 1–200 characters;
 prompt/combined clarification: at most 16,000 characters; operation JSON: at most
 128 KiB. Canonical validated input is hashed; same key with different input returns
@@ -138,7 +150,7 @@ durable UI does not call them. They do not gain implicit conversation context.
 ## 4. Operation recovery and billing limits
 
 1. Authorize and inspect stable key/hash for replay before resolving old configuration.
-2. Resolve current context/source, then lock and recheck role/ownership/idle state.
+2. Resolve current context/source, then lock and recheck role/workspace/idle state.
 3. Capture bounded history and persist request/claim; positively establish commit
    before dispatch. Commit an ai_run before each actual provider invocation.
 4. Call the provider with SDK retries disabled and a 120-second per-invocation timeout.
@@ -162,7 +174,8 @@ durable UI does not call them. They do not gain implicit conversation context.
 The browser stores pending identifiers/input under
 `lucie_chat_pending:v1:<encoded account/workspace scope>` before dispatch. Storage
 failure is surfaced and blocks generation. Unresolved status is polled every two
-seconds while visible; focus/reconnect refreshes the active conversation. No automatic
+seconds while visible; focus/reconnect refreshes the active conversation and sidebar.
+Idle shared chats/list refresh approximately every 15–16 seconds while visible/online. No automatic
 regeneration occurs. Server status is authoritative; local storage is not an authority
 or an encrypted backup. A full reload can recover claimed work on another browser
 from server history/status even though that browser has no local pending record.
@@ -234,8 +247,10 @@ messages, exchange/provenance IDs, message_ids, truncated and utf8_bytes. Both
 campaign stages use this captured snapshot. Historical content enters provider
 user/assistant messages, never trusted policy. Current brand/persona/licensing and
 compliance remain authoritative; ai_run prompt version is step-i-policy-step-j5-v1.
-Media uses its explicit saved source without unrelated history. There is no cross-chat
-memory, RAG, embeddings, vector extension, summary job or additional AI context call.
+Media uses its explicit saved source without unrelated history. Bounded recent-idea avoidance separately reads up to 12 completed outputs across this
+workspace, extracts at most 25 concepts within 8 KiB and passes them as untrusted advisory
+context, without an extra model call. This is not full cross-chat memory, RAG, embeddings,
+a vector extension or a summary job.
 
 ## 7. Decisions and boundaries
 
@@ -243,7 +258,7 @@ memory, RAG, embeddings, vector extension, summary job or additional AI context 
 | --- | --- |
 | Persistence first, retain Step I generation | Avoid rebuilding prompts/compliance; shared callable services preserve old stateless response shapes. |
 | Existing schema, application authorization | Existing fields/indexes support required invariants with locking; no speculative DDL or RLS rollout. |
-| Creator-private even for admins | Workspace membership/configuration authority does not imply access to another creator's conversations. |
+| Workspace-shared chats | Members can read and writers can continue/edit the workspace’s saved chats; creator/authors remain attribution. No cross-workspace access. |
 | Scrollable list with Archive | Replaces fixed three-slot reconciliation; keeps history and reversible clearing. |
 | Immutable revisions and media links | Historical publication content/identity remains auditable and reloadable. |
 | Client UUID plus idempotent create | Reload/retry does not create duplicate placeholder sessions or overwrite metadata. |
@@ -252,7 +267,7 @@ memory, RAG, embeddings, vector extension, summary job or additional AI context 
 | Bounded context after durability | Server-owned same-conversation history, bounded cost/input and auditable selection, without cross-chat memory. |
 | Defer Save Draft (J.6) | content_item lacks the approved creator ownership/visibility contract; do not invent draft privacy or migration. |
 | Preserve local history/calendar | Avoid unintended historical upload or a false cross-device calendar promise. |
-| UI appearance separate | Owner will consult the team; functional fixes do not authorize a redesign. |
+| Legacy UI recovery | Explicitly requested hotfixes restore persona cards/review, numbered tone choices, optional demographic controls, tag/sample inputs and stacked sidebar navigation. See the UI guide and recovery report. |
 | Agent runs routine scripts | Owner focuses on normal UI review; no repeated PowerShell/Neon preflight is needed absent a relevant change. |
 | J.5/J.7 combined | Explicit owner approval replaced the intermediate J.5 checkpoint, with tests still sequential. |
 
@@ -261,7 +276,9 @@ memory, RAG, embeddings, vector extension, summary job or additional AI context 
 The owner reported working normal UI/multiple-browser persistence after J.4 and
 working behavior after J.5. This is qualitative acceptance, not a claim that every
 role/output/provider/cache/runtime combination was manually exercised. Latest exact
-counts and review fixes are in finalization and the single implementation record.
+counts for the UI/sharing patch are in [workspace sharing](WORKSPACE_CHAT_SHARING.md);
+fresh-install verification is in the [documentation sweep](DOCUMENTATION_SETUP_SWEEP.md).
+Earlier finalization/implementation results remain historical evidence.
 
 Routine isolated tests and the Chrome fixture/export script need no live database
 or paid calls. Opt-in PostgreSQL tests use only approved fresh synthetic workspaces
