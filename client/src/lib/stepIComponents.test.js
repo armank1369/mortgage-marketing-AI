@@ -65,7 +65,7 @@ test('missing brand profile offers an actionable error without a false usable sa
 
 test('persona onboarding renders saved choices while read-only users cannot create/edit', () => {
   const html = render(PersonaManager, {}, { onSelect() {} })
-  assert.match(html, /Use this persona/)
+  assert.match(html, /Select persona/)
   assert.match(html, /Education/)
   assert.doesNotMatch(html, />Edit</)
   assert.doesNotMatch(html, /New persona/)

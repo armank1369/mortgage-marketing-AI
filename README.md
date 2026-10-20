@@ -16,7 +16,14 @@ For current features, architecture decisions, API/recovery behavior and limitati
 See [Step J finalization](docs/STEP_J_FINALIZATION.md) for acceptance/results and
 [Step J testing](docs/STEP_J_TESTING_GUIDE.md) for reproducible checks. The owner
 reported successful UI use after J.4 and J.5; deployment/live-matrix gates remain
-explicit. UI appearance refinements are separately planned with the owner's team.
+explicit.
+
+The [legacy workflow recovery patch](docs/LEGACY_RECOVERY_PATCH.md) restores
+persona selection/review, Brand Summary, audience/tone editing, sidebar metadata,
+rotating suggestions and selected-chat export. It supersedes earlier mutable
+per-chat persona behavior: persisted chats keep one persona. Recent-idea avoidance
+is limited to the current creator's chats in the selected workspace. The recovery
+guide includes the parity matrix, API amendments and return-to-computer checklist.
 
 For the underlying brand/persona generation work, read:
 

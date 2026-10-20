@@ -1,3 +1,4 @@
+import { collectConversationExport } from './legacyRecovery.js'
 import { mergeMessages, operationRecords } from './chatSerialization.js'
 
 export function chatUUID() {
@@ -13,7 +14,8 @@ export const pendingStorageKey = (scope) => `lucie_chat_pending:v1:${encodeURICo
 const terminal = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
 const apiError = (err) => {
   const code = err?.response?.data?.error
-  return ({ precondition_failed: 'This conversation changed elsewhere. Refresh and try the edit again.',
+  return ({ persona_locked: 'This conversation is tied to one persona. Start a new chat for another audience.',
+    persona_history_conflict: 'This conversation has mixed or unknown persona history. Start a new chat.', precondition_failed: 'This conversation changed elsewhere. Refresh and try the edit again.',
     operation_in_progress: 'Another operation is active in this conversation.', stale_source: 'A newer version exists. Refresh before trying again.',
     permission_denied: 'Your workspace role does not permit this action.', not_found: 'This conversation or source is unavailable.',
     generation_configuration_required: 'Review the brand and persona configuration in Settings.',
@@ -102,6 +104,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   async function patch(fields) {
     const active = state.active
     if (!active) return
+    if (!active.unsaved && 'default_persona_id' in fields && fields.default_persona_id !== active.default_persona_id) throw Error('This conversation is tied to one persona. Start a new chat.');
     if (active.unsaved) { emit({ active: { ...active, ...fields } }); return }
     if (state.metadataSaving) throw Error('A conversation edit is already being saved.')
     metadataVersions.set(active.id, (metadataVersions.get(active.id) || 0) + 1); emit({ metadataSaving: true })
@@ -178,7 +181,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     if (unresolved && !retryOf) throw Error('Check or close the active request first.')
     const body = { ...input, operation_key: uuid() }
     if (retryOf) { body.retry_of = retryOf; if (acknowledge) body.acknowledge_uncertain_outcome = true }
-    const record = { session_id: active.id, body, needs_create: !!active.unsaved, create: { title: active.unsaved && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
+    const record = { session_id: active.id, body, needs_create: !!active.unsaved, create: { title: active.unsaved && active.title === 'New conversation' && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
       persona_id: active.default_persona_id || input.persona_id || null }, state: 'checking' }
     return dispatch(record)
   }
@@ -221,8 +224,9 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     },
     stop() { alive = false; ++epoch; ++selection; for (const controller of controllers) controller.abort(); controllers.clear() },
     list, open, newChat, patch, submit, reconcile, operations, abandon,
+    exportConversation(id) { return collectConversationExport((sessionId, cursor) => request(`${base}/${sessionId}?version=2&limit=100${cursor ? `&before=${encodeURIComponent(cursor)}` : ''}`), id) },
     async archive() { const active = state.active; if (await patch({ archived: true })) {
-      if (state.active?.id === active.id) newChat(active.default_persona_id || '')
+      if (state.active?.id === active.id) newChat()
     } },
     async resend(key) { const record = state.pending.find((r) => r.body.operation_key === key); if (record) return dispatch(record) },
     clearError() { emit({ error: state.storageError }) },

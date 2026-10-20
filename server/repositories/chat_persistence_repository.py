@@ -17,6 +17,7 @@ from services.chat_contract import (PROVIDER_ACTIONS, TYPES, canonical, text, me
                                     serialize, public_message, operation_state, input_hash,
                                     operation_fields, patch_fields, encode_cursor)
 from validation import uuid_string
+from services.session_presentation import enrich_sessions, assert_persona
 
 SESSION_COLUMNS = "id, workspace_id, created_by_member_id, default_persona_id, title, summary_status, started_at, updated_at, archived_at"
 MESSAGE_COLUMNS = "id, session_id, author_member_id, persona_id, role, kind, mode, content, content_format, structured_data, compliance_flags, client_message_key, request_message_id, source_message_id, created_at"
@@ -113,7 +114,7 @@ def list_sessions(workspace_id, member_id, *, archived=False, limit=30, cursor=N
                     f"WHERE workspace_id=%s AND created_by_member_id=%s {where} "
                     "ORDER BY updated_at DESC,id DESC LIMIT %s", (*params, limit + 1))
         rows = cur.fetchall()
-    page = rows[:limit]
+        page = enrich_sessions(cur, [dict(row) for row in rows[:limit]])
     return {"sessions": [session_dto(row) for row in page],
             "next_cursor": encode_cursor(page[-1]["updated_at"], page[-1]["id"]) if len(rows) > limit else None}
 
@@ -168,6 +169,7 @@ def get_session(workspace_id, session_id, member_id, *, limit=50, before=None):
         rows = cur.fetchall()
         page = rows[:limit]
         operations = [_status(cur, row) for row in _unresolved_requests(cur, session_id)]
+        enrich_sessions(cur, [session])
         result = session_dto(session)
         result.update(messages=[public_message(row) for row in reversed(page)], operations=operations,
                       before_cursor=encode_cursor(page[-1]["created_at"], page[-1]["id"]) if len(rows) > limit else None)
@@ -196,8 +198,8 @@ def patch_session(workspace_id, session_id, member_id, fields, if_match):
             raise PreconditionFailedError()
         if fields.get("archived") is True:
             _assert_idle(cur, session_id)
-        if fields.get("default_persona_id"):
-            active_persona(cur, workspace_id, fields["default_persona_id"])
+        if "default_persona_id" in fields and fields["default_persona_id"] != (str(session["default_persona_id"]) if session.get("default_persona_id") else None):
+            raise ChatConflictError("persona_locked", "Start a new conversation to use another persona.")
         assignments, params = [], []
         for key in ("title", "default_persona_id"):
             if key in fields:
@@ -337,6 +339,8 @@ def _claim_locked(cur, workspace_id, session_id, member_id, fields, *, generatio
             raise ChatConflictError("operation_not_retryable", "The original operation is not ready for a new attempt.")
     _assert_idle(cur, session_id)
     source = _source(cur, session_id, fields)
+    session = owned_session(cur, workspace_id, session_id, member_id, lock=True)
+    assert_persona(cur, session, fields, source)
     snapshot = (active_persona(cur, workspace_id, fields["persona_id"]) if fields["action"] in PROVIDER_ACTIONS
                 else deepcopy(source["structured_data"].get("persona_snapshot")))
     if persona_snapshot is not None:

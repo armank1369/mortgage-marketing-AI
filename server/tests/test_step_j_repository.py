@@ -43,7 +43,24 @@ class MemorySQL:
         self.calls.append((q, params))
         self.rows = []
         now = datetime.now(timezone.utc)
-        if q.startswith("select") and "from public.workspace_member" in q:
+        if q.startswith("select s.id, p.name as persona_name"):
+            for sid in params[0]:
+                session = self.sessions.get(sid)
+                if not session:
+                    continue
+                messages = [r for r in self.messages.values() if r['session_id'] == sid]
+                persona = self.personas.get(session.get('default_persona_id'))
+                if persona and (persona.get('deleted_at') or persona['workspace_id'] != session['workspace_id']):
+                    persona = None
+                first = next((r for r in sorted(messages, key=lambda r: (r['created_at'], r['id'])) if r['role'] == 'user' and
+                              (r['kind'] != 'operation' or r['structured_data'].get('input', {}).get('action') == 'send')), None)
+                self.rows.append(dict(id=sid, persona_name=persona['name'] if persona else None,
+                    active_persona_id=persona['id'] if persona else None,
+                    persona_ids=list({str(r['persona_id']) for r in messages if r.get('persona_id')}),
+                    unknown_persona=any(r['role'] == 'assistant' and not r.get('persona_id') for r in messages),
+                    preview=first['content'][:180] if first else '',
+                    content_types=sorted({r['structured_data']['type'] for r in messages if r['role']=='assistant' and r['structured_data'].get('schema_version') == 1 and r['structured_data'].get('type') in {'text','posts','campaign','video','social_image'}})))
+        elif q.startswith("select") and "from public.workspace_member" in q:
             row = self.members.get(params[0])
             self.rows = [row] if row and row["workspace_id"] == params[1] and not row.get("revoked_at") else []
         elif q.startswith("select") and "from public.persona" in q:
@@ -408,7 +425,9 @@ def test_deleted_or_foreign_persona_rejected_before_claim_insert(store):
     store.personas[P].pop("deleted_at")
     store.personas[P]["workspace_id"] = OTHER
     with pytest.raises(NotFoundError):
-        repo.patch_session(W, S, M, {"default_persona_id": P}, metadata_etag(store.sessions[S]))
+        repo.claim_operation(W, S, M, send())
+    # An identical metadata selection is a harmless no-op, even if unavailable.
+    assert repo.patch_session(W, S, M, {"default_persona_id": P}, metadata_etag(store.sessions[S]))["default_persona_id"] == P
 
 
 @pytest.mark.parametrize("response", [

@@ -221,7 +221,10 @@ test('a stale history GET cannot overwrite a newly committed persona/title edit'
 test('shortening an existing conversation does not require a new creation or a current persona', async () => {
   const f = fixture(), c = f.make(); await c.start()
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
-  await c.patch({ default_persona_id: null })
+  await assert.rejects(c.patch({ default_persona_id: null }), /tied to one persona/)
+  // A historical unavailable selection still permits deterministic shortening.
+  f.sessions.get(c.getSnapshot().active.id).default_persona_id = null
+  await c.open(c.getSnapshot().active.id)
   const before = f.calls.filter((r) => r.method === 'PUT').length
   await c.submit({ action: 'shorten', source_message_id: 'response' })
   assert.equal(f.calls.filter((r) => r.method === 'PUT').length, before)

@@ -86,7 +86,8 @@ def execute_operation(workspace_id, session_id, member_id, data, runtime):
     try:
         if task["kind"] == "chat":
             response = generate_chat(task["message"], context, invoke, model=runtime.model,
-                                     history=task.get("conversation_context", {}).get("messages", []))
+                                     history=task.get("conversation_context", {}).get("messages", []),
+                                     recent_ideas=task.get("recent_ideas", []))
         elif task["kind"] == "video":
             response = {"type": "video", **generate_video(task, context, invoke, model=runtime.model)}
         else:

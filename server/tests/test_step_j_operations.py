@@ -42,6 +42,24 @@ class GenerationSQL(MemorySQL):
 
     def execute(self, sql, params=()):
         q = " ".join(sql.lower().split())
+        if q.startswith("with creator_ideas as"):
+            self.calls.append((q, params))
+            latest = {}
+            for row in self.messages.values():
+                session = self.sessions.get(row['session_id'], {})
+                envelope = row.get('structured_data') or {}
+                request = self.messages.get(row.get('request_message_id'), {})
+                if (session.get('workspace_id') != params[0] or session.get('created_by_member_id') != params[1]
+                        or row['role'] != 'assistant' or envelope.get('schema_version') != 1
+                        or envelope.get('type') not in {'text', 'posts', 'campaign'}
+                        or request.get('structured_data', {}).get('operation', {}).get('state') != 'succeeded'):
+                    continue
+                root = envelope.get('original_request_id') or row.get('request_message_id')
+                prior = latest.get(root)
+                if not prior or (row['created_at'], row['id']) > (prior['created_at'], prior['id']):
+                    latest[root] = row
+            self.rows = sorted((r for r in latest.values() if r['id'] != params[2]), key=lambda r: (r['created_at'], r['id']), reverse=True)[:12]
+            return
         if q.startswith("with latest as"):
             self.calls.append((q, params))
             sid, *rest = params

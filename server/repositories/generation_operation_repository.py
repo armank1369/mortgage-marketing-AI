@@ -11,8 +11,9 @@ from errors import ChatConflictError, ValidationError
 from services.chat_contract import canonical, input_hash, operation_fields, operation_state, text
 from repositories import chat_persistence_repository as chats
 from db.connection import get_db_transaction
+from services.recent_ideas import capture_recent_ideas
 
-PROMPT_VERSION = "step-i-policy-step-j5-v1"
+PROMPT_VERSION = "legacy-recovery-v1"
 SAFE_ERRORS = frozenset({"provider_unavailable", "provider_rate_limited", "provider_outcome_unknown",
                          "invalid_provider_output", "persistence_outcome_unknown", "generation_failed"})
 
@@ -105,7 +106,7 @@ def prepare_operation(workspace_id, session_id, member_id, data):
     fields = operation_fields(data)
     with get_db_transaction() as cur:
         chats.lock_member(cur, workspace_id, member_id, "chat:write", "ai:generate")
-        chats.owned_session(cur, workspace_id, session_id, member_id, lock=True)
+        session = chats.owned_session(cur, workspace_id, session_id, member_id, lock=True)
         existing = chats._request(cur, session_id, fields["operation_key"])
         if existing:
             if existing["structured_data"]["input_hash"] != input_hash(fields):
@@ -126,6 +127,7 @@ def prepare_operation(workspace_id, session_id, member_id, data):
                 raise ChatConflictError("operation_not_retryable")
         chats._assert_idle(cur, session_id, excluding=excluding)
         source = chats._source(cur, session_id, fields, excluding_request_id=excluding)
+        chats.assert_persona(cur, session, fields, source)
         if fields["action"] == "send":
             result = {"kind": "chat", "message": fields["message"]}
         elif fields["action"] in {"regenerate", "clarify"}:
@@ -135,6 +137,8 @@ def prepare_operation(workspace_id, session_id, member_id, data):
             result = {"kind": "chat", "message": task}
         else:
             result = _media_input(cur, session_id, fields, source)
+        if result["kind"] == "chat":
+            result["recent_ideas"] = capture_recent_ideas(cur, workspace_id, member_id, str(source["id"]) if source else None)
     return {"generation_input": result}
 
 
