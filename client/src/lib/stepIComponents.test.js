@@ -67,11 +67,11 @@ test('persona onboarding renders saved choices while read-only users cannot crea
   const html = render(PersonaManager, {}, { onSelect() {} })
   assert.match(html, /Select persona/)
   assert.match(html, /Education/)
-  assert.doesNotMatch(html, />Edit</)
+  assert.doesNotMatch(html, /aria-label="Edit Education"/)
   assert.doesNotMatch(html, /New persona/)
   const editable = render(PersonaManager, { canWrite: true })
   assert.match(editable, /New persona/)
-  assert.match(editable, />Edit</)
+  assert.match(editable, /aria-label="Edit Education"/)
 })
 
 test('legacy persona transition remains explicit and does not present an automatic mapping', () => {

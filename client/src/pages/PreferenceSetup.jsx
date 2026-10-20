@@ -1,44 +1,36 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { usePreferences } from '../context/PreferencesContext'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
 import { selectDatabasePersona } from '../lib/workspaceConfiguration.js'
 import PersonaManager from '../components/PersonaManager.jsx'
-import BrandSummary from '../components/BrandSummary.jsx'
+import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
-// Keep the pick -> review -> use onboarding flow. Workspace voice is edited once
-// in Settings; persona audiences use the same database editor here and there.
 export default function PreferenceSetup({ onComplete, onCancel }) {
   const { preferences, setPreferences } = usePreferences()
-  const { brand, personas } = useWorkspaceData()
+  const { personas } = useWorkspaceData()
   const [selectedId, setSelectedId] = useState(null)
-  const selected = personas.find((row) => row.id === selectedId)
-  function complete() {
-    if (!selected) return
-    setPreferences(selectDatabasePersona(preferences, selected))
-    onComplete?.(selected)
+  const [editingId, setEditingId] = useState(null)
+  const selected = personas.find((row) => row.id === editingId)
+  const activeId = selectedId || personas.find((row) => row.id === preferences?.persona?.id)?.id || personas[0]?.id
+  function complete(persona) {
+    setPreferences(selectDatabasePersona(preferences, persona))
+    onComplete?.(persona)
   }
   return <div className="min-h-full bg-slate-50">
     <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-4">
-        <img src={lucieAvatar} alt="Lucie" className="h-8 w-8 rounded-full object-cover" />
-        <h1 className="text-lg font-bold text-slate-900">Lucie: Persona setup</h1>
-        {onCancel && <button type="button" onClick={onCancel} className="text-sm underline">Cancel</button>}
-        <Link to="/settings" className="ml-auto text-sm text-sky-700 underline">Brand settings</Link>
+      <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <img src={lucieAvatar} alt="Lucie" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+          <h1 className="truncate text-base text-slate-900 sm:text-lg"><span className="font-bold">Lucie</span><span className="font-normal">: Lucent's AI Social Media Assistant</span></h1>
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">Brand Setup</span>
       </div>
     </header>
-    <section className="mx-auto max-w-2xl px-4 py-8">
-      {!selected ? <PersonaManager selectedId={selectedId} onSelect={(row) => setSelectedId(row.id)} legacyPersona={preferences?.persona} /> :
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <button className="mb-5 text-sm text-slate-500 underline" onClick={() => setSelectedId(null)}>Back to personas</button>
-          <h2 className="text-lg font-semibold mb-5">Review {selected.name}</h2>
-          <BrandSummary persona={selected} brand={brand} />
-          <p className="mt-4 text-sm text-blue-900">One persona per conversation. To address another audience, start a separate chat.</p>
-          {(!Object.keys(selected.audience_profile || {}).length || !selected.prompt_guidance) && <p role="status" className="mt-3 text-sm text-amber-800">This persona has limited audience details or guidance. An authorized editor can enrich it in Settings.</p>}
-          {(!brand?.licensed_person_name || !brand?.nmls_id || !brand?.dre_number) && <p role="status" className="mt-4 text-sm text-amber-800">Before generating, an authorized editor must complete licensing in <Link className="underline" to="/settings">Settings</Link>.</p>}
-          <button className="mt-6 w-full rounded-xl bg-sky-700 py-3 font-semibold text-white" onClick={complete}>Use this persona</button>
-        </section>}
+    <section className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      {onCancel && !selected && <button type="button" onClick={onCancel} className="mb-4 text-xs text-slate-500 hover:text-slate-700">← Back to chats</button>}
+      {selected ? <PersonaGuidelines key={selected.id} persona={selected} startChat onBack={() => setEditingId(null)} onDone={complete} /> :
+        <PersonaManager selectedId={activeId} onSelect={(row) => { setSelectedId(row.id); setEditingId(row.id) }} legacyPersona={preferences?.persona} />}
     </section>
   </div>
 }

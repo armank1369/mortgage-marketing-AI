@@ -5,7 +5,7 @@ import { workspaceApi, apiErrorMessage } from '../lib/api.js'
 import { brandVoiceText, validateBrandFields } from '../lib/workspaceConfiguration.js'
 import { brandProfileRequest } from '../lib/brandProfile.js'
 
-import { TONE_SCALES } from '../lib/legacyRecovery.js'
+import ToneScales from './ToneScales.jsx'
 
 const fields = [
   ['business_name', 'Business name', 100], ['licensed_person_name', "Licensed person's full name", 100],
@@ -76,9 +76,7 @@ export default function BrandProfileEditor() {
           {key === 'tone' && <span className="text-xs text-slate-500">For example: Clear, professional and warm. Other saved tone settings are preserved.</span>}
         </label>)}
         <div className="space-y-4 rounded-xl bg-slate-50 p-4"><h3 className="font-medium text-sm">Shared tone scales</h3><p className="text-xs text-slate-500">These apply to every persona. Leave unset for no preference; use persona guidance for audience-specific explanations.</p>
-          {TONE_SCALES.map(([key, left, right]) => { const tone = JSON.parse(draft.tone); return <label key={key} className="block text-sm"><span className="flex justify-between text-xs"><span>{left}</span><span>{right}</span></span>
-            <select aria-label={`${left} to ${right}`} className="mt-2 w-full border rounded-lg p-2" value={Number.isInteger(tone[key]) && tone[key] >= 1 && tone[key] <= 5 ? tone[key] : ''} onChange={(event) => { const next = { ...tone }; if (event.target.value) next[key] = Number(event.target.value); else delete next[key]; setDraft({ ...draft, tone: JSON.stringify(next) }) }}>
-              <option value="">Not configured{tone[key] !== undefined ? ' (custom stored value preserved)' : ''}</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value} {value === 1 ? left : value === 5 ? right : value === 3 ? 'Balanced' : ''}</option>)}</select></label> })}
+          <ToneScales value={JSON.parse(draft.tone)} disabled={!canWrite || saving || !brand.exists} onChange={(key, value) => { const tone = { ...JSON.parse(draft.tone) }; if (value === undefined) delete tone[key]; else tone[key] = value; setDraft({ ...draft, tone: JSON.stringify(tone) }) }} />
         </div>
         {(!brand.keywords?.length || !brand.catchphrases?.length) && <p className="text-xs text-amber-800">Keywords or catchphrases are empty. Existing voice text may still be useful; review these fields against your approved brand guidance.</p>}
         {!brandVoiceText(brand.tone) && <p className="text-sm text-amber-800">Shared brand voice is empty. Review wording before saving.</p>}

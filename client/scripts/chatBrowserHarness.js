@@ -32,7 +32,7 @@ window.__stepJ.api = { getWorkspace: () => 'workspace-a', async send(config, { e
   const user = JSON.parse(expectedScope)[0]
   const { url, method, data } = config
   db.calls.push({ url, method, data }); save()
-  if (url.startsWith('/api/brand-profile') && method === 'PUT') { db.brand = { ...db.brand, ...data }; save(); return { data: db.brand } }
+  if (url.startsWith('/api/brand-profile') && method === 'PUT') { if(window.__stepJ.failBrand) return reject(503, 'database_unavailable'); db.brand = { ...db.brand, ...data }; save(); return { data: db.brand } }
   if (url.startsWith('/api/personas') && ['PUT', 'POST'].includes(method)) {
     const row = { ...(db.personas || []).find(p => url.endsWith(p.id)), ...data, id: method === 'POST' ? crypto.randomUUID() : url.split('/').at(-1), is_starter: false }
     db.personas = [...(db.personas || []).filter(p => p.id !== row.id), row]; save(); return { data: row }
@@ -109,7 +109,7 @@ window.__stepJ.api = { getWorkspace: () => 'workspace-a', async send(config, { e
 function Harness() {
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [brand, setBrand] = useState(() => db.brand ||= { exists: true, business_name: 'Synthetic Brokerage', nmls_id: '123456', dre_number: '00123456', licensed_person_name: 'Synthetic Licensee', tone: { voice: 'Clear voice', custom: 'Preserve tone' }, values: ['Clarity'] })
-  const [personas, setPersonas] = useState(() => db.personas ||= [{ ...snapshot, audience_profile: { custom: { preserve: true } }, prompt_guidance: 'Explain clearly' }])
+  const [personas, setPersonas] = useState(() => db.personas ||= [{ ...snapshot, description: 'An education-focused audience looking for clear mortgage guidance and practical next steps.', audience_profile: { custom: { preserve: true } }, prompt_guidance: 'Explain clearly' }])
   window.__stepJ.openConfiguration = () => setConfigurationOpen(true)
   save()
   const [access, setAccess] = useState({ account: 'account-a', role: 'owner' })

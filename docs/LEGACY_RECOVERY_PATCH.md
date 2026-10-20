@@ -4,6 +4,43 @@ Baseline: Step J `290c636`, compared with presentation-era main `43162e2`.
 This patch preserves the Steps G–J authorization, durable operation recovery,
 immutable responses and existing generation policies. No migration is required.
 
+## Screenshot-driven UI revision
+
+The follow-up UI revision uses main's actual `PreferenceSetup.jsx`,
+`DualRangeSlider.jsx` and sidebar markup as its reference. Setup now opens as a
+standalone page with the original Lucie/Brand Setup header, navy active persona
+cards, initials, edit pencil, compact name/description creation form, numbered
+sections and a full-width Set Brand Guidelines action.
+
+The tone dropdowns have been replaced with the original five numbered choices
+in both setup and Settings. They also support keyboard arrow navigation and an
+explicit clear action. The dual-handle age slider restores the original 1–100
+range and clamps each handle at the other bound, with pointer capture, touch
+support and keyboard access. Household income, education and pain points appear
+in the original Target Audience arrangement. Additional audience/generation
+settings remain accessible in an expandable section.
+
+Brand values and tone still apply to the workspace and are labeled accordingly;
+audience details belong to the selected persona. Age uses `audience_profile.ageRange`,
+income uses `.income`, education uses `.education`, and pain points use the existing
+`.pain_points` string array. These JSON fields already fit the current API/context
+contract. Existing values and custom keys are preserved. Empty tone/demographic
+fields remain unset until explicitly selected; 25–45 is only the slider preview
+and its explicit “Use 25–45” action, not an automatic migration.
+
+Set Brand Guidelines saves changed audience fields and then changed shared brand
+fields through authorized APIs before opening the conversation. If the audience
+save succeeds but the brand save fails, the form reports that partial outcome and
+stays open for retry. Config readers can review guidelines and use a persona without
+receiving configuration write controls. The persona remains locked once a chat is
+persisted.
+
+The sidebar restores vertically stacked Chat, Calendar and New Chat rows, active
+view highlighting, the green persona chip and compact conversation entries. Settings
+is available at the bottom. The existing Archive and Local history views remain
+accessible. Setup offers Back to chats without creating or changing a conversation.
+
+
 ## Feature parity and intentional differences
 
 | Presentation-era behavior / source | Current implementation / storage | Patch outcome |
@@ -13,7 +50,7 @@ immutable responses and existing generation policies. No migration is required.
 | Brand Summary: old `ChatPage.jsx` | `BrandSummary.jsx`; current brand/persona configuration | Restored from persistent header; explains current configuration versus historical labels |
 | Core values and tone: old `PreferenceSetup.jsx` | `brand_profile.values` and `.tone` | Shared brand editor; four optional 1–5 controls, voice text and unknown tone keys preserved |
 | Audience details / pain points: old `PreferenceSetup.jsx` | `persona.audience_profile`, `.prompt_guidance` | Named multiline fields for needs, pain points, questions and explanation preferences; advanced JSON remains available |
-| Age/income/education local preferences | Scoped legacy preferences and local history | Preserved as reference/export; new targeting controls deferred |
+| Age/income/education: old `PreferenceSetup.jsx` | Optional `persona.audience_profile` JSON fields plus scoped legacy records | Slider and dropdowns restored; existing custom data and unset values preserved |
 | Hardcoded brand prompt: old `server/app.py` | Step I database generation context | Empty-field notices and explicit reviewable drafts; no automatic configuration migration or identity substitution |
 | Sidebar previews and tags: old `ChatPage.jsx`, `storage.js` | Read-only v2 session presentation fields derived from stored messages | Persona label, first-request preview, response-type badges; bounded session-page queries, no client history fan-out |
 | Title and description editing | Existing metadata PATCH | Title retained; editable descriptions deferred because no corresponding current storage/API contract exists |
@@ -43,7 +80,8 @@ immutable responses and existing generation policies. No migration is required.
   meanings are included in prompt construction. Persona identity is locked, while
   edits to its definition and shared brand apply to future generations.
 - Named audience fields map to string arrays at `needs`, `pain_points`,
-  `common_questions`, `explanation_preferences`. Other keys survive. Existing
+  `common_questions`, `explanation_preferences`. Legacy-style optional controls use
+  `ageRange` (two numbers), `income` and `education` (text). Other keys survive. Existing
   incompatible field shapes use the advanced editor rather than silent conversion.
 - JSON exports use `schema_version: 1`, `exported_at`, `source`, `session`,
   `messages`. Server messages use public serializers that strip claim tokens.
@@ -73,14 +111,18 @@ Persona starters and local-persona copies also require explicit review and Save.
 
 ## Return-to-computer checks
 
-1. Open New Chat. Choose a card, review the persona and shared brand, then confirm.
-   Confirm the composer opens with that persona and the header summary is readable.
+1. Open New Chat. Choose a card, review/edit its guidelines and select Set Brand
+   Guidelines (or Use this persona for a configuration reader). Confirm the composer
+   opens with that persona and the header summary is readable. The edit pencil changes
+   a card's name/description; selecting the card opens the full guidelines form.
 2. Send a request; refresh and reopen it. Its persona stays fixed. Create another
    chat for a different audience; both chats remain distinguishable in the sidebar.
 3. In Settings, edit audience needs, pain points and explanation preferences. Save,
    reload and check the summary. Existing custom JSON fields should remain intact.
-4. Set a shared tone scale, save and reload. Check its summary visualization. Clear
-   a scale to return it to unset. Review any empty brand voice/keywords/catchphrases.
+4. Select numbered tone choices and move both age handles using mouse/touch or arrow
+   keys. Set income and education, save and reload. Verify the values and clear/reset
+   actions. Tone is shared across personas; audience controls are persona-specific.
+   Review any empty brand voice/keywords/catchphrases in Settings.
 5. Open a prompt category, use More, and confirm suggestions stay stable while
    typing. Check the running/unknown operation UI still describes real state.
 6. Generate and reopen posts/campaigns, clarification answers, carousel slides and
@@ -100,10 +142,10 @@ Final local checks:
 | Command | Result |
 | --- | --- |
 | `.\server\venv\Scripts\python.exe -m pytest server/tests -q` | 521 passed, 36 skipped (opt-in integration cases) |
-| `npm --prefix client test` | 101 passed |
+| `npm --prefix client test` | 106 passed |
 | `npm --prefix client run lint` | Passed; three existing Fast Refresh warnings in unchanged components |
 | `npm --prefix client run build` | Passed; existing large-bundle advisory |
-| `npm --prefix client run test:chat-browser` | Passed, including configuration round trips, custom-key preservation, JSON export and 390px layout |
+| `npm --prefix client run test:chat-browser` | Passed, including persona creation, numbered choices, slider keyboard/drag bounds, partial-save recovery, stacked navigation, configuration round trips, custom-key preservation, JSON export and 390px layout |
 | `git diff --check` | Passed |
 
 Backend tests
