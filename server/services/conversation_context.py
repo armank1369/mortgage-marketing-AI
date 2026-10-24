@@ -3,6 +3,8 @@
 The caller must authorize membership, capabilities and workspace access first.
 No provider calls, writes, summaries, cross-session lookups or publication mutation.
 """
+import re
+
 from services.chat_contract import canonical
 from errors import ValidationError
 
@@ -54,12 +56,50 @@ def _lines(value, allowed):
             for key in allowed if value.get(key) is not None]
 
 
+# Provider output that opens with one of the labels written below, or with the bare question/options
+# layout of a projected clarification, is the model copying internal history instead of answering.
+# generation.py rejects such output rather than saving it as a user-facing reply. Keep this in step
+# with project_artifact(): any new "Saved <kind>:" label must be added here.
+_LEAKED_LABEL = re.compile(r"\A\s*saved\s+(?:posts|campaign|clarification)\s*:", re.IGNORECASE)
+_LEAKED_QUESTION_LAYOUT = re.compile(r"\A\s*question\s*:.*^\s*options\s*:", re.IGNORECASE | re.DOTALL | re.MULTILINE)
+
+CLARIFICATION_HEADER = ("[Earlier assistant turn: Lucie asked the user the clarifying questions below, which have not "
+                        "been answered. This is background context only, not an output format to copy.]")
+
+
+def looks_like_leaked_history(text):
+    return bool(_LEAKED_LABEL.match(text) or _LEAKED_QUESTION_LAYOUT.match(text))
+
+
+def _clarification_summary(data):
+    """Prose, not key: value lines, so the model reads it as a record of what was asked and can't mistake it
+    for the layout of a reply. Question text, offered options and custom-answer support are all kept."""
+    lines = [CLARIFICATION_HEADER]
+    for number, question in enumerate(data.get("questions", []), 1):
+        if not isinstance(question, dict) or not question.get("question"):
+            continue
+        options = question.get("options")
+        offered = ", ".join(str(option) for option in options) if isinstance(options, list) and options else ""
+        notes = []
+        if question.get("type") == "multiple":
+            notes.append("more than one could be chosen")
+        if question.get("allow_custom"):
+            notes.append("a custom answer was allowed")
+        detail = ""
+        if offered:
+            detail = f" Choices offered: {offered}" + (f" ({'; '.join(notes)})" if notes else "") + "."
+        lines.append(f"{number}. {question['question']}{detail}")
+    return "\n".join(lines)
+
+
 def project_artifact(envelope):
     """Explicit content fields only. Never serialize an operational envelope."""
     kind, payload = envelope.get("type"), envelope.get("payload") or {}
     if kind == "text":
         return str(payload.get("response", ""))
     data = payload.get(kind) or {}
+    if kind == "clarification":
+        return _clarification_summary(data)
     lines = [f"Saved {kind}:"]
     if kind == "posts":
         lines += _lines(data, ("intro",))
@@ -73,9 +113,6 @@ def project_artifact(envelope):
             lines += _lines(platform, ("platform", "frequency", "total_posts", "times", "audience", "tone"))
         for entry in data.get("content_calendar", []):
             lines += _lines(entry, ("day", "date", "time", "category", "platform", "format", "caption", "slides", "hashtags"))
-    elif kind == "clarification":
-        for question in data.get("questions", []):
-            lines += _lines(question, ("question", "options", "allow_custom"))
     return "\n".join(lines)
 
 
