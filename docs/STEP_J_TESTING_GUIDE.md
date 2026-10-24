@@ -115,6 +115,7 @@ From repository root:
 .\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_repository.py server/tests/test_step_j_routes.py server/tests/test_step_j_contract.py server/tests/test_step_g_private_chats.py server/tests/test_step_g_authorization.py -q
 .\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_operations.py server/tests/test_step_i_routes.py server/tests/test_step_i_compliance.py -q
 .\server\.venv\Scripts\python.exe -m pytest server/tests/test_step_j_context.py server/tests/test_step_i_context.py server/tests/test_step_i_routes.py -q
+.\server\.venv\Scripts\python.exe -m pytest server/tests/test_history_contamination.py -q   # history-format / malformed-output regression (mocked provider)
 .\server\.venv\Scripts\python.exe -m pytest server/tests -q
 git diff --check
 ```

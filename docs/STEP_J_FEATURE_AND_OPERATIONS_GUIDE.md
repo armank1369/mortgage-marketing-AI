@@ -252,6 +252,13 @@ workspace, extracts at most 25 concepts within 8 KiB and passes them as untruste
 context, without an extra model call. This is not full cross-chat memory, RAG, embeddings,
 a vector extension or a summary job.
 
+Format safety (post-J.5 fix): earlier clarifications are replayed as a labelled prose summary of what was
+asked (questions, choices, whether multiple/custom answers were allowed, and that they remain unanswered),
+never as `key: value` lines the model could imitate. If the provider nevertheless returns text that opens
+with a `Saved posts|campaign|clarification:` label or a bare question/options layout, generation fails with
+`invalid_provider_output` instead of saving it as a reply; ordinary plain-text answers are unaffected. See
+the incident record in STEP_J_IMPLEMENTATION_AND_TESTING.md.
+
 ## 7. Decisions and boundaries
 
 | Decision | Reason / consequence |

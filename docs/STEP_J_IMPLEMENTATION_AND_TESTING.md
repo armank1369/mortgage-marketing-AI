@@ -502,6 +502,66 @@ or configuration records were modified. No paid calls, migrations, new Neon bran
 dependency changes, Git publishing or deployment. No owner-run SQL or routine script
 repetition is needed.
 
+## Post-J.5 incident: history contamination and malformed output (2026-10-21/23)
+
+**What happened.** In a shared conversation that already held an *unanswered* clarification, a second
+workspace member sent "Give me a post idea for a first-time homebuyer tip". Instead of interactive
+clarification cards, Lucie saved and showed an ordinary AI Response beginning `Saved clarification:`
+followed by `question:` / `options:` / `type:` / `allow_custom:` lines, plus the normal compliance footer.
+Repeating the request produced correct cards, and answering them produced a valid post.
+
+**Why it was possible (two mechanisms, both confirmed with a mocked provider).**
+1. *Context contamination.* `project_artifact()` replayed earlier clarifications to the model as
+   assistant history in the form `Saved clarification:` + `key: value` lines. Only the latest result of
+   each original task is replayed, so an **unanswered** clarification (e.g. the campaign questions) stays
+   in history while an answered one is replaced by its final posts/campaign. The model copied that layout
+   (even adding `type:` lines the projection never wrote) instead of returning the required JSON.
+2. *Silent fallthrough.* `generate_chat()` tries clarification JSON, then posts JSON, then falls back to
+   plain text. Malformed clarification-like text matched neither parser, so it was compliance-normalised
+   and saved as a successful `text` message.
+
+**Not a sharing/authorization defect.** The same history is built for the creator and for any authorized
+member, and the tests below run both identities through identical assertions. Workspace chat sharing,
+membership checks and role gates were not touched.
+
+**Changes.**
+- `server/services/conversation_context.py`: clarifications are now projected as a labelled prose summary
+  ("Earlier assistant turn: Lucie asked ... which have not been answered. ... not an output format to
+  copy.") that keeps each question, the choices offered, multiple-choice and custom-answer support, and
+  carries no `key: value` lines. `Saved posts:` / `Saved campaign:` projections are unchanged (existing
+  contracts). `looks_like_leaked_history()` is added beside the formatter that defines the labels.
+  `PROJECTION_VERSION` stays 1; previously captured snapshots are immutable and are not rewritten.
+- `server/services/generation.py`: before the plain-text fallback, output that opens with a
+  `Saved posts|campaign|clarification:` label, or with a bare `question:` ... `options:` layout, raises the
+  existing `InvalidGenerationOutputError`. The operation fails with `invalid_provider_output`, no assistant
+  message or success run is stored, and there is no automatic retry. When history is replayed the system
+  prompt also states that stored summaries are not an output format.
+
+**Plain text is preserved.** Only output that *starts* with an internal label or the bare structured layout
+is rejected. Ordinary answers, and educational replies that merely mention "Saved clarification:" or show
+a question/options example after prose, still save as text (tests cover both).
+
+**Regression tests.** `server/tests/test_history_contamination.py` (22 cases, run for the creator and a
+second member where relevant): incident chat assembly (completed clarification, then unanswered campaign
+clarification, then the repeated request); history shape and preservation of question/choice text;
+non-mutation of stored rows; four malformed variants (exact incident text, unlabelled layout, `Saved posts:`,
+case/whitespace) failing safely with one provider call and no saved assistant message; malformed campaign
+output; valid clarification JSON; valid carousel posts with footer compliance; plain-text answers.
+Before the fix 11 of these failed (malformed output saved as `succeeded`; clarification replayed in the
+copyable layout); after the fix all pass.
+
+**Results (2026-10-23, synthetic data only).** `pytest server/tests`: 554 passed, 37 skipped (opt-in live
+database suites), 0 failed. `npm --prefix client test`: 113 passed. Lint clean; client build succeeds.
+
+**Known limits / not verified.** No live Anthropic call and no Neon integration run were made, so the
+real model's behaviour after the change is unobserved; the guarantee is only that malformed output is
+rejected instead of misreported as success. A user who sees `invalid_provider_output` must retry
+manually (one more paid call). A genuine plain-text answer that itself opens with `question:` +
+`options:` lines would be rejected (judged unlikely). The earlier malformed message stays stored and
+exportable exactly as saved. Strengthening non-campaign output with a provider `json_schema` was not done:
+that path legitimately returns clarification JSON, posts JSON *or* prose, so a single schema would be a
+larger redesign; treat it as follow-up.
+
 ## Remaining verification and approval gates
 
 - J.4 was accepted after owner multiple-browser/UI testing. J.5 and J.7 automated
