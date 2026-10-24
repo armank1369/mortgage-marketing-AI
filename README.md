@@ -12,11 +12,14 @@ Anthropic provides AI generation.
 - **Access and collaboration:** see [Workspace chat sharing](docs/WORKSPACE_CHAT_SHARING.md) and the [authorization matrix](docs/AUTHORIZATION_MATRIX.md).
 - **Configuration:** see [Environment configuration](docs/ENVIRONMENT.md).
 - **Maintainers:** see the [feature/API guide](docs/STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md), [UI recovery/parity report](docs/LEGACY_RECOVERY_PATCH.md) and [testing guide](docs/STEP_J_TESTING_GUIDE.md).
+- **Database design:** start with the [database overview](docs/database/README.md), then consult the [schema](docs/database/SCHEMA.md), [architecture](docs/database/ARCHITECTURE.md) and [workflows](docs/database/WORKFLOWS.md).
 
 The current development branch is **`codex/step-j-chat-persistence`**, including the
 UI hotfixes and workspace sharing. `main` is the presentation-era UI reference;
 `luciev2_newteam` is an earlier development baseline. Clone the branch below to test
 these changes. These instructions describe local development, not deployment.
+
+> The database references describe the Neon `development` branch inspected October 23, 2026; they do not certify production. Production requires an independently verified schema, approved migrations, matching database and Auth configuration, securely managed environment variables, provisioned workspace access and separate live security testing.
 
 ## What is implemented
 
