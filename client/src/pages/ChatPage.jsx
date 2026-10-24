@@ -12,6 +12,8 @@ import BrandSummary from '../components/BrandSummary.jsx'
 import Dialog from '../components/Dialog.jsx'
 import { downloadJSON, exportDocument, promptSuggestions } from '../lib/legacyRecovery.js'
 import PersistedMessage from '../components/PersistedMessage.jsx'
+import TypingIndicator from '../components/TypingIndicator.jsx'
+import ConversationSkeleton from '../components/ConversationSkeleton.jsx'
 import CalendarPage from './CalendarPage.jsx'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
@@ -22,6 +24,9 @@ function OperationStatus({ operation, controller, canWrite, disabled, retryDisab
   const [acknowledged, setAcknowledged] = useState(false)
   const unknown = operation.state === 'unknown'
   if (operation.state === 'succeeded' || operation.state === 'abandoned') return null
+  // While a request is simply in flight, show Lucie's loading bubble instead of the internal
+  // bookkeeping label. States that need a decision (unconfirmed/failed/unknown) keep the full panel.
+  if (['running', 'checking'].includes(operation.state)) return <TypingIndicator onCheck={() => controller.reconcile()} disabled={disabled} />
   return <div role="status" className={`rounded-xl border p-4 text-sm space-y-2 ${unknown ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
     <p className="font-medium">{['running', 'checking'].includes(operation.state) && <span aria-hidden="true" className="inline-block mr-2 h-2 w-2 rounded-full bg-blue-700 motion-safe:animate-pulse" />}{({ running: 'Generating — awaiting a saved result', checking: 'Checking whether this request was saved',
       unconfirmed: 'Request not found yet — no new attempt has been started', failed: 'This attempt failed', unknown: 'Outcome unknown' })[operation.state] || operation.state}</p>
@@ -73,6 +78,10 @@ export default function ChatPage() {
   const readOnly = local || !!state.active?.archived_at || !canWrite
   const blocked = readOnly || pending || state.loading || state.metadataSaving || offline || !!state.storageError
   const personaConflict = ['mixed', 'ambiguous', 'unavailable'].includes(state.active?.persona_state)
+  // While a chat (or the persona list) is still loading, the persona is simply not known yet — not
+  // missing. Show a neutral placeholder instead of the "Unavailable" warning; generation stays
+  // blocked by `blocked`/`providerBlocked` either way.
+  const personaPending = !local && (state.loading || configLoading)
   const providerBlocked = blocked || personaConflict || !persona || configLoading || !!configError
   const inputKey = local ? `local:${localId}` : state.active?.id || 'composer'
   const input = inputs[inputKey] || ''
@@ -137,7 +146,7 @@ export default function ChatPage() {
       <div className="p-5 border-b border-slate-100">
         <div className="flex items-center gap-2.5"><img src={lucieAvatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
           <div className="leading-tight"><h1 className="text-xl font-extrabold text-slate-900">Lucie</h1><p className="text-[10px] font-medium text-slate-500">Lucent's AI Social Media Assistant</p></div></div>
-        <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || 'Choose a persona'}</span></div>
+        <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
       </div>
       <nav aria-label="Main navigation" className="space-y-1 p-3">
         {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"]].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
@@ -163,7 +172,7 @@ export default function ChatPage() {
       <div className="md:hidden bg-slate-900 text-white px-4 py-3"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}>☰ <span className="ml-3 font-semibold">Lucie</span></button></div>
       {nav === 'calendar' ? <CalendarPage /> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || 'Unavailable'}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
+          <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
           <div className="flex gap-2">{active && !active.unsaved && <button className={button} disabled={exporting || state.loading} onClick={exportChat}>{exporting ? 'Preparing export…' : 'Export chat'}</button>}<button className={button} disabled={!active} onClick={() => setSummaryOpen(true)}>Brand Summary</button></div>
           {!local && state.active && <div className="flex gap-2">
             <button className={button} disabled={readOnly || pending || state.loading || state.metadataSaving || state.active.unsaved} onClick={() => setTitleEdit(state.active.title)}>Rename</button>
@@ -176,7 +185,7 @@ export default function ChatPage() {
             {error && <div role="alert" className="border border-red-200 bg-red-50 rounded-lg p-3 text-sm text-red-800">{error} <button className="underline ml-2" onClick={() => { setLocalError(''); controller.clearError(); controller.reconcile(); controller.list() }}>Refresh</button></div>}
             {offline && <p role="status" className="text-sm text-amber-800">Offline. You can compose a message; generation needs durable storage online.</p>}
             {!canWrite && <p className="text-xs text-slate-500">Your workspace role permits reading this workspace’s saved conversations.</p>}
-            {!local && (personaConflict || !persona || configError) && <div className="rounded-xl border bg-white p-3 text-sm">
+            {!local && !personaPending && (personaConflict || !persona || configError) && <div className="rounded-xl border bg-white p-3 text-sm">
               <div className="flex flex-wrap justify-between items-center gap-3"><span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-900">Persona: {persona?.name || state.active?.persona_name || 'Unavailable'}</span><button className={button} disabled={!canWrite} onClick={newChat}>Start another chat</button></div>
               <p className="text-xs text-slate-500 mt-2">This conversation stays with one persona. Multiple conversations can use the same persona.</p>
               {(personaConflict || !persona) && <p role="status" className="text-xs text-amber-800 mt-2">This conversation's persona is unavailable, mixed or unknown. History is preserved; start a new chat to generate content.</p>}
@@ -184,7 +193,7 @@ export default function ChatPage() {
               {configError && <p role="alert" className="mt-2 text-xs">{configError} <button className="underline" onClick={reload}>Reload configuration</button></p>}
               <Link to="/settings" className="block text-xs text-blue-700 mt-2">Configure brand and personas</Link>
             </div>}
-            {state.loading && !local && <p role="status">Loading saved conversation…</p>}
+            {state.loading && !local && <ConversationSkeleton />}
             {!local && state.before_cursor && <button className={button} onClick={() => controller.open(state.active.id, true)}>Load earlier messages</button>}
             {!messages.length && !state.loading && <div className="py-14 text-center"><p className="font-semibold">{local ? 'Select local history' : 'Start a conversation'}</p><p className="text-xs text-slate-500 mt-2">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
             {messages.map((message) => <PersistedMessage key={message.id} message={message} nmls={nmls} persona={persona?.id} onAction={action} disabled={blocked} providerDisabled={providerBlocked} readOnly={readOnly} legacy={local} />)}
