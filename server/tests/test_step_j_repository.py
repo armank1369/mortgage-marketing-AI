@@ -27,6 +27,7 @@ OTHER = "55555555-5555-4555-8555-555555555555"
 
 class MemorySQL:
     def __init__(self):
+        self._clock_tick = 0
         self.members = {M: {"id": M, "role": "member", "environment": "test", "workspace_id": W}}
         self.personas = {P: {"id": P, "name": "Synthetic", "slug": "synthetic", "workspace_id": W}}
         self.sessions, self.messages, self.calls = {}, {}, []
@@ -43,7 +44,8 @@ class MemorySQL:
         q = " ".join(sql.lower().split())
         self.calls.append((q, params))
         self.rows = []
-        now = datetime.now(timezone.utc)
+        self._clock_tick += 1
+        now = datetime.fromtimestamp(1700000000 + self._clock_tick * 0.001, tz=timezone.utc)
         if q.startswith("select s.id, p.name as persona_name"):
             for sid in params[0]:
                 session = self.sessions.get(sid)

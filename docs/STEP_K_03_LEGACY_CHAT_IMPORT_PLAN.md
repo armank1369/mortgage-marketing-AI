@@ -54,12 +54,13 @@ Legacy browser/local exports can contain diverse data structures. This pipeline 
 
 | Legacy Export Field | Target PostgreSQL Column | Transform / Handling Policy |
 |---|---|---|
-| `session.title` | `chat_session.title` | Text preserved (falls back to timestamp if missing). |
-| `session.created_at` | `chat_session.created_at` | ISO-8601 string parsed to `TIMESTAMPTZ`. |
-| `session.persona_snapshot` | `chat_session.metadata` | Stored as `{ "historical_persona": ... }`. |
+| `session.title` | `chat_session.title` | Preserved as session title. |
+| `session.created_at` | `chat_session.started_at` | ISO-8601 string parsed to `TIMESTAMPTZ` (maps to `started_at`). |
+| `session.persona_snapshot` | `chat_session.default_persona_id` / metadata | Retained in audit logs or session metadata. |
 | `message.role` | `chat_message.role` | Strictly validated against `'user'`, `'assistant'`, `'system'`. |
-| `message.text` | `chat_message.content` | Exact text preserved; unicode normalized. |
-| `message.payload` | `chat_message.payload` | JSON object preserved as `jsonb`. |
+| `message.text` / `message.content` | `chat_message.content` | Exact text preserved (`content` column). |
+| `message.payload` | `chat_message.structured_data` | Preserved as `jsonb` with embedded `_import_metadata`. |
+| `content_hash` | `structured_data['_import_metadata']` | Embedded inside JSONB (no separate table column). |
 | `message.created_at` | `chat_message.created_at` | Preserves original turn timestamp. |
 
 ## 5. Synthetic Footprint & Database Sizing Evaluation
