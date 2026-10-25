@@ -116,9 +116,17 @@ Neon Point-in-Time Recovery (PITR): In the event of schema corruption, use the N
 5. Formal Pre-Release Sign-Off Gate
 All boxes must be checked before merging to main:   
 [x] All non-credentialed automated backend tests pass (554 passed, 0 failed).  
+
 [x] Known test skips documented (37 opt-in live database tests requiring real Neon credentials).   
-[x] Security audit signed: @require_capability("config:write") and @require_workspace verified[cite: 2].[x] Deployed hosting timeouts configured via root Procfile (--timeout 180).
+
+[x] Security audit signed: @require_capability("config:write") and @require_workspace verified[cite: 2].
+
+[x] Deployed hosting timeouts configured via root Procfile (--timeout 180).
+
 [X] Frontend unit tests, lint, and production build rehearsed cleanly.
+
 [ ] Joseph signed intake form (STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md) received[cite: 2].
+
 [ ] Joseph production Neon Auth user ID verified and mapped[cite: 2].
+
 [ ] Production workspace provisioned via controlled script (not auto-signup)[cite: 2].
