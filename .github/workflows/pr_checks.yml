@@ -1,0 +1,59 @@
+name: Step K Preflight Pull Request Checks
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-checks:
+    name: Backend Regression & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt
+          pip install pytest pytest-mock
+
+      - name: Run Backend Regression Test Suite
+        env:
+          AI_PROVIDER: mock
+          ALLOW_DEV_AUTH_BYPASS: "false"
+        run: |
+          # Zero paid Anthropic calls; tests run strictly with mock memory/fixtures
+          python -m pytest server/tests -q
+
+  frontend-checks:
+    name: Frontend Lint & Production Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm --prefix client ci
+
+      - name: Run Linter
+        run: npm --prefix client run lint
+
+      - name: Run Frontend Tests
+        run: npm --prefix client test -- --run
+
+      - name: Verify Production Vite Build
+        run: npm --prefix client run build

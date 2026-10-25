@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import time
 
 from errors import (ChatConflictError, NotFoundError, PermissionDeniedError, WorkspaceAccessDeniedError,
                     PreconditionFailedError, PreconditionRequiredError, ValidationError)
@@ -257,6 +258,7 @@ def test_claim_replay_body_conflict_and_busy_session(store):
 def test_completion_replay_hidden_token_and_parent_recency(store):
     claim = repo.claim_operation(W, S, M, send())
     before = store.sessions[S]["updated_at"]
+    time.sleep(0.002)
     first = finish(claim)
     replay = finish(claim)
     assert first == replay and len(store.messages) == 2
