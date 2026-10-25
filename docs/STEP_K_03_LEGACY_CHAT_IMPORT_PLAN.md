@@ -37,7 +37,7 @@ Legacy browser/local exports can contain diverse data structures. This pipeline 
 ## 3. Idempotency, Deduplication & Atomic Rollback Strategy
 
 1. **Content Hashing:** Every imported message is fingerprinted using a SHA-256 hash:
-   $$\text{hash} = \text{SHA-256}(\text{session\_id} + \text{role} + \text{text} + \text{created\_at})$$
+   `hash = SHA-256(session_id + role + text + created_at)`
    Re-running the import tool checks for existing identical messages and skips insertion, preventing duplicate bubble rendering.
 2. **Transaction Integrity:** All writes run within an explicit ACID transaction block (`get_db_transaction()`). If any foreign key violation, payload parse error, or database timeout occurs, the entire transaction rolls back with 0 rows committed.
 3. **Targeted Cleanup SQL:**
