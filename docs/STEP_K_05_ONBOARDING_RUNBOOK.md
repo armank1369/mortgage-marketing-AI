@@ -117,7 +117,7 @@ COMMIT;
 
 Before executing the above on production, execute these automated and manual verification scenarios against the development database using disposable test UUIDs:
 
-Scenario 1: Identity & Profile Load/Save/Reload
+**Scenario 1:** Identity & Profile Load/Save/Reload
 Sign in with a test user assigned to development workspace 8bab9643-a7a2-4b5c-989c-d7358393ac6e.
 
 Issue GET /api/brand-profile. Verify HTTP 200 with matching business name and NMLS credentials.
@@ -126,7 +126,7 @@ Issue PUT /api/brand-profile with updated voice guidelines. Verify HTTP 200 and 
 
 Reload the Settings page (/settings). Verify that the updated profile loads cleanly without UI cache conflicts.
 
-Scenario 2: Persona Lifecycle & Soft-Delete
+**Scenario 2:** Persona Lifecycle & Soft-Delete
 Issue POST /api/personas to create a test persona ("Test Refinance Persona"). Verify HTTP 201.
 
 Issue PUT /api/personas/<id> with "deleted_at": NOW(). Verify HTTP 200.
@@ -135,14 +135,14 @@ Issue GET /api/personas. Verify the soft-deleted persona is excluded from active
 
 Confirm no foreign-key cascades broke in chat_message.
 
-Scenario 3: Cross-Workspace Access Denial (Multi-Tenant Isolation)
+**Scenario 3:** Cross-Workspace Access Denial (Multi-Tenant Isolation)
 Generate a JWT for Test User B (belonging to Workspace B).
 
 Attempt to read Joseph's workspace via GET /api/brand-profile with X-Workspace-Id: :joseph_workspace_id.
 
 Expected Result: HTTP 403 Forbidden ("Access denied: Not a member of the requested workspace").
 
-Scenario 4: Member Removal & Session Revocation
+**Scenario 4:** Member Removal & Session Revocation
 Add a temporary test collaborator to the workspace with role 'member'.
 
 Remove the collaborator row from public.workspace_members.
