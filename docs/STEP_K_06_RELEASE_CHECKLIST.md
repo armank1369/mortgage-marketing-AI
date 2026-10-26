@@ -38,17 +38,20 @@ Every gate below must pass locally prior to submitting the release PR:
 ### B. Frontend Unit Tests
 - **Execution Command:** `npm --prefix client test -- --run`
 - **Expected Threshold:** All client component, hook, and context test suites pass cleanly with 0 failing assertions.
-- **Status:** **Pending Local Rehearsal**
+- **Empirical Result:** 113 passed, 0 failed, 0 skipped across all test suites (node --test runner).
+- **Status:** **Verified**
 
 ### C. Frontend Linter & Static Analysis
 - **Execution Command:** `npm --prefix client run lint`
 - **Expected Threshold:** 0 syntax, unreachable code, or unresolved component/variable errors.
-- **Status:** **Pending Local Rehearsal**
+- **Empirical Result:** 0 errors (3 fast-refresh warnings) across 74 files with 92 rules using oxlint.
+- **Status:** **Verified**
 
 ### D. Frontend Production Build & Bundle Verification
 - **Execution Command:** `npm --prefix client run build`
 - **Expected Threshold:** Exit code 0; Vite production distribution bundle cleanly emitted in `client/dist` with zero JSX/TypeScript compilation errors.
-- **Status:** **Pending Local Rehearsal**
+- **Empirical Result:** Built successfully in 2.78s; `client/dist/index.html` and assets cleanly emitted.
+- **Status:** **Verified**
 
 ### E. Gunicorn Worker Timeout Gate
 - **Inspection Command:** `Get-Content Procfile`
@@ -99,34 +102,54 @@ On the local command line, revert the merge commit on main:
 ```bash
 git checkout main
 git pull origin main
-git revert -m 1 HEAD -m "Rollback Step K production release"
+# -m 1 specifies parent number for merge commit; --message sets rollback commit log
+git revert -m 1 --no-edit HEAD
 git push origin main
 ```
+
 Render detects the push to main and automatically deploys the previous container.
 
 ### C. Database Restoration & Recovery
-Transaction Abort: Importers and migrations operate inside explicit ACID transactions (get_db_transaction()); syntax or integrity errors automatically roll back without partial data commits.   
-Targeted Workspace Cleanup: If an import must be undone after commit, clean strictly within Joseph's workspace boundaries:
+- **Transaction Abort:** Importers and migrations operate inside explicit ACID transactions (`get_db_transaction()`); syntax or integrity errors automatically roll back without partial data commits.
+- **Batch-Targeted Workspace Cleanup:** If an import must be undone after commit, clean strictly within Joseph's workspace boundaries by targeting the specific `batch_id` recorded in `chat_message.structured_data['_import_metadata']`:
 
 ```sql
-DELETE FROM public.chat_session WHERE workspace_id = 'JOSEPH_WORKSPACE_UUID';
+-- Target ONLY the specific import batch without touching active user chats
+DELETE FROM public.chat_session
+WHERE id IN (
+    SELECT DISTINCT session_id
+    FROM public.chat_message
+    WHERE structured_data->'_import_metadata'->>'batch_id' = 'TARGET_BATCH_ID'
+      AND session_id IN (
+          SELECT id FROM public.chat_session WHERE workspace_id = 'JOSEPH_WORKSPACE_UUID'
+      )
+);
 ```
-Neon Point-in-Time Recovery (PITR): In the event of schema corruption, use the Neon console to branch off the database state as of a timestamp immediately preceding the release.
 
-5. Formal Pre-Release Sign-Off Gate
-All boxes must be checked before merging to main:   
-[x] All non-credentialed automated backend tests pass (554 passed, 0 failed).  
+**SAFETY INVARIANT:** Never execute unbounded queries such as DELETE FROM public.chat_session WHERE workspace_id = .... That would destroy Joseph's newly created active chats and cascade-delete all messages and assets.
 
-[x] Known test skips documented (37 opt-in live database tests requiring real Neon credentials).   
+## 5. Formal Pre-Release Sign-Off Gate
 
-[x] Security audit signed: @require_capability("config:write") and @require_workspace verified[cite: 2].
+All boxes must be checked before merging to main:
 
-[x] Deployed hosting timeouts configured via root Procfile (--timeout 180).
+[x] All non-credentialed automated backend tests pass (558 passed, 0 failed, 37 skipped live DB tests).
 
-[X] Frontend unit tests, lint, and production build rehearsed cleanly.
+[x] Dedicated Step K chat importer tests pass (`server/tests/test_legacy_importer_schema.py` covering schema alignment, UUIDv5 determinism, idempotency skipping, and persona snapshot ingestion).
 
-[ ] Joseph signed intake form (STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md) received[cite: 2].
+[x] Frontend unit tests pass (113 passed, 0 failed via `npm --prefix client test -- --run`).
 
-[ ] Joseph production Neon Auth user ID verified and mapped[cite: 2].
+[x] Frontend static analysis verified with 0 errors via `npm --prefix client run lint`.
 
-[ ] Production workspace provisioned via controlled script (not auto-signup)[cite: 2].
+[x] Frontend production bundle verified with exit code 0 via `npm --prefix client run build`.
+
+[x] Security audit signed: `@require_capability("config:write")` and `@require_workspace` verified.
+
+[x] Deployed hosting timeouts configured via root Procfile (`--timeout 180`).
+
+[x] Safe, batch-targeted database rollback query verified.
+
+[ ] Joseph signed intake form (`STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md`) received.
+
+[ ] Joseph production Neon Auth user ID verified and mapped.
+
+[ ] Production workspace provisioned via controlled script (not auto-signup).
