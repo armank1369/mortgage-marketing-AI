@@ -118,3 +118,45 @@ def test_importer_skips_existing_records_on_second_run(tmp_path):
     # Because records already existed, NO INSERT statements should have run
     assert not any("INSERT INTO public.chat_session" in stmt for stmt in executed_statements)
     assert not any("INSERT INTO public.chat_message" in stmt for stmt in executed_statements)
+
+def test_importer_preserves_historical_persona_snapshot(tmp_path):
+    sample_data = [
+        {
+            "title": "Persona Snapshot Test Chat",
+            "created_at": "2026-09-15T14:30:00Z",
+            "persona_snapshot": {
+                "name": "First-Time Homebuyer Guide",
+                "pacing": "encouraging and educational",
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "text": "Explain down payments",
+                    "created_at": "2026-09-15T14:30:01Z",
+                }
+            ],
+        }
+    ]
+    json_file = tmp_path / "test_persona_snapshot.json"
+    json_file.write_text(json.dumps(sample_data), encoding="utf-8")
+
+    mock_cur = MagicMock()
+    mock_cur.fetchone.side_effect = [("workspace-123",), None, None]
+
+    mock_tx = MagicMock()
+    mock_tx.__enter__.return_value = mock_cur
+
+    with patch("server.db.get_db_transaction", return_value=mock_tx):
+        run_import(str(json_file), "8bab9643-a7a2-4b5c-989c-d7358393ac6e", execute=True)
+
+    # Find the chat_message INSERT call and verify the JSON payload contains persona_snapshot
+    message_insert_call = next(
+        call for call in mock_cur.execute.call_args_list if "INSERT INTO public.chat_message" in call[0][0]
+    )
+    # Params tuple passed to execute
+    params = message_insert_call[0][1]
+    # structured_data JSON string is index 5
+    stored_structured_data = json.loads(params[5])
+    assert "_import_metadata" in stored_structured_data
+    assert "persona_snapshot" in stored_structured_data["_import_metadata"]
+    assert stored_structured_data["_import_metadata"]["persona_snapshot"]["name"] == "First-Time Homebuyer Guide"

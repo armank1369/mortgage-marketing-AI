@@ -16,9 +16,21 @@
 | **K1: Security & RBAC Audit** | **VERIFIED** | `@require_capability("config:write")` and `@require_workspace` active on brand/persona routes; soft deletion via `deleted_at` preserved; no ambient staff access. | Security policies locked. |
 | **K2: Hosting & Worker Timeouts** | **VERIFIED** | Root `Procfile` created with `--timeout 180 --workers 2` to accommodate 120s Anthropic Claude calls; `client/vercel.json` edge rewrites verified. | Stage in release PR. |
 | **K3: Legacy Chat Importer Tooling** | **VERIFIED** | `server/scripts/import_legacy_chats.py` and `synthetic_lucie_export.json` created; dry-run validation verified with zero DB side effects. | Await Joseph's full Lucie chat export. |
-| **K4: ChatGPT Preference Pipeline** | **VERIFIED** | `STEP_K_04_JOSEPH_PREFERENCES_SPEC.md` and offline extractor `extract_chatgpt_preferences.py` created; redaction rules set; zero RAG/vector bloat. | Await Joseph's complete ChatGPT files. |
+| **K4: ChatGPT Preference Pipeline** | **SPECIFIED / JCRC** | ``STEP_K_04_JOSEPH_PREFERENCES_SPEC.md` updated to JCRC curation model; phantom standalone extractor replaced by intake template curation; redaction rules set; zero RAG/vector bloat. | Await Joseph's completed intake template. |
 | **K5: Intake Template & Provisioning Runbook** | **VERIFIED** | `STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md` (blank) and `STEP_K_05_ONBOARDING_RUNBOOK.md` delivered; manual workspace provisioning documented. | Hand intake template to Joseph. |
 | **K6: Release Gates & Minimal Safeguards** | **VERIFIED** | `.github/workflows/pr_checks.yml` created; frontend Vite build (0 errors) and Oxlint (0 errors) rehearsed; rollback runbook documented. | Gated on owner approval. |
+
+### Implementation Status Categorization
+
+1. **Implemented and Tested:**
+   - **K3 Legacy Chat Importer:** `server/scripts/import_legacy_chats.py` featuring deterministic RFC 4122 UUIDv5 IDs, stable SHA-256 content hashing, `batch_id` tagging, `persona_snapshot` ingestion, duplicate skip logic, and rollback capability. Verified with unit and schema tests (`server/tests/test_legacy_importer_schema.py`).
+   - **Step J Repository Integration:** Fully aligned with `SCHEMA.md` across `chat_session` (`started_at`) and `chat_message` (`content`, `structured_data`). Monotonic tick test-harness clock verified with 558 passing tests.
+
+2. **Implemented but Awaiting Validation:**
+   - **K5 Production Provisioning Runbook:** `docs/STEP_K_05_ONBOARDING_RUNBOOK.md` updated with exact `public.workspace_member`, `public.workspace`, `public.brand_profile`, and `public.persona` schema definitions. Awaiting Joseph's signed intake form for live production execution.
+
+3. **Planned Only / Superceded by Process:**
+   - **Standalone Preference Extractor:** Standalone script (`extract_chatgpt_preferences.py`) deprecated in favor of the human-in-the-loop JCRC workflow in `STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md` to prevent unverified factual hallucinations and duplicate tooling.
 
 ---
 

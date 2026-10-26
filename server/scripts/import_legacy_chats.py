@@ -104,6 +104,7 @@ def run_import(file_path: str, workspace_id: str, batch_id: str = None, execute:
         for s in data:
             title = s.get("title", "Imported Legacy Chat")
             started_at = s.get("created_at") or s.get("started_at") or datetime.now(timezone.utc).isoformat()
+            persona_snapshot = s.get("persona_snapshot")
             
             # Deterministic session UUID
             session_id = generate_deterministic_session_id(workspace_id, title, started_at)
@@ -134,12 +135,15 @@ def run_import(file_path: str, workspace_id: str, batch_id: str = None, execute:
                 # Compute content hash
                 c_hash = compute_content_hash(role, content, created_at)
                 if isinstance(structured_data, dict):
-                    structured_data["_import_metadata"] = {
+                    import_meta = {
                         "batch_id": batch_id,
                         "content_hash": c_hash,
                         "imported_at": datetime.now(timezone.utc).isoformat(),
                         "source": "lucie_legacy_export",
                     }
+                    if persona_snapshot:
+                        import_meta["persona_snapshot"] = persona_snapshot
+                    structured_data["_import_metadata"] = import_meta
 
                 # Check if message already exists across the entire database
                 cur.execute("SELECT id FROM public.chat_message WHERE id = %s", (msg_id,))

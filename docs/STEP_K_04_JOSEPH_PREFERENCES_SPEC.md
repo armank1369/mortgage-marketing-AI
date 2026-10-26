@@ -40,22 +40,25 @@ Deliver this concise intake guidance to Joseph when requesting his ChatGPT refer
 
 The ingestion workflow runs entirely offline on local development machines using isolated JSON staging[cite: 2]:
 
-[ Joseph Export Folder / ZIP ]
+[ Joseph Real-World Exemplars ] (3-10 Curated Conversations)
+
 │
+
 ▼
-[ Offline Redaction Pass ] ──► (Strips client PII, emails, rates, credit figures)
-│
+
+[ JCRC Curation & Redaction Workflow ] ──► docs/STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md
+
+│ (Human-in-the-Loop: PII Scrubbed, Guidelines Verified)
+
 ▼
-[ Local Parser Utility ] ──► server/scripts/extract_chatgpt_preferences.py
-│
+
+[ Production Provisioning Runbook ] ──► docs/STEP_K_05_ONBOARDING_RUNBOOK.md
+
+│ (NeonDB Transaction)
+
 ▼
-[ Derived Intermediate ] ──► docs/extracted_preferences.json
-│
-▼
-[ Team Review & Diffing ] ──► Populates Proposed Brand Profile / Persona fields
-│
-▼
-[ Joseph Explicit Sign-Off ] ──► Production DB Update via @require_capability("config:write")
+
+[ Public Schema Storage ] ──► public.brand_profile & public.persona
 
 ---
 
@@ -145,6 +148,6 @@ What is your preferred direct message trigger word across platforms (DM 'GUIDE' 
 
 ### 7. Next Actions
 
-PREPARE NOW: Maintain extraction script server/scripts/extract_chatgpt_preferences.py and verify against synthetic fixtures[cite: 2].
+PREPARE NOW: Align with JCRC curation workflow in docs/STEP_K_05_JOSEPH_INTAKE_TEMPLATE.md. No standalone automated extraction script needed or introduced.
 
 WAIT: JOSEPH: Receipt of Joseph's real chat export files, voluntary consent confirmation, and formal intake sign-off[cite: 2].
