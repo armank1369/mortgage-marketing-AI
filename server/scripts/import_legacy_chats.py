@@ -1,7 +1,7 @@
 """
 Historical Lucie Chat Import Tool (Step K3)
 Usage:
-    python server/scripts/import_legacy_chats.py --file <path_to_json> --workspace-id <workspace_uuid> [--execute]
+    python server/scripts/import_legacy_chats.py --file <path_to_json> --workspace-id <workspace_uuid> [--batch-id <id>] [--execute]
 """
 
 import argparse
@@ -15,13 +15,28 @@ from datetime import datetime, timezone
 # Allow execution from root repository path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+NAMESPACE_LUCIE = uuid.uuid5(uuid.NAMESPACE_URL, "urn:lucie:legacy:import")
 
-def compute_content_hash(session_id: str, role: str, content: str, created_at: str) -> str:
-    raw = f"{session_id}:{role}:{content}:{created_at}"
+
+def compute_content_hash(role: str, content: str, created_at: str) -> str:
+    """Stable content fingerprint independent of runtime session IDs."""
+    raw = f"{role}:{content.strip()}:{created_at}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def run_import(file_path: str, workspace_id: str, execute: bool = False):
+def generate_deterministic_session_id(workspace_id: str, title: str, started_at: str) -> str:
+    """Deterministic UUIDv5 for a chat session derived from workspace, title, and timestamp."""
+    seed = f"{workspace_id}:{title}:{started_at}"
+    return str(uuid.uuid5(NAMESPACE_LUCIE, f"session:{seed}"))
+
+
+def generate_deterministic_message_id(session_id: str, msg_idx: int, role: str, created_at: str) -> str:
+    """Deterministic UUIDv5 for a message derived from session, sequence index, role, and timestamp."""
+    seed = f"{session_id}:{msg_idx}:{role}:{created_at}"
+    return str(uuid.uuid5(NAMESPACE_LUCIE, f"message:{seed}"))
+
+
+def run_import(file_path: str, workspace_id: str, batch_id: str = None, execute: bool = False):
     print("=== Lucie Legacy Chat Importer (Step K3) ===")
     print(f"Target Workspace ID: {workspace_id}")
     print(f"Mode: {'LIVE EXECUTION (NeonDB commit)' if execute else 'DRY RUN (No database writes)'}")
@@ -40,6 +55,11 @@ def run_import(file_path: str, workspace_id: str, execute: bool = False):
     if not isinstance(data, list):
         print("Error: Root export structure must be a list of chat sessions.")
         sys.exit(1)
+
+    if not batch_id:
+        file_hash = hashlib.sha256(open(file_path, "rb").read()).hexdigest()[:12]
+        batch_id = f"batch_{file_hash}"
+    print(f"Import Batch ID: {batch_id}")
 
     parsed_sessions = 0
     parsed_messages = 0
@@ -77,65 +97,63 @@ def run_import(file_path: str, workspace_id: str, execute: bool = False):
             sys.exit(1)
 
         inserted_sessions = 0
+        skipped_sessions = 0
         inserted_messages = 0
         skipped_messages = 0
 
         for s in data:
-            session_id = str(uuid.uuid4())
             title = s.get("title", "Imported Legacy Chat")
             started_at = s.get("created_at") or s.get("started_at") or datetime.now(timezone.utc).isoformat()
+            
+            # Deterministic session UUID
+            session_id = generate_deterministic_session_id(workspace_id, title, started_at)
 
-            # Insert into public.chat_session conforming to Step J SCHEMA.md
-            cur.execute(
-                """
-                INSERT INTO public.chat_session (id, workspace_id, title, started_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (session_id, workspace_id, title, started_at, started_at),
-            )
-            inserted_sessions += 1
+            # Check if session already exists
+            cur.execute("SELECT id FROM public.chat_session WHERE id = %s", (session_id,))
+            if cur.fetchone():
+                skipped_sessions += 1
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO public.chat_session (id, workspace_id, title, started_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (session_id, workspace_id, title, started_at, started_at),
+                )
+                inserted_sessions += 1
 
-            for m in s.get("messages", []):
-                msg_id = str(uuid.uuid4())
+            for msg_idx, m in enumerate(s.get("messages", [])):
                 role = m.get("role", "user")
-                # Map source 'text' or 'content' to PostgreSQL column 'content'
                 content = m.get("content") or m.get("text", "")
                 created_at = m.get("created_at") or started_at
 
-                # Map source 'payload' or 'structured_data' to PostgreSQL column 'structured_data'
+                msg_id = generate_deterministic_message_id(session_id, msg_idx, role, created_at)
                 structured_data = m.get("structured_data") or m.get("payload") or {}
 
-                # Compute content hash for idempotency and embed in structured_data metadata
-                c_hash = compute_content_hash(session_id, role, content, created_at)
+                # Compute content hash
+                c_hash = compute_content_hash(role, content, created_at)
                 if isinstance(structured_data, dict):
                     structured_data["_import_metadata"] = {
+                        "batch_id": batch_id,
                         "content_hash": c_hash,
                         "imported_at": datetime.now(timezone.utc).isoformat(),
                         "source": "lucie_legacy_export",
                     }
 
-                # Deduplication check: check if an identical message exists in this session
-                cur.execute(
-                    """
-                    SELECT id FROM public.chat_message
-                    WHERE session_id = %s
-                      AND role = %s
-                      AND content = %s
-                    LIMIT 1
-                    """,
-                    (session_id, role, content),
-                )
+                # Check if message already exists across the entire database
+                cur.execute("SELECT id FROM public.chat_message WHERE id = %s", (msg_id,))
                 if cur.fetchone():
                     skipped_messages += 1
                     continue
 
-                # Insert into public.chat_message conforming to Step J SCHEMA.md
                 cur.execute(
                     """
                     INSERT INTO public.chat_message (
                         id, session_id, role, content, content_format, structured_data, created_at
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING
                     """,
                     (
                         msg_id,
@@ -150,15 +168,16 @@ def run_import(file_path: str, workspace_id: str, execute: bool = False):
                 inserted_messages += 1
 
         print(f"\n[LIVE IMPORT SUCCESS]")
-        print(f"Sessions committed: {inserted_sessions}")
-        print(f"Messages committed: {inserted_messages} (Skipped duplicates: {skipped_messages})")
+        print(f"Sessions committed: {inserted_sessions} (Skipped existing: {skipped_sessions})")
+        print(f"Messages committed: {inserted_messages} (Skipped existing: {skipped_messages})")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Import historical Lucie chats into NeonDB.")
     parser.add_argument("--file", required=True, help="Path to JSON chat export file")
     parser.add_argument("--workspace-id", required=True, help="Target workspace UUID")
+    parser.add_argument("--batch-id", required=False, help="Optional custom import batch identifier")
     parser.add_argument("--execute", action="store_true", help="Execute write to NeonDB (default: dry run)")
 
     args = parser.parse_args()
-    run_import(args.file, args.workspace_id, args.execute)
+    run_import(args.file, args.workspace_id, args.batch_id, args.execute)

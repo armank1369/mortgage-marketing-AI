@@ -36,19 +36,50 @@ Legacy browser/local exports can contain diverse data structures. This pipeline 
 
 ## 3. Idempotency, Deduplication & Atomic Rollback Strategy
 
-1. **Content Hashing:** Every imported message is fingerprinted using a SHA-256 hash:
+1. **Deterministic UUIDv5 Generation:**
+   To guarantee idempotency across repeated import executions, session and message UUIDs are derived deterministically using RFC 4122 UUIDv5 scoped under a dedicated Lucie namespace (`urn:lucie:legacy:import`):
+   - `session_id = UUIDv5(NAMESPACE_LUCIE, "session:" + workspace_id + ":" + title + ":" + started_at)`
+   - `msg_id = UUIDv5(NAMESPACE_LUCIE, "message:" + session_id + ":" + sequence_index + ":" + role + ":" + created_at)`
 
-   `hash = SHA-256(session_id + role + text + created_at)`
-   
-   Re-running the import tool checks for existing identical messages and skips insertion, preventing duplicate bubble rendering.
-2. **Transaction Integrity:** All writes run within an explicit ACID transaction block (`get_db_transaction()`). If any foreign key violation, payload parse error, or database timeout occurs, the entire transaction rolls back with 0 rows committed.
-3. **Targeted Cleanup SQL:**
-   If a migration run must be manually purged from Joseph's workspace, cascading foreign keys allow targeted cleanup:
-   ```sql
-   DELETE FROM public.chat_session 
-   WHERE workspace_id = 'JOSEPH_WORKSPACE_UUID' 
-     AND title LIKE 'Synthetic%';
-     ```
+   Re-executing the importer on the exact same export file produces identical primary keys, allowing repeated imports without duplicating rows.
+
+2. **Stable Content Hashing:**
+   Every imported message is fingerprinted using a SHA-256 hash independent of runtime variables:
+
+  **content_hash = SHA-256(role + ":" + content.strip() + ":" + created_at)**
+
+3. **Batch Identification & Audit Metadata:**
+Each import execution records a unique or deterministic `batch_id` embedded inside `chat_message.structured_data['_import_metadata']`:
+```json
+{
+  "_import_metadata": {
+    "batch_id": "batch_a1b2c3d4",
+    "content_hash": "...",
+    "imported_at": "2026-10-25T17:00:00Z",
+    "source": "lucie_legacy_export"
+  }
+}
+```
+
+Multi-Tier Deduplication & Database Safety:
+
+The importer performs an existence lookup on primary keys before attempting insertion (SELECT id FROM ... WHERE id = %s).
+
+Insertion queries use ON CONFLICT (id) DO NOTHING as a defense-in-depth safety guard.
+
+Atomic Rollback & Batch Cleanup SQL:
+
+Because all records carry batch_id in their _import_metadata, an import can be rolled back cleanly without affecting other workspace conversations:
+
+```sql
+-- Roll back a specific import batch
+DELETE FROM public.chat_session
+WHERE id IN (
+    SELECT DISTINCT session_id
+    FROM public.chat_message
+    WHERE structured_data->'_import_metadata'->>'batch_id' = 'BATCH_ID_TO_ROLLBACK'
+);
+```
 
 ## 4. Source-to-Destination Schema Mapping
 
