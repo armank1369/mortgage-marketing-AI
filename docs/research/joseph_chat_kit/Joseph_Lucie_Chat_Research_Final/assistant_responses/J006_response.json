@@ -1,0 +1,12 @@
+{
+  "selection_id": "J006",
+  "source_type": "sanitized ChatGPT export subset",
+  "redacted": false,
+  "note": "Approved assistant wording is reproduced in full for the selected excerpt. Any approved redaction is explicitly marked; no unredacted copy is included.",
+  "assistant_responses": [
+    {
+      "source_message_ordinal": 2,
+      "content": "The listing broker's commission for a high-value commercial property like a $400 million skyscraper in Los Angeles is typically negotiable and depends on various factors, including market conditions, property complexity, and brokerage agreements. However, here are some general guidelines:  \n\n- **Standard Commercial Commission Rates**: Generally, commercial real estate broker commissions range from **1% to 4%** of the sale price.  \n- **Sliding Scale Structure**: For ultra-high-value transactions, commissions often follow a **tiered structure**, meaning a lower percentage for higher price brackets. A common structure could be:  \n  - 2% on the first $10 million  \n  - 1% on the next $90 million  \n  - 0.5% on anything above $100 million  \n\nFor a $400 million deal, the total commission could range from **$2 million to $8 million**, typically split between the listing broker and the buyer’s broker. In cases where the listing broker also represents the buyer, they might negotiate a slightly lower total commission but still earn a significant amount.  \n\nWould you like me to look up any recent deals for reference?"
+    }
+  ]
+}

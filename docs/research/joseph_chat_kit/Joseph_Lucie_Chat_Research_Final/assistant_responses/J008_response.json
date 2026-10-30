@@ -1,0 +1,16 @@
+{
+  "selection_id": "J008",
+  "source_type": "sanitized ChatGPT export subset",
+  "redacted": false,
+  "note": "Approved assistant wording is reproduced in full for the selected excerpt. Any approved redaction is explicitly marked; no unredacted copy is included.",
+  "assistant_responses": [
+    {
+      "source_message_ordinal": 2,
+      "content": "A \"crime yarn\" typically refers to a story or narrative centered around crime, often with a focus on mystery, suspense, and intricate plots. This term can be used to describe crime novels, short stories, or even films and television shows that weave together complex storylines involving criminal activities, investigations, and often a detective or protagonist trying to solve a case. These stories often include elements like twists, red herrings, and cliffhangers to keep the audience engaged.\n\nAre you looking for a recommendation, a plot idea, or something else related to crime yarns?"
+    },
+    {
+      "source_message_ordinal": 4,
+      "content": "A \"crime yarn\" is essentially a gripping tale centered on criminal activities, usually filled with suspense, twists, and an unfolding investigation. It's a story that unravels like a puzzle, often featuring detectives, criminals, and unexpected turns that keep the audience guessing until the end."
+    }
+  ]
+}

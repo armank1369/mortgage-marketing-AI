@@ -1,0 +1,24 @@
+{
+  "selection_id": "J001",
+  "source_type": "sanitized ChatGPT export subset",
+  "redacted": true,
+  "note": "Approved assistant wording is reproduced in full for the selected excerpt. Any approved redaction is explicitly marked; no unredacted copy is included.",
+  "assistant_responses": [
+    {
+      "source_message_ordinal": 4,
+      "content": "In mortgage shorthand:\n\n### **NOO = Non-Owner Occupied**\n\nIt means the borrower **does not live in the property**.\n\nIn lending terms, that typically refers to:\n- Investment properties  \n- DSCR loans  \n- Rental properties  \n- Fix-and-flip holds  \n\n---\n\n### Compare:\n\n- **OO** = Owner Occupied (primary residence)  \n- **2nd Home** = Vacation home  \n- **NOO** = Investment property  \n\n---\n\nIn your world, [REDACTED_NICKNAME] — if you're talking DSCR, you’re almost always dealing with **NOO** classification.\n\nIf you want, I can also break down how pricing differs between OO vs NOO."
+    },
+    {
+      "source_message_ordinal": 6,
+      "content": "### **NOI = Net Operating Income**\n\nIt’s the income a property produces **before mortgage payments**.\n\n---\n\n### Formula:\n\n\\[\n\\textbf{NOI = Gross Rental Income − Operating Expenses}\n\\]\n\n---\n\n### What counts as operating expenses?\n\n✔ Property taxes  \n✔ Insurance  \n✔ HOA  \n✔ Property management  \n✔ Maintenance / repairs allowance  \n\n❌ NOT included:\n- Mortgage payment  \n- Depreciation  \n- Income taxes  \n- Capital improvements  \n\n---\n\n### Simple Example\n\nMonthly rent: **[REDACTED_AMOUNT]**\n\nAnnual rent:\n\\[\n[REDACTED_AMOUNT] × 12 = [REDACTED_AMOUNT]\n\\]\n\nAssume 30% operating expenses:\n\\[\n[REDACTED_AMOUNT] × 30\\% = [REDACTED_AMOUNT]\n\\]\n\nNOI:\n\\[\n[REDACTED_AMOUNT] − [REDACTED_AMOUNT] = [REDACTED_AMOUNT]\n\\]\n\n---\n\n### Why it matters (DSCR context)\n\n\\[\nDSCR = \\frac{NOI}{Annual Debt Service}\n\\]\n\nNOI is the numerator.  \nHigher NOI → stronger DSCR → better pricing.\n\n---\n\nIf you want it ultra-lender specific, tell me:\n- Is this 75% rent method or actual expense underwriting?\n- IO or amortizing?\n\nI’ll give you the clean desk version."
+    },
+    {
+      "source_message_ordinal": 8,
+      "content": "In mortgage / underwriting conversations, **TSR** usually means:\n\n### **TSR = Total Shelter Ratio**\n\nIt’s a debt-to-income metric used in **agency and conventional underwriting** (especially in AUS findings).\n\n---\n\n## 📌 Formula\n\n\\[\n\\textbf{TSR = Total Monthly Housing Expense ÷ Gross Monthly Income}\n\\]\n\nWhere **Total Monthly Housing Expense** includes:\n\n- Principal & Interest  \n- Property Taxes  \n- Insurance  \n- HOA (if applicable)  \n- Mortgage Insurance (if applicable)  \n\n---\n\n## 📌 Example\n\nBorrower gross income: **$"
+    },
+    {
+      "source_message_ordinal": 10,
+      "content": "[REDACTED_NICKNAME] — straight to it.\n\n## **DSCR = Debt Service Coverage Ratio**\n\nIt measures whether a rental property produces enough income to cover its mortgage.\n\n---\n\n### 🔢 Formula\n\n\\[\n\\textbf{DSCR = NOI ÷ Annual Debt Service}\n\\]\n\nOr monthly version:\n\n\\[\n\\textbf{DSCR = Monthly Qualifying Rent ÷ Monthly PITIA}\n\\]\n\n---\n\n## Step 1 — Determine NOI (or qualifying income)\n\nMost DSCR lenders use one of these:\n\n### Option A: 75% of gross rent\nIf rent = **[REDACTED_AMOUNT]/month**\n\n\\[\n[REDACTED_AMOUNT] × 75\\% = [REDACTED_AMOUNT] qualifying monthly income\n\\]\n\nAnnualized:\n\\[\n[REDACTED_AMOUNT] × 12 = [REDACTED_AMOUNT]\n\\]\n\n---\n\n### Option B: Actual rent minus actual expenses  \n(Used more in portfolio products)\n\n---\n\n## Step 2 — Divide by Debt Service\n\nIf PITIA = **[REDACTED_AMOUNT]/month**\n\n\\[\nDSCR = 8,250 ÷ 8,000 = 1.03\n\\]\n\n---\n\n## What lenders want\n\n- **1.25+** = strong  \n- **1.15–1.24** = solid  \n- **1.00–1.14** = workable with pricing hit  \n- **<1.00** = negative cash flow (some allow down to 0.75 with rate bump)\n\n---\n\n## Important nuance (non-QM desk reality)\n\n- IO loans improve DSCR materially  \n- Property taxes in CA can swing it hard  \n- Some lenders exclude HOA from qualifying income calc  \n- STR loans may use AirDNA / 12-month history  \n\nIf you give me:\n- [REDACTED_ID]  \n- Rate  \n- IO or 30yr amort  \n- Taxes + insurance  \n\nI’ll calculate the real DSCR like we’re submitting it."
+    }
+  ]
+}

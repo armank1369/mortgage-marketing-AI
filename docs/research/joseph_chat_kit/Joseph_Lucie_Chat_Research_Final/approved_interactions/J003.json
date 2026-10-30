@@ -1,0 +1,41 @@
+{
+  "selection_id": "J003",
+  "synthetic_reference": true,
+  "source_type": "sanitized ChatGPT export subset",
+  "original_conversation_id": null,
+  "title": "Mortgage rate buy-down points",
+  "original_date": null,
+  "source_file": "sanitized_conversations-003.json",
+  "source_conversation_ordinal": 4,
+  "original_message_ids": null,
+  "selected_messages": [
+    {
+      "source_message_ordinal": 1,
+      "role": "user",
+      "content": "On a mortgage loan, for every quarter percent, excuse me, an eighth of a percent on the rate that you buy down, how much in points does that usually come out to?"
+    },
+    {
+      "source_message_ordinal": 2,
+      "role": "assistant",
+      "content": "In most mortgage pricing structures, buying down the rate by **⅛% (0.125%)** typically costs about **0.25 to 0.375 points** (¼ to ⅜ of a percent of the [REDACTED_ID]).  \n\nSo for example:  \n\n- [REDACTED_ID]: **[REDACTED_AMOUNT]**  \n- 1 point = **[REDACTED_AMOUNT]** (1% of [REDACTED_ID])  \n- 0.25 points = **[REDACTED_AMOUNT]**  \n- 0.375 points = **[REDACTED_AMOUNT]**  \n\nThe exact cost depends on:  \n- The overall rate environment (volatile markets can skew the ratio)  \n- How far you are from “par” pricing  \n- Whether it’s a conforming, jumbo, or government [REDACTED_ID] pricing grids  \n\nRule of thumb in a **stable market**:  \n- ⅛% buy-down = about **0.25–0.375 points**  \n- ¼% buy-down = about **0.5–0.75 points**  \n\nIf you want, I can give you the **current FNMA/FHLMC pricing grid** example so you can see exactly how it scales in today’s market. That would make the answer more precise for 2025 rates."
+    },
+    {
+      "source_message_ordinal": 3,
+      "role": "user",
+      "content": "What's one and one-eighth percent of [REDACTED_AMOUNT]?"
+    },
+    {
+      "source_message_ordinal": 4,
+      "role": "assistant",
+      "content": "Let’s calculate step by step:  \n\n1. One and one-eighth percent = \\( 1 + \\frac{1}{8} \\) = **1.125%**  \n2. Convert to decimal: \\( 1.125\\% = 0.01125 \\)  \n3. Multiply by [REDACTED_AMOUNT]:  \n\n\\[\n[REDACTED_AMOUNT] \\times 0.01125 = [REDACTED_AMOUNT]\n\\]\n\n**Answer:** **[REDACTED_AMOUNT]**"
+    }
+  ],
+  "approval_scope": "excerpt",
+  "redacted": true,
+  "video_status": "unsubstantiated",
+  "user_notes": null,
+  "redaction_notes": [
+    "potentially transaction-specific amounts redacted",
+    "pre-existing sanitizer marker preserved"
+  ]
+}

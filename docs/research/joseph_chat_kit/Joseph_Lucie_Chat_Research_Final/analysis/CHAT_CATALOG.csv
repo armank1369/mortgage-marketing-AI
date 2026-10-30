@@ -1,0 +1,10 @@
+selection_id,title,task_type,preference_signal,confidence,video_status,approval_scope,redacted,notes
+J001,NOI and DSCR Calculation,mortgage / underwriting shorthand,inferred: context-preserving terse follow-ups,high,unsubstantiated,excerpt,yes,Professional shorthand sequence; amounts/nickname redacted.
+J002,Fed bond purchase effects,economics / credit mechanism,inferred: probes causal mechanism,high,unsubstantiated,excerpt,yes,Company personalization redacted; existing sanitizer marker preserved.
+J003,Mortgage rate buy-down points,mortgage pricing + applied math,inferred: explanation to practical calculation,medium,unsubstantiated,excerpt,yes,Potentially transaction-specific amounts redacted.
+J004,Insurance Claims and Lenders,mortgage servicing / insurance,unknown response preference,unknown,unsubstantiated,excerpt,yes,Existing sanitizer markers preserved.
+J005,Insurance Payout and Sale,home sale / lender / insurance,inferred: brief scenario refinement,medium,unsubstantiated,excerpt,yes,Reference to unapproved prior private context removed.
+J006,Broker Commission for Skyscraper,commercial real estate,unknown response preference,unknown,unsubstantiated,excerpt,no,Hypothetical transaction example retained.
+J007,Incognito mode explained,ChatGPT product/privacy workflow,inferred: terse context-dependent operational follow-up,high,unsubstantiated,excerpt,no,Historical product instructions; not current documentation.
+J008,Crime Yarn Summary,rephrasing / wording,inferred: requests alternate phrasing,medium,unsubstantiated,excerpt,no,General style example.
+J009,Pesticide Study Fruit Warning,editing + Korean translation,inferred: context-preserving bilingual transformation,high,unsubstantiated,excerpt,no,General transformation example.
