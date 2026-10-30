@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ComplianceNotice from '../components/ComplianceNotice.jsx'
 import { useCalendar } from '../context/CalendarContext'
 import ContentBriefCard, { FORMAT_BADGES } from '../components/ContentBriefCard'
 import platformBadge from '../components/platformBadge'
@@ -144,6 +145,7 @@ function EntryDetailModal({ entry, onClose }) {
             hashtags={entry.details?.hashtags}
             onCopyText={buildCopyText}
           />
+          <ComplianceNotice flags={entry.details?.compliance_flags} />
         </div>
       </div>
     </div>

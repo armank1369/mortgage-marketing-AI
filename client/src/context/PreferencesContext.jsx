@@ -1,3 +1,4 @@
+import { useBrowserScope } from './BrowserScope'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { loadPreferencesFromStorage, savePreferencesToStorage } from '../utils/storage'
 
@@ -13,13 +14,14 @@ export function usePreferences() {
 }
 
 export function PreferencesProvider({ children }) {
-  const [preferences, setPreferences] = useState(loadPreferencesFromStorage)
+  const scope = useBrowserScope()
+  const [preferences, setPreferences] = useState(() => loadPreferencesFromStorage(scope))
 
   useEffect(() => {
     if (preferences) {
-      savePreferencesToStorage(preferences)
+      savePreferencesToStorage(preferences, scope)
     }
-  }, [preferences])
+  }, [preferences, scope])
 
   return (
     <PreferencesContext.Provider value={{ preferences, setPreferences }}>

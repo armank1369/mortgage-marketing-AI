@@ -7,13 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test src/lib/*.test.js",
+    "test:chat-browser": "node scripts/test-chat-browser.mjs"
   },
   "dependencies": {
+    "@neondatabase/neon-js": "^0.7.0-beta",
     "axios": "^1.19.0",
     "html-to-image": "^1.11.13",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

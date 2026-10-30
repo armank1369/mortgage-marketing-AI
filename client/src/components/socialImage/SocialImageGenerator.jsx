@@ -1,5 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
-import axios from 'axios'
+import { workspaceApi, apiErrorMessage } from '../../lib/api'
+import { scopedRequest } from '../../lib/workspaceConfiguration.js'
+import { useBrowserScope } from '../../context/BrowserScope.js'
 import { toPng } from 'html-to-image'
 import TEMPLATE_COMPONENTS, { TEMPLATE_DIMENSIONS } from './templates'
 
@@ -20,9 +22,13 @@ function resolvePlatformLabel(platform) {
   return PLATFORM_LABELS[key] || platform || 'Instagram'
 }
 
-export default function SocialImageGenerator({ title, script, platform, persona, nmls }) {
+export default function SocialImageGenerator({ title, script, platform, persona, durable = false, savedResult = null, onGenerate, disabled = false, readOnly = false }) {
+  const scope = useBrowserScope()
+  const pendingRef = useRef(null)
+  useEffect(() => () => pendingRef.current?.abort(), [scope])
   const platformLabel = resolvePlatformLabel(platform)
-  const [result, setResult] = useState(null)
+  const [localResult, setResult] = useState(null)
+  const result = durable ? savedResult : localResult
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [downloading, setDownloading] = useState(false)
@@ -44,22 +50,26 @@ export default function SocialImageGenerator({ title, script, platform, persona,
   }, [result])
 
   const generate = async () => {
+    if (disabled || readOnly) return
+    if (durable) { if (onGenerate) await onGenerate(); return }
+    if (pendingRef.current) return
+    const pending = new AbortController()
+    pendingRef.current = pending
     setLoading(true)
     setError('')
     try {
-      const { data } = await axios.post('/api/social-image', {
+      const data = await scopedRequest(workspaceApi, scope, pending.signal, '/api/social-image', 'POST', {
         title,
         script,
         platform: platformLabel,
-        persona,
-        nmls_number: nmls,
+        persona_id: persona,
         previous_attempt: result || undefined,
       })
-      setResult(data)
+      if (!pending.signal.aborted) setResult(data)
     } catch (err) {
-      setError(err?.response?.data?.error || 'Could not generate a graphic. Please try again.')
+      if (!pending.signal.aborted && err.code !== 'ERR_CANCELED') setError(apiErrorMessage(err, 'Could not generate a graphic. Please try again.'))
     } finally {
-      setLoading(false)
+      if (!pending.signal.aborted) { setLoading(false); pendingRef.current = null }
     }
   }
 
@@ -99,13 +109,14 @@ export default function SocialImageGenerator({ title, script, platform, persona,
         </span>
       </div>
 
+      {result?.compliance_flags?.length > 0 && <p className="mb-3 text-xs text-amber-800" role="status">Human compliance review required before publishing: {result.compliance_flags.join(', ')}</p>}
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
 
       {!result ? (
         <button
           type="button"
           onClick={generate}
-          disabled={loading}
+          disabled={loading || disabled || readOnly}
           className="w-full flex flex-col items-center justify-center gap-2 border border-dashed border-slate-300 rounded-lg py-8 text-slate-400 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/40 transition-colors disabled:opacity-60"
         >
           {loading ? (
@@ -120,7 +131,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
             </>
           )}
         </button>
-      ) : (
+      ) : !TemplateComponent || !dims ? <p role="status">Unsupported saved image format. Its specification remains preserved.</p> : (
         <div>
           <div
             ref={previewBoxRef}
@@ -129,7 +140,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
           >
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
               <div ref={captureRef} style={{ width: dims.width, height: dims.height }}>
-                <TemplateComponent slots={result.slots} nmls={nmls} />
+                <TemplateComponent slots={result.slots} footer={result.compliance_footer} businessName={result.business_name} />
               </div>
             </div>
           </div>
@@ -137,7 +148,7 @@ export default function SocialImageGenerator({ title, script, platform, persona,
             <button
               type="button"
               onClick={generate}
-              disabled={loading}
+              disabled={loading || disabled || readOnly}
               className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-60"
             >
               {loading ? 'Regenerating…' : '↻ Regenerate'}
