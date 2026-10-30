@@ -70,3 +70,15 @@ The following actions are **FROZEN** and will not execute until Joseph supplies 
 - [ ] **K-J4: ChatGPT Preference Synthesis**: No final tone or prompt adjustments until Joseph submits his full ChatGPT export and approves the derived style diff.
 - [ ] **K-J5: Live Model Smoke Calls**: No paid Anthropic generation calls against production without owner-approved smoke-test budget.
 - [ ] **K-J6: PR Merge to `main` & Deployment**: No merge into `main` until K-J1 through K-J5 pass inspection.
+
+### Behavioral Test Validation Record (Completed)
+All 7 empirical checks for Joseph's interaction patterns passed on the local stack:
+- [x] Check 1: Shorthand Acronym Resolution (`DSCR` -> Debt Service Coverage Ratio in context)
+- [x] Check 2: Causal Mechanism Explanation (Fed bond purchasing transmission channels)
+- [x] Check 3: Inline Rephrasing ("Tell me another way" + Regulation Z guardrail verification)
+- [x] Check 4: Translation Command Handling ("To korean" regulatory disclosure interception)
+- [x] Check 5: Ambiguous Acronym Clarification (`ARM` -> Adjustable-Rate Mortgage explainer)
+- [x] Check 6: Deliverable Pivot (Dynamic transition to Instagram image card)
+- [x] Check 7: Multi-Tenancy Scoping (Strict `workspace_id` header enforcement)
+
+**Architectural Decision:** Retain core system prompt and schema intact; no prompt patching or vector DB required. Research artifacts archived in `docs/research/joseph_chat_kit/`.
