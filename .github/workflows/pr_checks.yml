@@ -53,7 +53,7 @@ jobs:
         run: npm --prefix client run lint
 
       - name: Run Frontend Tests
-        run: npm --prefix client test -- --run
+        run: npm --prefix client test
 
       - name: Verify Production Vite Build
         run: npm --prefix client run build
