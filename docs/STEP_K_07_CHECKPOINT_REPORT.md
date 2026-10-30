@@ -81,4 +81,5 @@ All 7 empirical checks for Joseph's interaction patterns passed on the local sta
 - [x] Check 6: Deliverable Pivot (Dynamic transition to Instagram image card)
 - [x] Check 7: Multi-Tenancy Scoping (Strict `workspace_id` header enforcement)
 
+
 **Architectural Decision:** Retain core system prompt and schema intact; no prompt patching or vector DB required. Research artifacts archived in `docs/research/joseph_chat_kit/`.
