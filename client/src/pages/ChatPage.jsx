@@ -215,7 +215,7 @@ export default function ChatPage() {
                 onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
               <button type="submit" disabled={providerBlocked || !input.trim()} className={`${button} bg-lucent-navy text-white px-5`}>{state.submitting ? 'Saving / generating…' : 'Send'}</button>
             </form>
-            <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves remain on this browser.</p>
+            <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves are shared with this workspace.</p>
           </div>
         </footer>}
       </>}

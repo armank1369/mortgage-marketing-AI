@@ -38,9 +38,10 @@ The browser does **not** receive the PostgreSQL database password or Claude API 
 | Business context | `brand_profile`, `persona` | Used for editable business/audience settings and validated AI context |
 | Saved conversations | `chat_session`, `chat_message`, `ai_run` | Durable chats, linked operations and revisions in the reviewed Step J code |
 | Future capabilities | `memory_item`, `retrieval_document`, `retrieval_chunk`, `chat_summary` | Schema exists; long-term memory/RAG/summarization are **not** implemented end-to-end |
-| Other planned storage | Campaign, content, calendar and CRM-related tables | Tables exist; do **not** assume the UI uses them as the source of truth |
+| Calendar and campaigns (after migration) | `campaign`, `campaign_persona`, `content_item`, `calendar_entry`, `workspace_schedule_state` | [Workspace schedule and deployment](CALENDAR_SYNC.md) |
+| Other planned storage | CRM-related tables | Tables exist; do **not** assume the UI uses them as the source of truth |
 
-The **calendar, older local chat history and some pending browser state** remain browser-local. Step K work such as Joseph's historical ChatGPT import and final onboarding configuration remains separate and pending.
+Legacy calendar entries remain local until explicitly imported. New calendar saves use the workspace schedule API. Older local chat history and some pending state remain browser-local. Step K work such as Joseph's historical ChatGPT import and final onboarding configuration remains separate and pending.
 
 ## Development is not production
 

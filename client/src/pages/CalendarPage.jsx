@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ComplianceNotice from '../components/ComplianceNotice.jsx'
 import { useCalendar } from '../context/CalendarContext'
 import ContentBriefCard, { FORMAT_BADGES } from '../components/ContentBriefCard'
@@ -91,6 +91,12 @@ function toDateInputValue(date) {
 // same ContentBriefCard breakdown as the source card. A manually added or seed entry has no
 // `details`, so it gracefully falls back to just the schedule info (topic/platform/date/time).
 function EntryDetailModal({ entry, onClose }) {
+  const { canWrite, moveEntry } = useCalendar()
+  const [date, setDate] = useState(toDateInputValue(entry.date))
+  const [time, setTime] = useState(entry.time || '')
+  const move = async () => {
+    if (await moveEntry(entry.id, { ...entry, date: new Date(date+'T00:00:00'), time }, entry.openedRevision)) onClose()
+  }
   const script = entry.details?.script || null
 
   const buildCopyText = () => {
@@ -146,6 +152,12 @@ function EntryDetailModal({ entry, onClose }) {
             onCopyText={buildCopyText}
           />
           <ComplianceNotice flags={entry.details?.compliance_flags} />
+          {canWrite && <details className="mt-3"><summary>Reschedule entry</summary>
+            <p className="text-xs">New time in {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
+            <input aria-label="New date" type="date" value={date} onChange={e => setDate(e.target.value)} />
+            <input aria-label="New time" value={time} onChange={e => setTime(e.target.value)} />
+            <button disabled={!date} onClick={move}>Save new time</button>
+          </details>}
         </div>
       </div>
     </div>
@@ -153,7 +165,8 @@ function EntryDetailModal({ entry, onClose }) {
 }
 
 export default function CalendarPage() {
-  const { entries, addEntry, removeEntry, clearEntries } = useCalendar()
+  const { entries, revision, addEntry, removeEntry, clearEntries, refresh, canWrite, legacy, importLegacy } = useCalendar()
+  useEffect(() => { refresh() }, [refresh])
   const today = new Date()
   // The month currently on screen — starts on today's month but moves independently once the
   // user navigates, while `today` above stays fixed to the real date for the "today" highlight
@@ -163,6 +176,7 @@ export default function CalendarPage() {
   const grid = buildMonthGrid(viewDate.getFullYear(), viewDate.getMonth())
 
   const [showForm, setShowForm] = useState(false)
+  const [manualKey, setManualKey] = useState(null)
   const [formTopic, setFormTopic] = useState('')
   const [formPlatform, setFormPlatform] = useState(PLATFORMS[0])
   const [formDate, setFormDate] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`)
@@ -175,27 +189,28 @@ export default function CalendarPage() {
   const [clearScope, setClearScope] = useState('day')
   const [clearDate, setClearDate] = useState(() => toDateInputValue(today))
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!formTopic.trim() || !formDate) return
     const [y, m, d] = formDate.split('-').map(Number)
-    addEntry({
+    if (!await addEntry({
+      id: manualKey,
       topic: formTopic.trim(),
       platform: formPlatform,
       format: 'text-only',
       date: new Date(y, m - 1, d),
       time: formTime ? formatTimeLabel(formTime) : '',
       status: 'Scheduled',
-    })
+    })) return
     setFormTopic('')
     setFormPlatform(PLATFORMS[0])
     setFormTime('')
     setShowForm(false)
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!entryToDelete) return
-    removeEntry(entryToDelete.id)
+    if (!await removeEntry(entryToDelete.id)) return
     setEntryToDelete(null)
   }
 
@@ -220,8 +235,8 @@ export default function CalendarPage() {
 
   const clearMatchCount = entries.filter(matchesClearScope).length
 
-  const confirmClear = () => {
-    clearEntries(matchesClearScope)
+  const confirmClear = async () => {
+    if (!await clearEntries(matchesClearScope)) return
     setShowClearModal(false)
   }
 
@@ -255,20 +270,26 @@ export default function CalendarPage() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={openClearModal}
+            disabled={!canWrite} onClick={openClearModal}
             className="text-slate-500 hover:text-red-600 hover:bg-red-50 border border-slate-200 text-sm font-medium px-3 py-2 rounded-lg transition-colors inline-flex items-center gap-1.5"
           >
             <TrashIcon />
             <span className="hidden sm:inline">Clear Calendar</span>
           </button>
           <button
-            onClick={() => setShowForm(true)}
+            disabled={!canWrite} onClick={() => { setManualKey(crypto.randomUUID()); setShowForm(true) }}
             className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm shadow-blue-200"
           >
             + New Entry
           </button>
         </div>
       </header>
+
+      {legacy.length > 0 && <details className="border-b bg-amber-50 px-4 py-2 text-sm">
+        <summary>Review {legacy.length} browser entries for import into this shared workspace</summary>
+        <ul className="max-h-40 overflow-auto">{legacy.map(e => <li key={e.id}>{e.date.toLocaleDateString()} {e.time} · {e.topic}</li>)}</ul>
+        <button disabled={!canWrite} onClick={importLegacy}>Import these entries</button>
+      </details>}
 
       {/* Fixed-width grid (700px) scrolls horizontally below that — a 7-day week squeezed
           into a phone's ~350px usable width would make every cell too narrow to read, so this
@@ -305,7 +326,7 @@ export default function CalendarPage() {
                     return (
                       <div
                         key={entry.id}
-                        onClick={() => setSelectedEntry(entry)}
+                        onClick={() => setSelectedEntry({ ...entry, openedRevision: revision })}
                         className="group relative rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 cursor-pointer hover:border-slate-300 hover:bg-white transition-colors"
                       >
                         <div className="flex items-center gap-1.5 mb-0.5 pr-4">
@@ -329,7 +350,7 @@ export default function CalendarPage() {
                             e.stopPropagation()
                             setEntryToDelete(entry)
                           }}
-                          aria-label={`Delete ${entry.topic}`}
+                          disabled={!canWrite} aria-label={`Delete ${entry.topic}`}
                           className="absolute top-1 right-1 p-1 rounded-md transition-all opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 hover:bg-slate-200"
                         >
                           <TrashIcon />
@@ -440,7 +461,7 @@ export default function CalendarPage() {
               </button>
               <button
                 type="button"
-                onClick={confirmDelete}
+                disabled={!canWrite} onClick={confirmDelete}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
               >
                 Remove
@@ -492,7 +513,7 @@ export default function CalendarPage() {
             <p className="text-xs text-slate-500 mb-5">
               {clearMatchCount === 0
                 ? 'No entries match this selection.'
-                : `This will permanently delete ${clearMatchCount} ${clearMatchCount === 1 ? 'entry' : 'entries'}. This cannot be undone.`}
+                : `This will permanently delete ${clearMatchCount} shared workspace ${clearMatchCount === 1 ? 'entry' : 'entries'}. This cannot be undone.`}
             </p>
 
             <div className="flex gap-2">
@@ -506,7 +527,7 @@ export default function CalendarPage() {
               <button
                 type="button"
                 onClick={confirmClear}
-                disabled={clearMatchCount === 0}
+                disabled={!canWrite || clearMatchCount === 0}
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold py-2 rounded-lg transition-colors"
               >
                 Clear

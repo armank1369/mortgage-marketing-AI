@@ -34,6 +34,8 @@ app = Flask(__name__)
 CORS(app)
 
 from services.chat_http import blueprint as durable_chat_blueprint, list_v2, detail_v2, body as chat_body
+from services.schedule_http import blueprint as schedule_blueprint
+app.register_blueprint(schedule_blueprint)
 app.register_blueprint(durable_chat_blueprint)
 
 

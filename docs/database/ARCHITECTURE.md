@@ -73,7 +73,7 @@ Functional clusters:
 | RAG/reference retrieval | `retrieval_document`, `retrieval_chunk`, `ai_run_retrieval` | Future normalized source docs, vector chunks and retrieval provenance |
 | Marketing/CRM | `campaign`, `campaign_persona`, `content_item`, `calendar_entry`, `contact`, `lead` | Future structured planning, published content and light lead tracking |
 
-**Do not equate 'table exists' with 'feature exists.'** The application currently uses workspace, brand/persona and durable chat/AI-run storage. Long-term semantic memory, automatic summarization and vector RAG workflows remain future work. Browser calendar/legacy history are not synchronized via the similarly named PostgreSQL tables.
+**Do not equate 'table exists' with 'feature exists.'** The application currently uses workspace, brand/persona and durable chat/AI-run storage. Long-term semantic memory, automatic summarization and vector RAG workflows remain future work. The subsequent [calendar migration](CALENDAR_SYNC.md) connects workspace campaigns, content and schedule entries. Legacy chat history remains browser-local.
 
 Detailed definitions, nullability/defaults, every FK and index appear in [SCHEMA.md](SCHEMA.md), derived from the uploaded snapshot—not from the original proposed SQL file.
 
@@ -112,7 +112,7 @@ A new chat is only saved when the first Send occurs. The client creates a stable
 
 **Context is bounded, not unlimited memory:** `server/services/conversation_context.py` captures up to six recent completed exchanges and a 16 KiB history projection from the *same* session, with a per-artifact limit. Recent idea avoidance uses a separate bounded window of completed outputs in the selected workspace; it does not turn all workspace history into the prompt. No automatic long-term summary, semantic memory extraction or RAG retrieval is in this implementation.
 
-Saved messages/revisions persist across supported browsers and can be shared within the authorized workspace. Legacy browser history remains read-only/local; pending inputs and calendar remain browser-scoped. Export is supported; automatic history import is **not**.
+Saved messages/revisions persist across supported browsers and can be shared within the authorized workspace. Legacy browser history remains read-only/local; pending inputs remain browser-scoped. The shared calendar uses a workspace revision and an account/workspace browser cache. Export is supported; automatic history import is **not**.
 
 For exact endpoint and recovery details, use [`../STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md`](../STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md) and [WORKFLOWS.md](WORKFLOWS.md).
 

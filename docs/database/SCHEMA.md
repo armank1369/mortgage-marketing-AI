@@ -648,6 +648,8 @@ erDiagram
 
 ### 6. Marketing, content, calendar, CRM
 
+The table descriptions below record the inspected October baseline. See [calendar sync](CALENDAR_SYNC.md) for subsequent code and proposed DDL.
+
 #### `public.campaign`
 
 **Purpose and use:** Structured campaign model reserved for broader marketing persistence; rendered chat campaign outputs do not prove persistence here.

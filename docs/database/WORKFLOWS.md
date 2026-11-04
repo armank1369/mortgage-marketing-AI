@@ -123,7 +123,7 @@ Source: [`../WORKSPACE_CHAT_SHARING.md`](../WORKSPACE_CHAT_SHARING.md).
 - **Make it shorter:** deterministic text shortening happens without a Claude API call, retains full required disclosure/flags and creates a linked result.
 - **Export:** the browser paginates through authorized history and produces a versioned JSON export containing saved structured outputs, revisions and relevant metadata. Export does not write/import the chat into another workspace.
 - **Social image:** the persisted artifact is a validated *render specification* (template/slots/business identity/disclosure). The PNG is rendered/downloaded in the browser; the Step J flow does not automatically store a binary image in PostgreSQL.
-- **Calendar:** remains browser-local despite `public.calendar_entry` existing. Do not document a cross-device calendar sync feature.
+- **Calendar:** after the [calendar migration](CALENDAR_SYNC.md), a confirmed save writes to the shared workspace schedule. Legacy browser entries have an explicit import preview.
 
 ## 8. Switching from development to production (future checklist)
 

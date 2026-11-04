@@ -31,7 +31,7 @@ are historical context, not instructions to repeat migrations, preflight or seed
 | Brand Summary | Header dialog shows current persona/audience/brand configuration; saved message labels retain historical snapshots. |
 | Sidebar and suggestions | Stacked Chat/Calendar/New Chat, persona/preview/type labels, and three suggestions per category with More. |
 | Export chat | Versioned JSON with every history page, structured outputs, revisions, snapshots and flags; failures do not create partial downloads. No import endpoint. |
-| Calendar | Existing browser-local scheduling remains, using durable message IDs as batch keys. It does not synchronize across devices. Saving another revision uses that revision's distinct ID. |
+| Calendar | At the Step J baseline (superseded by [calendar sync](database/CALENDAR_SYNC.md)), browser-local scheduling remained, using durable message IDs as batch keys. It does not synchronize across devices. Saving another revision uses that revision's distinct ID. |
 
 Text, posts, clarification, campaign, video and social-image outputs retain their
 normalized payloads, full disclosures, slides, hashtags, withheld content, compliance

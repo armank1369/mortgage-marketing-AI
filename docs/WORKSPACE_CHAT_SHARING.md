@@ -38,8 +38,7 @@ The sidebar and active saved chat refresh on focus/reconnect/visibility return a
 approximately every 15–16 seconds while visible and online. Unresolved operation polling
 retains its faster cadence. Unsent composer text remains intact. This is polling, not
 real-time co-editing. Browser-local drafts, pending request identifiers, legacy local
-history and calendar remain scoped to the existing account/workspace browser records;
-only database-backed chats are shared.
+history and pre-migration calendar entries remain scoped to existing account/workspace browser records. See [calendar sync](database/CALENDAR_SYNC.md) for shared schedules and explicit import.
 
 Recent-idea avoidance now covers completed outputs from all creators in the selected
 workspace, matching their new visibility. It still uses the latest 12 completed outputs,
