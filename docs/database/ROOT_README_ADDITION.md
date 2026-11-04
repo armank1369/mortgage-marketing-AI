@@ -1,6 +1,6 @@
 # Optional addition to repository-root `README.md`
 
-**This is an insert, not a full-file replacement.** The existing root README on `codex/step-j-chat-persistence` already documents cloning, installation, current features, Auth, environment setup and testing. Replacing it with a new database-focused README would lose useful material. Instead, insert the following under its existing **Start here** links:
+The repository README already includes the database links. The snippets below use paths relative to the repository root and can be reused when updating that README.
 
 ---
 
@@ -11,7 +11,7 @@
 **Optional additional clarification** below the root README's introductory branch paragraph, if useful:
 
 ```markdown
-> **Database environment:** these database references document the Neon **`development`** branch inspected October 23, 2026, and code behavior reviewed on `codex/step-j-chat-persistence`. They do **not** certify production. Production requires an independently verified Neon schema, approved migrations if needed, matching production DB/Auth configuration, securely managed environment variables, manually provisioned workspace access, and separate live security testing. See [database architecture and environment transition](docs/database/ARCHITECTURE.md#7-development-staging-and-production) and [environment setup](docs/ENVIRONMENT.md).
+> **Database environment:** these database references document the Neon **`development`** branch inspected October 23, 2026, with a subsequent targeted check confirming the Step K2 shared calendar migration on development. The calendar implementation is on `luciev2_newteam`. They do **not** certify production. Production requires an independently verified Neon schema, approved migrations if needed, matching production DB/Auth configuration, securely managed environment variables, manually provisioned workspace access, and separate live security testing. See [database architecture and environment transition](docs/database/ARCHITECTURE.md#7-development-staging-and-production) and [environment setup](docs/ENVIRONMENT.md).
 ```
 
 No replacement of `docs/ENVIRONMENT.md` or `docs/AUTHORIZATION_MATRIX.md` is recommended for this batch; those maintained docs already reflect development/production separation and workspace-shared Step J permissions. Keep them current as the application changes.

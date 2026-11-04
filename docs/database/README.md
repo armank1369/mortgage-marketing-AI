@@ -1,6 +1,6 @@
 # Lucie database: quick overview
 
-> **Current reference: Neon `development` branch (October 23, 2026).** This describes Lucie's **development** database and the application behavior on the reviewed `codex/step-j-chat-persistence` feature branch. It is **not** evidence of a configured or verified production deployment. Some code paths have local/synthetic test coverage but still need live, multi-account acceptance.
+> The October 23, 2026 development inspection is the full catalog baseline. A targeted development check confirmed the Step K2 calendar migration. Calendar behavior follows `luciev2_newteam`. Production rollout requires separate verification.
 
 ## What Neon does for Lucie
 
@@ -38,7 +38,7 @@ The browser does **not** receive the PostgreSQL database password or Claude API 
 | Business context | `brand_profile`, `persona` | Used for editable business/audience settings and validated AI context |
 | Saved conversations | `chat_session`, `chat_message`, `ai_run` | Durable chats, linked operations and revisions in the reviewed Step J code |
 | Future capabilities | `memory_item`, `retrieval_document`, `retrieval_chunk`, `chat_summary` | Schema exists; long-term memory/RAG/summarization are **not** implemented end-to-end |
-| Calendar and campaigns (after migration) | `campaign`, `campaign_persona`, `content_item`, `calendar_entry`, `workspace_schedule_state` | [Workspace schedule and deployment](CALENDAR_SYNC.md) |
+| Shared calendar and campaigns | `campaign`, `campaign_persona`, `content_item`, `calendar_entry`, `workspace_schedule_state` | [Workspace schedule and deployment](CALENDAR_SYNC.md) |
 | Other planned storage | CRM-related tables | Tables exist; do **not** assume the UI uses them as the source of truth |
 
 Legacy calendar entries remain local until explicitly imported. New calendar saves use the workspace schedule API. Older local chat history and some pending state remain browser-local. Step K work such as Joseph's historical ChatGPT import and final onboarding configuration remains separate and pending.
@@ -51,14 +51,15 @@ The database schema described in these documents was inspected on the team's **N
 
 For local development, `server/.env` includes `DATABASE_URL` and `NEON_AUTH_BASE_URL`; `client/.env` includes `VITE_NEON_AUTH_URL`. They must refer to the **matching intended Neon branch/Auth service**. Production hosting should use managed environment variables or secrets, not committed `.env` files. See [existing environment guidance](../ENVIRONMENT.md).
 
-**Security note:** all 24 inspected `public` application tables currently have **RLS disabled**, and no application RLS policies were returned. Flask authorization and workspace-filtered data access therefore remain essential. RLS and database-credential privileges require explicit production review.
+**Security note:** the October inspection found RLS disabled on its 24 public tables and returned no public policies. The subsequent calendar check found RLS disabled on the five inspected schedule-related tables. Flask authorization and workspace-filtered data access therefore remain essential. RLS and database-credential privileges require explicit production review.
 
 ## Read next
 
 - [SCHEMA.md](SCHEMA.md) — actual development table/column/relationship reference.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — how Auth, Flask, PostgreSQL and AI generation fit together; production considerations.
 - [WORKFLOWS.md](WORKFLOWS.md) — trace sign-in, settings changes, saved chat and collaboration through API/code.
-- [AGENTS.md](AGENTS.md) — **instructions** for coding agents modifying the database-related system.
+- [Step K2 hotfix](../STEP_K2_HOTFIX_CALENDAR_DATE_TIME.md) — implementation changes and test evidence.
+- [AGENTS.md](../../AGENTS.md) — **instructions** for coding agents modifying the database-related system.
 - [Existing authorization matrix](../AUTHORIZATION_MATRIX.md) and [current Step J guide](../STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md) — detailed behavioral contracts.
 
 **Documentation rule:** a database table's existence does not prove that a feature is implemented, tested live, or deployed. When documents disagree, verify current code, migration history and the actual intended Neon branch before changing anything.

@@ -1,6 +1,6 @@
 # Lucie database workflows: code-to-data traces
 
-> **Scope:** intended implementation in GitHub `codex/step-j-chat-persistence`, cross-checked against the Neon **development** schema snapshot supplied October 23, 2026. These are **application-level paths**, not proof of production deployment or live multi-account acceptance. [Overview](README.md) · [Architecture](ARCHITECTURE.md) · [Schema](SCHEMA.md).
+> The October 23, 2026 development inspection is the full catalog baseline. A targeted development check confirmed the Step K2 calendar migration. Calendar behavior follows `luciev2_newteam`. Production rollout requires separate verification. [Overview](README.md) · [Architecture](ARCHITECTURE.md) · [Schema](SCHEMA.md).
 
 ## Before tracing any request
 
@@ -123,7 +123,12 @@ Source: [`../WORKSPACE_CHAT_SHARING.md`](../WORKSPACE_CHAT_SHARING.md).
 - **Make it shorter:** deterministic text shortening happens without a Claude API call, retains full required disclosure/flags and creates a linked result.
 - **Export:** the browser paginates through authorized history and produces a versioned JSON export containing saved structured outputs, revisions and relevant metadata. Export does not write/import the chat into another workspace.
 - **Social image:** the persisted artifact is a validated *render specification* (template/slots/business identity/disclosure). The PNG is rendered/downloaded in the browser; the Step J flow does not automatically store a binary image in PostgreSQL.
-- **Calendar:** after the [calendar migration](CALENDAR_SYNC.md), a confirmed save writes to the shared workspace schedule. Legacy browser entries have an explicit import preview.
+### Saving and looking up a workspace schedule
+
+1. Generating a campaign stores the draft in chat. Confirming its schedule sends `POST /api/calendar` with `If-Match`. Flask checks `chat:write`, locks membership and revision, and resolves the source message in the selected workspace. A stale revision returns HTTP 409.
+2. A successful transaction writes the campaign, its content items and their calendar entries. A standalone generated post needs a content item and a calendar entry. A manual reminder needs only the calendar entry. Triggers advance the workspace revision.
+3. At startup, on Calendar page entry and on window focus, the browser revalidates its account/workspace snapshot with `GET /api/calendar`. A matching revision returns HTTP 304 after authorization. A changed revision returns a fresh snapshot. Older browser entries have a separate import preview.
+4. For recognized schedule questions, Flask looks up the selected workspace’s entries for a date range in the device timezone, with UTC as fallback. Chat uses a separate revision-keyed server cache. The Calendar UI handles edits. [Schedule API and lookup limits](CALENDAR_SYNC.md)
 
 ## 8. Switching from development to production (future checklist)
 

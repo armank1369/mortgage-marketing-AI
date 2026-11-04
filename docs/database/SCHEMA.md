@@ -2,13 +2,15 @@
 
 > **Evidence:** full catalog introspection exported by the team on **October 23, 2026**, while Neon `development` was selected. SQL metadata reports database `neondb`, PostgreSQL `18.6`, `public` application schema and managed `neon_auth` tables; the query **cannot independently attest the Neon branch**. This file is **not** a migration script, production schema certification or proof of feature deployment. See [README](README.md) and [ARCHITECTURE](ARCHITECTURE.md).
 
-## Snapshot summary
+## October 23 baseline
+
+The totals below describe the full October inspection. The subsequent development check covered five calendar-related tables. Section 6 includes the confirmed Step K2 changes.
 
 - **24 `public` tables**, **9 `neon_auth` managed tables**, **51 indexes**, **13 non-internal triggers**, **50 foreign keys**, **35 CHECK constraints**, **10 UNIQUE constraints** and **24 primary keys**. The export also lists 146 Postgres 18 catalog `NOT NULL` constraint records, reflected under each column rather than repeated below.
 - All `public` application tables have `rls_enabled=false` and `rls_forced=false`; **no policies** were returned under `pg_policies` for `public`. Application/server authorization must remain in force; RLS/role grants require separate production review.
 - Extensions: `pg_session_jwt` 0.5.0, `pgcrypto` 1.4, `plpgsql` 1.0, `vector` 0.8.6. No `vector` similarity-index acceleration (HNSW/IVFFlat) appears among the 51 inspected indexes.
 - One application function was surfaced: `public.set_updated_at()` (PL/pgSQL trigger function; no body exported). Triggers below identify which tables use it.
-- The original design created storage for more features than currently run in the application. Usage labels below are based on the reviewed Step I/J source and feature guides; they are **not** determined by the SQL schema alone.
+- The original design created storage for more features than currently run in the application. Usage labels below are based on the reviewed Step I/J source and the Step K2 calendar implementation; they are **not** determined by the SQL schema alone.
 
 ## Ownership and relationship model
 
@@ -23,12 +25,18 @@ erDiagram
   chat_session ||--o{ chat_message : contains
   chat_session ||--o{ ai_run : records
   chat_message ||--o{ ai_run : requests
+  workspace ||--o| workspace_schedule_state : versions
+  workspace ||--o{ campaign : owns
+  campaign o|--o{ content_item : groups
+  chat_message o|--o{ content_item : sources
+  workspace ||--o{ calendar_entry : schedules
+  content_item o|--o{ calendar_entry : appears_in
   workspace ||--o{ memory_item : future_memory
   workspace ||--o{ retrieval_document : future_reference
   retrieval_document ||--o{ retrieval_chunk : chunks
 ```
 
-> This ER diagram intentionally shows **primary conceptual links**, not all 50 SQL foreign keys. In particular, `workspace_member.auth_user_id` links by application convention to Neon Auth identity, **not** by a physical FK from `public` into `neon_auth`. See constraints under each table for actual database-enforced relationships.
+> This ER diagram intentionally shows **primary conceptual links**, a subset of the SQL foreign keys. In particular, `workspace_member.auth_user_id` links by application convention to Neon Auth identity, **not** by a physical FK from `public` into `neon_auth`. See constraints under each table for actual database-enforced relationships.
 
 ### Key safety facts
 
@@ -648,11 +656,11 @@ erDiagram
 
 ### 6. Marketing, content, calendar, CRM
 
-The table descriptions below record the inspected October baseline. See [calendar sync](CALENDAR_SYNC.md) for subsequent code and proposed DDL.
+The development post-migration check confirmed the four marketing tables below and `workspace_schedule_state`. The CRM descriptions retain their October baseline. Each `schedule_revision` trigger calls `public.bump_schedule_revision()` after row inserts, updates and deletes. [Applied migration](calendar_sync.sql)
 
 #### `public.campaign`
 
-**Purpose and use:** Structured campaign model reserved for broader marketing persistence; rendered chat campaign outputs do not prove persistence here.
+**Purpose and use:** Confirming a generated campaign’s schedule creates or updates its workspace plan. Generating the draft alone stores an assistant response in chat history.
 
 | Column | SQL type | Null? | Default / special behavior |
 |---|---|:---:|---|
@@ -679,11 +687,11 @@ The table descriptions below record the inspected October baseline. See [calenda
 **Indexes (including backing PK/UNIQUE indexes):**
 - `campaign_pkey` — `CREATE UNIQUE INDEX campaign_pkey ON campaign USING btree (id)`
 
-**Triggers:** `trg_campaign_updated` (see `pg_get_triggerdef` in the inspection).
+**Triggers:** `trg_campaign_updated` before update and `schedule_revision` after insert, update or delete.
 
 #### `public.campaign_persona`
 
-**Purpose and use:** Junction between structured campaigns and personas; not proof of a deployed campaign manager.
+**Purpose and use:** A campaign save links the source persona as primary when it belongs to the workspace.
 
 | Column | SQL type | Null? | Default / special behavior |
 |---|---|:---:|---|
@@ -705,9 +713,11 @@ The table descriptions below record the inspected October baseline. See [calenda
 - `campaign_persona_pkey` — `CREATE UNIQUE INDEX campaign_persona_pkey ON campaign_persona USING btree (campaign_id, persona_id)`
 - `uq_campaign_one_primary_persona` — `CREATE UNIQUE INDEX uq_campaign_one_primary_persona ON campaign_persona USING btree (campaign_id) WHERE (persona_role = 'primary'::text)`
 
+**Trigger:** `schedule_revision` after insert, update or delete.
+
 #### `public.content_item`
 
-**Purpose and use:** Structured marketing asset storage; current chat saves artifacts in messages and calendar remains local.
+**Purpose and use:** Saving a generated post or campaign slot writes a workspace content item linked to its source assistant message. A standalone post can have a null campaign ID.
 
 | Column | SQL type | Null? | Default / special behavior |
 |---|---|:---:|---|
@@ -743,11 +753,11 @@ The table descriptions below record the inspected October baseline. See [calenda
 - `ix_content_item_campaign` — `CREATE INDEX ix_content_item_campaign ON content_item USING btree (campaign_id)`
 - `ix_content_item_workspace_status` — `CREATE INDEX ix_content_item_workspace_status ON content_item USING btree (workspace_id, status)`
 
-**Triggers:** `trg_content_item_updated` (see `pg_get_triggerdef` in the inspection).
+**Triggers:** `trg_content_item_updated` before update and `schedule_revision` after insert, update or delete.
 
 #### `public.calendar_entry`
 
-**Purpose and use:** Structured calendar schema exists, but current Calendar feature remains browser-local (not cross-device DB sync).
+**Purpose and use:** Stores shared scheduled slots and manual reminders. The browser caches an authorized workspace snapshot and checks its revision.
 
 | Column | SQL type | Null? | Default / special behavior |
 |---|---|:---:|---|
@@ -757,6 +767,7 @@ The table descriptions below record the inspected October baseline. See [calenda
 | `title` | `text` | No | — |
 | `scheduled_for` | `timestamp with time zone` | No | — |
 | `timezone` | `text` | No | `'America/Los_Angeles'::text` |
+| `display_data` | `jsonb` | No | `'{}'::jsonb` |
 | `status` | `text` | No | `'planned'::text` |
 | `notes` | `text` | Yes | — |
 | `created_at` | `timestamp with time zone` | No | `now()` |
@@ -776,7 +787,19 @@ The table descriptions below record the inspected October baseline. See [calenda
 - `calendar_entry_pkey` — `CREATE UNIQUE INDEX calendar_entry_pkey ON calendar_entry USING btree (id)`
 - `ix_calendar_entry_workspace_scheduled` — `CREATE INDEX ix_calendar_entry_workspace_scheduled ON calendar_entry USING btree (workspace_id, scheduled_for)`
 
-**Triggers:** `trg_calendar_entry_updated` (see `pg_get_triggerdef` in the inspection).
+**Triggers:** `trg_calendar_entry_updated` before update and `schedule_revision` after insert, update or delete.
+
+#### `public.workspace_schedule_state`
+
+A missing row reads as revision zero. A calendar write locks the workspace revision before comparing it with the client’s version. Multiple trigger increments in one transaction become visible together.
+
+| Column | SQL type | Null? | Default |
+|---|---|---|---|
+| `workspace_id` | `uuid` | No | — |
+| `revision` | `bigint` | No | `0` |
+| `updated_at` | `timestamp with time zone` | No | `now()` |
+
+`workspace_schedule_state_pkey` supplies the unique index on `workspace_id`. The foreign key `workspace_schedule_state_workspace_id_fkey` references `public.workspace(id)` with `ON DELETE CASCADE`.
 
 #### `public.contact`
 

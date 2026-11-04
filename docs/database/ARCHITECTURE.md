@@ -1,6 +1,6 @@
 # Lucie database and backend architecture
 
-> **Baseline:** Neon PostgreSQL `development` schema inspection supplied October 23, 2026; application behavior reviewed against GitHub branch `codex/step-j-chat-persistence` and its current feature/authorization/environment documents. This is a **development architecture reference**, not a production deployment or complete live-test certification. [Quick overview](README.md) · [Full schema](SCHEMA.md) · [Workflows](WORKFLOWS.md).
+> The October 23, 2026 development inspection is the full catalog baseline. A targeted development check confirmed the Step K2 calendar migration. Calendar behavior follows `luciev2_newteam`. Production rollout requires separate verification. [Overview](README.md) · [Schema](SCHEMA.md) · [Workflows](WORKFLOWS.md).
 
 ## 1. System boundaries
 
@@ -60,7 +60,7 @@ A missing/invalid JWT leads to authentication rejection; no membership leads to 
 
 ## 3. Database organization and schema status
 
-The current export contains **24 `public` tables**, **9 managed `neon_auth` tables**, **50 public foreign-key constraints**, **51 public indexes**, **13 application triggers**, and extensions `pg_session_jwt`, `pgcrypto`, `plpgsql` and `vector`. There are **no RLS policies in `public`**, and `relrowsecurity` is false for every inspected application table.
+The full October export recorded **24 `public` tables**, **9 managed `neon_auth` tables**, **50 public foreign-key constraints**, **51 public indexes**, **13 application triggers**, and extensions `pg_session_jwt`, `pgcrypto`, `plpgsql` and `vector`. There are **no RLS policies in `public`**, and `relrowsecurity` is false for every inspected application table.
 
 Functional clusters:
 
@@ -71,13 +71,16 @@ Functional clusters:
 | AI execution/provenance | `ai_run`, `tool_call`, `web_source`, `message_source` | Runs, metrics, and supporting provenance schema |
 | Long-term semantic memory | `memory_item`, `ai_run_memory`, `feedback_event` | Future durable facts/preferences/corrections and run attribution |
 | RAG/reference retrieval | `retrieval_document`, `retrieval_chunk`, `ai_run_retrieval` | Future normalized source docs, vector chunks and retrieval provenance |
-| Marketing/CRM | `campaign`, `campaign_persona`, `content_item`, `calendar_entry`, `contact`, `lead` | Future structured planning, published content and light lead tracking |
+| Workspace schedule | `campaign`, `campaign_persona`, `content_item`, `calendar_entry`, `workspace_schedule_state` | Confirmed saves, scheduled posts and workspace revision checks |
+| CRM | `contact`, `lead` | Reserved for contact and lead tracking |
 
 **Do not equate 'table exists' with 'feature exists.'** The application currently uses workspace, brand/persona and durable chat/AI-run storage. Long-term semantic memory, automatic summarization and vector RAG workflows remain future work. The subsequent [calendar migration](CALENDAR_SYNC.md) connects workspace campaigns, content and schedule entries. Legacy chat history remains browser-local.
 
 Detailed definitions, nullability/defaults, every FK and index appear in [SCHEMA.md](SCHEMA.md), derived from the uploaded snapshot—not from the original proposed SQL file.
 
 ## 4. Configuration and prompt-context assembly
+
+For ordinary chat, campaign clarification and campaign generation, Flask renders its current clock in the device timezone supplied by `X-Device-Timezone`, with a labeled UTC fallback. This per-request clock needs no database read. A recognized question about an existing schedule also receives bounded workspace records for the selected date range. Flask validates the revision before reusing cached results and passes record text to the model as untrusted data. [Schedule lookup and cache behavior](CALENDAR_SYNC.md)
 
 A saved **brand profile** belongs to one workspace (`brand_profile.workspace_id` is unique) and stores `business_name`, licensing numbers, tone, values, keywords, catchphrases, banned words, writing examples and supplemental compliance text. The approved licensed person's name lives in `brand_profile.settings.licensed_person_name`; it is **not** a separate SQL column. Other JSON settings keys are not generally injected into generation prompts.
 
@@ -119,7 +122,7 @@ For exact endpoint and recovery details, use [`../STEP_J_FEATURE_AND_OPERATIONS_
 ## 6. Database security model and limitations
 
 - All protected API access relies on a verified Auth identity **and** current workspace membership **and** the appropriate capability. Every repository operation must constrain records by the authorized workspace or verify ownership through a workspace-scoped parent.
-- The development database snapshot has **RLS disabled on every `public` table** and no `public` RLS policies. This does *not* demonstrate a broken route, but it means PostgreSQL itself is **not** the current tenant-isolation safety net. Server-side filters, privileges and tests are crucial. Review RLS and least-privilege DB roles before production.
+- The October development snapshot recorded **RLS disabled on every `public` table** and no `public` RLS policies. This does *not* demonstrate a broken route, but it means PostgreSQL itself is **not** the current tenant-isolation safety net. Server-side filters, privileges and tests are crucial. Review RLS and least-privilege DB roles before production.
 - `workspace.environment` is an **application row value**, not proof of which Neon branch you're connected to. Its SQL default is `'production'` even inside a development database. Controlled workspace creation should set and verify its intended environment explicitly.
 - `workspace_member` currently has no physical `revoked_at` column in the inspected export. Compatibility code checks an optional key via JSON, but **soft revocation is not implemented solely by that check**. Removing a membership denies subsequent requests; in-flight calls have separate limitations.
 - Hard-coded or client-supplied role/workspace, status/claim, authorship and identity values must not bypass server checks. Do not weaken requirement for a committed operation claim before provider dispatch.
@@ -152,8 +155,8 @@ Possible future ingestion: authorized document -> normalized Markdown -> bounded
 
 ## 9. Source-of-truth and maintenance rules
 
-1. **For table facts:** treat the October 23, 2026 development schema export as this snapshot's evidence, and re-inspect the intended live database before new migrations.
-2. **For code behavior:** verify the latest chosen application branch and tests; this document describes `codex/step-j-chat-persistence` when reviewed. Do not silently substitute the older `main` or `luciev2_newteam` behavior.
+1. **For table facts:** use the October development export for the full baseline and the K2 catalog results for the updated schedule schema. Inspect the target branch before subsequent migrations.
+2. **For code behavior:** the Step J branch supplies the chat baseline. Use `luciev2_newteam` and the [K2 hotfix record](../STEP_K2_HOTFIX_CALENDAR_DATE_TIME.md) for the current calendar API and generation context.
 3. **For authorization:** use [`../AUTHORIZATION_MATRIX.md`](../AUTHORIZATION_MATRIX.md) and [`../WORKSPACE_CHAT_SHARING.md`](../WORKSPACE_CHAT_SHARING.md); earlier creator-private notes are superseded.
 4. **For current app feature/recovery contracts:** use [`../STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md`](../STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md) and [`../STEP_I_CONTEXT_CONTRACT.md`](../STEP_I_CONTEXT_CONTRACT.md).
 5. **For environment setup:** use [`../ENVIRONMENT.md`](../ENVIRONMENT.md), including `.env.example` placeholders. Never commit actual `.env`, connection URLs with passwords, user IDs or genuine chat data.
