@@ -37,7 +37,7 @@ def _metrics(result, elapsed):
     return values
 
 
-def execute_operation(workspace_id, session_id, member_id, data, runtime):
+def execute_operation(workspace_id, session_id, member_id, data, runtime, *, device_zone=None):
     fields = operation_fields(data)
     if fields["action"] == "shorten":
         return chats.shorten_operation(workspace_id, session_id, member_id, fields)
@@ -86,7 +86,7 @@ def execute_operation(workspace_id, session_id, member_id, data, runtime):
     try:
         if task["kind"] == "chat":
             response = generate_chat(task["message"], context, invoke, model=runtime.model,
-                                     history=task.get("conversation_context", {}).get("messages", []),
+                                     device_zone=device_zone, history=task.get("conversation_context", {}).get("messages", []),
                                      recent_ideas=task.get("recent_ideas", []))
         elif task["kind"] == "video":
             response = {"type": "video", **generate_video(task, context, invoke, model=runtime.model)}

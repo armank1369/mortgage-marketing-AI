@@ -221,7 +221,7 @@ CAMPAIGN_FORMAT_PROMPT = (
     '- content_calendar should span 14 days by default, or the exact duration the user specifies (e.g. "1 week" = 7 '
     'days, "1 month" = 30 days). Only include calendar entries for days that actually have a scheduled post — do not '
     'create empty entries for off days.\n'
-    '- Today is {today}. content_calendar must start from the next sensible posting day on or after today and use '
+    '- Use the current date supplied for this request. content_calendar must start from the next sensible posting day on or after today and use '
     'the real calendar date for every entry (never reuse a stale or example date) — "day" and "date" must agree '
     '(e.g. if today is a Saturday and the first post goes out the following Monday, that entry reads day: "Mon", '
     'date: the actual date of that Monday).\n'

@@ -17,13 +17,15 @@ test('fresh session token and selected workspace accompany each AI endpoint', as
   const { api, calls } = setup()
   api.setWorkspace('user-a', 'workspace-a')
   const signal = new AbortController().signal
-  for (const url of ['/api/chat', '/api/video-brief', '/api/social-image']) {
+  for (const url of ['/api/chat', '/api/chat/sessions/session-a/operations', '/api/video-brief', '/api/social-image']) {
     await api.send({ url, method: 'POST', data: { message: 'synthetic' }, signal,
       headers: { authorization: 'spoof', 'X-Workspace-Id': 'spoof' } })
   }
-  assert.equal(calls.length, 3)
+  assert.equal(calls.length, 4)
   for (const call of calls) {
-    assert.deepEqual(call.headers, { Authorization: 'Bearer token-user-a', 'X-Workspace-Id': 'workspace-a' })
+    const { 'X-Device-Timezone': zone, ...headers } = call.headers
+    assert.deepEqual(headers, { Authorization: 'Bearer token-user-a', 'X-Workspace-Id': 'workspace-a' })
+    assert.equal(zone, call.url.startsWith('/api/chat') ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined)
     assert.equal(call.signal, signal)
   }
 })

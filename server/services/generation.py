@@ -3,7 +3,9 @@
 invoke(label, **kwargs) is supplied by either the stateless wrapper or durable
 orchestrator. The latter persists/rechecks an invocation before dispatching it.
 """
-from datetime import date
+from datetime import datetime, timezone
+import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import json
 
 from errors import AppError
@@ -29,7 +31,20 @@ def _raw(result):
     return value
 
 
-def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=()):
+def _clock_context(device_zone):
+    zone = timezone.utc
+    if device_zone and len(device_zone) <= 128 and re.fullmatch(r"[A-Za-z0-9_+/-]+", device_zone):
+        try:
+            zone = ZoneInfo(device_zone)
+        except (ValueError, ZoneInfoNotFoundError):
+            pass
+    now = datetime.now(zone)
+    source = "Device timezone" if zone is not timezone.utc else "Device timezone unavailable, using UTC"
+    return f"Current date and time for this request: {now:%A, %Y-%m-%d %H:%M %z}. {source}: {zone}."
+
+
+def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(), device_zone=None):
+    clock = _clock_context(device_zone)
     is_campaign = bool(policy.CAMPAIGN_INTENT_PATTERN.search(message))
     is_followup = message.strip().lower().startswith("original request:")
     ambiguous = not is_campaign and bool(policy.AMBIGUOUS_SCOPE_PATTERN.search(message))
@@ -53,7 +68,7 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
     if is_campaign and not is_followup:
         check_prompt = shared + "\n\n" + render_policy(policy.CAMPAIGN_CLARIFICATION_PROMPT, context)
         check = invoke("campaign_clarification_check", model=model,
-                       system=policy.build_system(check_prompt),
+                       system=policy.build_system(check_prompt, clock),
                        messages=messages, max_tokens=1500,
                        thinking={"type": "disabled"})
         clarification = policy._parse_clarification(_raw(check))
@@ -61,13 +76,12 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
             return {"type": "clarification", "clarification": clarification}
     system = shared
     if is_campaign:
-        system += "\n\n" + render_policy(policy.CAMPAIGN_FORMAT_PROMPT.replace(
-            "{today}", date.today().strftime("%A, %B %d, %Y")), context)
+        system += "\n\n" + render_policy(policy.CAMPAIGN_FORMAT_PROMPT, context)
     else:
         system += "\n\n" + render_policy(policy.NON_CAMPAIGN_FORMAT_PROMPT, context)
         if ambiguous:
             system += "\n\n" + policy.AMBIGUOUS_SCOPE_PROMPT
-    kwargs = {"model": model, "system": policy.build_system(system),
+    kwargs = {"model": model, "system": policy.build_system(system, clock),
               "messages": messages,
               "thinking": {"type": "disabled"}, "max_tokens": 10000 if is_campaign else 4096}
     if is_campaign:

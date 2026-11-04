@@ -206,7 +206,13 @@ export default function ChatPage() {
             <div className="flex flex-wrap gap-2 mb-3">{PROMPT_CATEGORIES.map((category) => <button key={category.category} className={button} onClick={() => setPromptCategory(promptCategory === category.category ? null : category.category)}>{category.emoji} {category.category}</button>)}</div>
             {promptCategory && <div className="flex flex-wrap gap-2 mb-3">{promptSuggestions(PROMPT_CATEGORIES.find((row) => row.category === promptCategory).prompts, promptOffsets[promptCategory] || 0).map((prompt) => <button key={prompt} disabled={providerBlocked} className={button} onClick={() => send(prompt)}>{prompt}</button>)}<button type="button" className={button} onClick={() => setPromptOffsets({ ...promptOffsets, [promptCategory]: (promptOffsets[promptCategory] || 0) + 3 })}>↻ More</button></div>}
             <form onSubmit={(event) => { event.preventDefault(); send() }} className="flex gap-2 items-end">
-              <textarea aria-label="Message" rows={2} maxLength={16000} value={input} onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
+              <textarea aria-label="Message" rows={2} maxLength={16000} value={input}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
+                  event.preventDefault()
+                  if (!event.repeat && !providerBlocked && input.trim()) event.currentTarget.form.requestSubmit()
+                }}
+                onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
               <button type="submit" disabled={providerBlocked || !input.trim()} className={`${button} bg-lucent-navy text-white px-5`}>{state.submitting ? 'Saving / generating…' : 'Send'}</button>
             </form>
             <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves remain on this browser.</p>

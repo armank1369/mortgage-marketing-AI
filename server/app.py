@@ -297,10 +297,10 @@ app.extensions['generation_runtime'] = GenerationRuntime(
     create=lambda **kwargs: get_anthropic_client().messages.create(**kwargs), model=ANTHROPIC_MODEL)
 
 
-def _stateless_response(generate, data, context):
+def _stateless_response(generate, data, context, **options):
     from services.generation import InvalidGenerationOutputError
     try:
-        return jsonify(generate(data, context, _invoke_stateless, model=ANTHROPIC_MODEL))
+        return jsonify(generate(data, context, _invoke_stateless, model=ANTHROPIC_MODEL, **options))
     except InvalidGenerationOutputError as error:
         return jsonify({'error': error.legacy_message}), 502
     except anthropic.AuthenticationError:
@@ -351,7 +351,7 @@ def chat():
     data = json_object()
     message = required_text(data, 'message')
     context = resolve_generation_context(g.workspace_id, persona_id=data.get('persona_id'))
-    return _stateless_response(generate_chat, message, context)
+    return _stateless_response(generate_chat, message, context, device_zone=request.headers.get("X-Device-Timezone"))
 
 
 if __name__ == '__main__':
