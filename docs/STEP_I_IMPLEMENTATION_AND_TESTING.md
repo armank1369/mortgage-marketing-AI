@@ -328,7 +328,7 @@ reference information, not verified facts or authorization to overwrite a row.
 
 ## Manual user acceptance checklist
 
-1. Confirm privately that the configured database connection targets the existing
+1. Confirm in private that the configured database connection targets the existing
    Neon development branch and the intended workspace. Do not paste credentials.
    Use a pre-existing authorized test account. If the profile is absent, report
    `exists=false`; provisioning remains a separately approved data operation.
