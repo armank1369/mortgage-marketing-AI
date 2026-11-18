@@ -40,9 +40,8 @@ these changes. These instructions describe local development, not deployment.
 - Brand/persona changes affect future generation. Saved output remains unchanged.
   Uncertain requests require explicit recovery; reopening never regenerates output.
 
-Calendar and legacy Local history remain browser-local. Unsent composer text is not
-promised to survive a reload. There is no automatic historical import, synchronized
-calendar, invitation UI, workspace-creation UI, Save Draft storage or long-term/RAG
+Shared calendar support requires the [calendar migration](docs/database/CALENDAR_SYNC.md). Legacy Local history remains browser-local. Unsent composer text is not
+promised to survive a reload. There is no automatic historical import, invitation UI, workspace-creation UI, Save Draft storage or long-term/RAG
 memory. AI output still requires human review before publication.
 
 ## Clone and install

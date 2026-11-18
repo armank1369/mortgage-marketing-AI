@@ -174,9 +174,9 @@ export default function ContentBriefCard({ title, platform, format, script, dire
     setTimeValue(newTimeOptions.find((t) => !newTaken.has(t)) || '')
   }
 
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     if (!dateValue || !timeValue || takenTimes.has(timeValue)) return
-    onSaveToCalendar(dateValue, timeValue)
+    if (await onSaveToCalendar(dateValue, timeValue) === false) return
     setPickingDate(false)
   }
 

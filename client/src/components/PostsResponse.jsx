@@ -6,7 +6,7 @@ import { useCalendar } from '../context/CalendarContext'
 import { bestPostingTime } from '../utils/postingTimes'
 
 function PostCard({ post, nmls, persona, batchId, complianceFlags, imageProps }) {
-  const { entries, upsertEntries, isBatchSaved } = useCalendar()
+  const { entries, upsertEntries, isBatchSaved, canWrite } = useCalendar()
   const saved = isBatchSaved(batchId)
   // This post's own previously-saved entry (if any) is excluded so re-opening the picker on an
   // already-saved post doesn't flag its own existing slot as a conflict with itself.
@@ -24,7 +24,7 @@ function PostCard({ post, nmls, persona, batchId, complianceFlags, imageProps })
     // parses as UTC midnight, which can land on the previous calendar day once converted back
     // to a negative-UTC-offset local timezone (e.g. US Pacific).
     const [y, m, d] = dateInputValue.split('-').map(Number)
-    upsertEntries(batchId, [
+    return upsertEntries(batchId, [
       {
         topic: post.title,
         platform: post.platform,
@@ -62,7 +62,7 @@ function PostCard({ post, nmls, persona, batchId, complianceFlags, imageProps })
       details={details}
       hashtags={post.hashtags}
       onCopyText={buildCopyText}
-      onSaveToCalendar={handleSaveToCalendar}
+      onSaveToCalendar={canWrite && handleSaveToCalendar}
       saved={saved}
       bookedTimes={bookedTimes}
     >

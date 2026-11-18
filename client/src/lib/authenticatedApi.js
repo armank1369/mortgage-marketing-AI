@@ -43,6 +43,10 @@ export function createAuthenticatedApi({ getSession, request, storage, onAccessE
       canceled.code = 'ERR_CANCELED'
       throw canceled
     }
+    if (config.method === 'POST' && (config.url === '/api/chat' || config.url?.endsWith('/operations'))) {
+      const zone = globalThis.Intl?.DateTimeFormat().resolvedOptions().timeZone
+      if (zone) headers['X-Device-Timezone'] = zone
+    }
     if (selected) headers['X-Workspace-Id'] = selected
     try {
       return await request({ ...config, headers })
