@@ -13,10 +13,7 @@ export const COLORS = {
 export const FONT_SERIF = "'Playfair Display', Georgia, serif"
 export const FONT_MONO = "'JetBrains Mono', 'IBM Plex Mono', monospace"
 
-export const WORDMARK = 'LUCENT'
-export const WORDMARK_SUB = 'MORTGAGE'
-
-export function Wordmark({ dark }) {
+export function Wordmark({ dark, businessName }) {
   const color = dark ? COLORS.cream : COLORS.ink
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -29,35 +26,27 @@ export function Wordmark({ dark }) {
           color,
         }}
       >
-        {WORDMARK}
+        {businessName || 'Business identity not configured'}
       </span>
-      <span
-        style={{
-          fontFamily: FONT_MONO,
-          fontWeight: 500,
-          fontSize: 15,
-          letterSpacing: '0.18em',
-          color: dark ? 'rgba(244,241,234,0.55)' : 'rgba(26,26,26,0.45)',
-        }}
-      >
-        {WORDMARK_SUB}
-      </span>
+
     </div>
   )
 }
 
-export function BrokerFooter({ dark, nmls }) {
+export function BrokerFooter({ dark, footer }) {
   const color = dark ? 'rgba(244,241,234,0.6)' : 'rgba(26,26,26,0.5)'
   return (
     <div
       style={{
         fontFamily: FONT_MONO,
         fontSize: 12,
+        whiteSpace: 'pre-wrap',
+        maxWidth: 950,
         letterSpacing: '0.04em',
         color,
       }}
     >
-      Joseph Kim &middot; NMLS #{nmls || '000000'}
+      {footer || 'Disclosure not configured — regenerate before publishing'}
     </div>
   )
 }

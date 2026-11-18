@@ -1,5 +1,9 @@
-import { useState } from 'react'
-import axios from 'axios'
+import ComplianceNotice from './ComplianceNotice.jsx'
+import { buildCampaignEntryCopy } from '../lib/publicationCopy.js'
+import { useState, useRef, useEffect } from 'react'
+import { workspaceApi, apiErrorMessage } from '../lib/api'
+import { scopedRequest } from '../lib/workspaceConfiguration.js'
+import { useBrowserScope } from '../context/BrowserScope.js'
 import Section from './Section'
 import platformBadge from './platformBadge'
 import { ScriptLine, SlideCarousel, CreativeDirectionGrid, FORMAT_BADGES } from './ContentBriefCard'
@@ -51,7 +55,8 @@ function distributeCalendarDates(calendar) {
 // Builds the same `details` shape ContentBriefCard/the calendar detail modal expect, from
 // whatever this specific entry actually has: a generated video script, carousel slides, or
 // just a plain caption — matches how PostsResponse builds `details` for a single post.
-function calendarEntryDetails(entry) {
+function calendarEntryDetails(entry, complianceFlags = []) {
+  const flags = [...new Set([...complianceFlags, ...(entry.video?.compliance_flags || [])])]
   if (entry.video) {
     const script = entry.video.script || {}
     return {
@@ -63,6 +68,7 @@ function calendarEntryDetails(entry) {
       direction: entry.video.creative_direction,
       quickDetails: entry.video.quick_details,
       hashtags: entry.hashtags,
+      compliance_flags: flags,
     }
   }
   if (Array.isArray(entry.slides) && entry.slides.length > 0) {
@@ -72,15 +78,17 @@ function calendarEntryDetails(entry) {
         { label: 'Caption', text: entry.caption },
       ],
       hashtags: entry.hashtags,
+      compliance_flags: flags,
     }
   }
   return {
     script: [{ label: 'Post Copy', text: entry.caption }],
     hashtags: entry.hashtags,
+    compliance_flags: flags,
   }
 }
 
-function SaveCalendarButton({ calendar, batchId }) {
+function SaveCalendarButton({ calendar, batchId, complianceFlags }) {
   const { upsertEntries, isBatchSaved } = useCalendar()
   // Derived from the calendar's own persisted entries (via batchId) rather than local
   // component state — a reload or chat switch used to reset a plain useState flag back to
@@ -97,7 +105,7 @@ function SaveCalendarButton({ calendar, batchId }) {
         format: entry.format,
         time: entry.time,
         date: dates[i],
-        details: calendarEntryDetails(entry),
+        details: calendarEntryDetails(entry, complianceFlags),
       }))
     )
   }
@@ -197,8 +205,11 @@ function PlatformBreakdownBody({ platforms }) {
   )
 }
 
-function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
+function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated, durable = false, onGenerateVideo, imageProps, disabled = false, readOnly = false }) {
   const [copied, setCopied] = useState(false)
+  const scope = useBrowserScope()
+  const pendingRef = useRef(null)
+  useEffect(() => () => pendingRef.current?.abort(), [scope])
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
   const badge = platformBadge(entry.platform)
@@ -208,46 +219,29 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
   const details = video?.quick_details || {}
 
   const generateVideo = async () => {
+    if (disabled || readOnly) return
+    if (durable) { if (onGenerateVideo) await onGenerateVideo(); return }
+    if (pendingRef.current) return
+    const pending = new AbortController()
+    pendingRef.current = pending
     setGenerating(true)
     setGenError('')
     try {
-      const { data } = await axios.post('/api/video-brief', {
+      const data = await scopedRequest(workspaceApi, scope, pending.signal, '/api/video-brief', 'POST', {
         caption: entry.caption,
         platform: entry.platform,
         category: entry.category,
-        persona,
-        nmls_number: nmls,
+        persona_id: persona,
       })
-      onVideoGenerated(data.video)
-    } catch {
-      setGenError('Could not generate a video script. Please try again.')
+      if (!pending.signal.aborted) onVideoGenerated({ ...data.video, compliance_flags: data.compliance_flags })
+    } catch (err) {
+      if (!pending.signal.aborted && err.code !== 'ERR_CANCELED') setGenError(apiErrorMessage(err, 'Could not generate a video script. Please try again.'))
     } finally {
-      setGenerating(false)
+      if (!pending.signal.aborted) { setGenerating(false); pendingRef.current = null }
     }
   }
 
-  const buildCopyText = () =>
-    [
-      entry.caption,
-      Array.isArray(entry.hashtags) && entry.hashtags.length > 0 ? entry.hashtags.join(' ') : '',
-      video ? 'SCRIPT' : '',
-      script.intro?.text ? `Intro (${script.intro.time || ''}): ${script.intro.text}` : '',
-      script.body?.text ? `Body (${script.body.time || ''}): ${script.body.text}` : '',
-      script.cta?.text ? `CTA (${script.cta.time || ''}): ${script.cta.text}` : '',
-      video ? 'CREATIVE DIRECTION' : '',
-      direction.setting ? `Setting: ${direction.setting}` : '',
-      direction.camera ? `Camera: ${direction.camera}` : '',
-      direction.lighting ? `Lighting: ${direction.lighting}` : '',
-      direction.energy ? `Energy: ${direction.energy}` : '',
-      direction.background ? `Background: ${direction.background}` : '',
-      direction.clothing ? `Clothing: ${direction.clothing}` : '',
-      video ? 'QUICK DETAILS' : '',
-      details.duration ? `Duration: ${details.duration}` : '',
-      details.tone ? `Tone: ${details.tone}` : '',
-      details.call_to_action ? `Call-to-Action: ${details.call_to_action}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
+  const buildCopyText = () => buildCampaignEntryCopy(entry)
 
   const handleCopy = async () => {
     try {
@@ -294,6 +288,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
             <span className="text-[11px] text-slate-400 shrink-0">🕐 {entry.time}</span>
           )}
         </div>
+        <ComplianceNotice flags={video?.compliance_flags} />
         {entry.caption && (
           <p className="text-xs text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">{entry.caption}</p>
         )}
@@ -314,7 +309,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
             <button
               type="button"
               onClick={generateVideo}
-              disabled={generating}
+              disabled={generating || disabled || readOnly}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {generating && (
@@ -367,6 +362,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
 
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100">
             <span className="text-[11px] text-slate-400">Draft ready</span>
+            {durable && !readOnly && <button type="button" disabled={disabled} onClick={generateVideo} className="text-xs text-blue-700 disabled:opacity-40">Regenerate video</button>}
             <button
               type="button"
               onClick={handleCopy}
@@ -394,13 +390,14 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated }) {
           platform={entry.platform}
           persona={persona}
           nmls={nmls}
+          {...imageProps}
         />
       )}
     </div>
   )
 }
 
-function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
+function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated, entryPropsFor }) {
   if (!calendar || calendar.length === 0) {
     return <p className="text-xs text-slate-400">No calendar entries returned.</p>
   }
@@ -412,14 +409,15 @@ function ContentCalendarBody({ calendar, nmls, persona, onVideoGenerated }) {
           entry={entry}
           nmls={nmls}
           persona={persona}
-          onVideoGenerated={(video) => onVideoGenerated(i, video)}
+          onVideoGenerated={(video) => onVideoGenerated?.(i, video)}
+          {...entryPropsFor?.(i)}
         />
       ))}
     </div>
   )
 }
 
-export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId }) {
+export default function CampaignResponse({ data, nmls, persona, onVideoGenerated, batchId, complianceFlags = [], entryPropsFor }) {
   if (!data) return null
   const { content_strategy, platform_breakdown, content_calendar } = data
   const scriptedCount = (content_calendar || []).filter((entry) => entry.video).length
@@ -445,7 +443,7 @@ export default function CampaignResponse({ data, nmls, persona, onVideoGenerated
         subtitle={`${content_calendar?.length || 0} scheduled posts${scriptedCount ? ` · ${scriptedCount} with a video script` : ''}`}
         defaultOpen={false}
         headerAction={
-          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} batchId={batchId} /> : null
+          content_calendar?.length > 0 ? <SaveCalendarButton calendar={content_calendar} batchId={batchId} complianceFlags={complianceFlags} /> : null
         }
       >
         <ContentCalendarBody
@@ -453,6 +451,7 @@ export default function CampaignResponse({ data, nmls, persona, onVideoGenerated
           nmls={nmls}
           persona={persona}
           onVideoGenerated={onVideoGenerated}
+          entryPropsFor={entryPropsFor}
         />
       </Section>
     </div>

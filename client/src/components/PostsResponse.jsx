@@ -1,10 +1,11 @@
+import { buildPostCopy } from '../lib/publicationCopy.js'
 import Section from './Section'
 import ContentBriefCard from './ContentBriefCard'
 import SocialImageGenerator from './socialImage/SocialImageGenerator'
 import { useCalendar } from '../context/CalendarContext'
 import { bestPostingTime } from '../utils/postingTimes'
 
-function PostCard({ post, nmls, persona, batchId }) {
+function PostCard({ post, nmls, persona, batchId, complianceFlags, imageProps }) {
   const { entries, upsertEntries, isBatchSaved } = useCalendar()
   const saved = isBatchSaved(batchId)
   // This post's own previously-saved entry (if any) is excluded so re-opening the picker on an
@@ -15,12 +16,7 @@ function PostCard({ post, nmls, persona, batchId }) {
   const details = post.quick_details || {}
   const isCarousel = post.format === 'carousel' && Array.isArray(script.body)
 
-  const buildCopyText = () => {
-    const bodyText = isCarousel
-      ? script.body.map((slide, i) => `Slide ${i + 2}: ${slide}`).join('\n\n')
-      : script.body || ''
-    return [script.hook || '', bodyText, script.cta || ''].filter(Boolean).join('\n\n')
-  }
+  const buildCopyText = () => buildPostCopy(post)
 
   const handleSaveToCalendar = (dateInputValue, timeValue) => {
     // dateInputValue is a "YYYY-MM-DD" string from the date-picker's <input type="date">.
@@ -38,6 +34,7 @@ function PostCard({ post, nmls, persona, batchId }) {
         // Carried along so the calendar's detail modal can show the same full breakdown as
         // this card, not just the topic/platform/date shell.
         details: {
+          compliance_flags: complianceFlags,
           script: [
             { label: 'Hook', text: script.hook },
             isCarousel ? { label: 'Body', slides: script.body } : { label: 'Body', text: script.body },
@@ -78,13 +75,14 @@ function PostCard({ post, nmls, persona, batchId }) {
           platform={post.platform}
           persona={persona}
           nmls={nmls}
+          {...imageProps}
         />
       )}
     </ContentBriefCard>
   )
 }
 
-export default function PostsResponse({ data, nmls, persona, batchId }) {
+export default function PostsResponse({ data, nmls, persona, batchId, complianceFlags = [], imagePropsFor = () => ({}) }) {
   const posts = data?.posts || []
   if (posts.length === 0) return null
 
@@ -98,7 +96,7 @@ export default function PostsResponse({ data, nmls, persona, batchId }) {
         {data?.intro && <p className="text-sm text-slate-600 mb-4 leading-relaxed">{data.intro}</p>}
         <div className="space-y-4">
           {posts.map((post, i) => (
-            <PostCard key={i} post={post} nmls={nmls} persona={persona} batchId={`${batchId}-${i}`} />
+            <PostCard key={i} post={post} nmls={nmls} persona={persona} batchId={`${batchId}-${i}`} complianceFlags={complianceFlags} imageProps={imagePropsFor(i)} />
           ))}
         </div>
       </Section>

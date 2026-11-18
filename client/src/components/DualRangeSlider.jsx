@@ -1,66 +1,34 @@
 import { useRef } from 'react'
 
-export default function DualRangeSlider({ min = 1, max = 100, value, onChange }) {
-  const trackRef = useRef(null)
-  const draggingRef = useRef(null)
-
-  const valueFromClientX = (clientX) => {
-    const rect = trackRef.current.getBoundingClientRect()
-    const ratio = (clientX - rect.left) / rect.width
-    const clamped = Math.min(Math.max(ratio, 0), 1)
-    return Math.round(min + clamped * (max - min))
+export default function DualRangeSlider({ min = 1, max = 100, value, onChange, disabled = false }) {
+  const track = useRef(null)
+  const dragging = useRef(null)
+  const update = (which, n) => {
+    const clamped = Math.max(min, Math.min(max, n))
+    onChange(which === 'low' ? [Math.min(clamped, value[1]), value[1]] : [value[0], Math.max(clamped, value[0])])
   }
-
-  const startDrag = (which) => (e) => {
-    e.preventDefault()
-    draggingRef.current = which
-    e.currentTarget.setPointerCapture(e.pointerId)
-    const move = (ev) => {
-      if (draggingRef.current !== which) return
-      const v = valueFromClientX(ev.clientX)
-      onChange((prev) => which === 'low' ? [Math.min(v, prev[1]), prev[1]] : [prev[0], Math.max(v, prev[0])])
-    }
-    const up = (ev) => {
-      draggingRef.current = null
-      e.currentTarget.releasePointerCapture?.(ev.pointerId)
-      e.currentTarget.removeEventListener('pointermove', move)
-      e.currentTarget.removeEventListener('pointerup', up)
-    }
-    e.currentTarget.addEventListener('pointermove', move)
-    e.currentTarget.addEventListener('pointerup', up)
+  const move = (event) => {
+    if (!dragging.current || disabled) return
+    const rect = track.current.getBoundingClientRect()
+    if (rect.width) update(dragging.current, Math.round(min + (event.clientX - rect.left) / rect.width * (max - min)))
   }
-
-  const pct = (v) => ((v - min) / (max - min)) * 100
-  const lowPct = pct(value[0])
-  const highPct = pct(value[1])
-
-  return (
-    <div ref={trackRef} className="relative h-6 select-none touch-none">
-      <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-slate-200" />
-      <div
-        className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-sky-700"
-        style={{ left: `${lowPct}%`, right: `${100 - highPct}%` }}
-      />
-      <div
-        onPointerDown={startDrag('low')}
-        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-sky-700 shadow cursor-grab active:cursor-grabbing"
-        style={{ left: `${lowPct}%` }}
-        role="slider"
-        aria-label="Minimum age"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value[0]}
-      />
-      <div
-        onPointerDown={startDrag('high')}
-        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-sky-700 shadow cursor-grab active:cursor-grabbing"
-        style={{ left: `${highPct}%` }}
-        role="slider"
-        aria-label="Maximum age"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value[1]}
-      />
-    </div>
-  )
+  const stop = (event) => {
+    dragging.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+  const pct = (n) => (n - min) / (max - min) * 100
+  return <div ref={track} className={`relative h-6 touch-none select-none ${disabled ? 'opacity-50' : ''}`}>
+    <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-slate-200" />
+    <div className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-sky-700" style={{ left: `${pct(value[0])}%`, right: `${100 - pct(value[1])}%` }} />
+    {['low', 'high'].map((which, index) => <button key={which} type="button" role="slider" disabled={disabled}
+      aria-label={index === 0 ? 'Minimum age' : 'Maximum age'} aria-valuemin={index === 0 ? min : value[0]} aria-valuemax={index === 0 ? value[1] : max} aria-valuenow={value[index]}
+      className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-sky-700 bg-white shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700 active:cursor-grabbing disabled:cursor-not-allowed"
+      style={{ left: `${pct(value[index])}%` }}
+      onPointerDown={(event) => { if (disabled) return; event.preventDefault(); event.currentTarget.focus(); dragging.current = which; event.currentTarget.setPointerCapture(event.pointerId) }}
+      onPointerMove={move} onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={() => { dragging.current = null }}
+      onKeyDown={(event) => {
+        const next = ({ ArrowRight: value[index] + 1, ArrowUp: value[index] + 1, ArrowLeft: value[index] - 1, ArrowDown: value[index] - 1, Home: min, End: max, PageUp: value[index] + 10, PageDown: value[index] - 10 })[event.key]
+        if (next !== undefined) { event.preventDefault(); update(which, next) }
+      }} />)}
+  </div>
 }

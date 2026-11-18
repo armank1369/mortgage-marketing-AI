@@ -19,7 +19,7 @@ const canvasBase = {
   overflow: 'hidden',
 }
 
-export function PullQuoteTemplate({ slots, nmls }) {
+export function PullQuoteTemplate({ slots, footer, businessName }) {
   const { quote, attribution_name, attribution_title } = slots
   return (
     <div
@@ -31,7 +31,7 @@ export function PullQuoteTemplate({ slots, nmls }) {
         justifyContent: 'space-between',
       }}
     >
-      <Wordmark />
+      <Wordmark businessName={businessName} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
         <span style={{ fontFamily: FONT_SERIF, fontSize: 96, lineHeight: 1, color: COLORS.terracotta }}>
           &ldquo;
@@ -59,12 +59,12 @@ export function PullQuoteTemplate({ slots, nmls }) {
           </div>
         </div>
       </div>
-      <BrokerFooter nmls={nmls} />
+      <BrokerFooter footer={footer} />
     </div>
   )
 }
 
-export function StatHighlightTemplate({ slots, nmls }) {
+export function StatHighlightTemplate({ slots, footer, businessName }) {
   const { eyebrow, stat_number, stat_label, footnote } = slots
   return (
     <div
@@ -77,7 +77,7 @@ export function StatHighlightTemplate({ slots, nmls }) {
         color: COLORS.cream,
       }}
     >
-      <Wordmark dark />
+      <Wordmark businessName={businessName} dark />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 16 }}>
         {eyebrow && (
           <span
@@ -113,13 +113,13 @@ export function StatHighlightTemplate({ slots, nmls }) {
             {footnote}
           </div>
         )}
-        <BrokerFooter dark nmls={nmls} />
+        <BrokerFooter dark footer={footer} />
       </div>
     </div>
   )
 }
 
-export function CarouselCoverTemplate({ slots, nmls }) {
+export function CarouselCoverTemplate({ slots, footer, businessName }) {
   const { number, category_label, slide_count, title, subtitle } = slots
   return (
     <div
@@ -133,7 +133,7 @@ export function CarouselCoverTemplate({ slots, nmls }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <Wordmark dark />
+        <Wordmark businessName={businessName} dark />
         {slide_count && (
           <span
             style={{
@@ -179,14 +179,14 @@ export function CarouselCoverTemplate({ slots, nmls }) {
         )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <BrokerFooter dark nmls={nmls} />
+        <BrokerFooter dark footer={footer} />
         <span style={{ fontFamily: FONT_MONO, fontSize: 14, color: 'rgba(244,241,234,0.55)' }}>Swipe &rarr;</span>
       </div>
     </div>
   )
 }
 
-export function EventBannerTemplate({ slots, nmls }) {
+export function EventBannerTemplate({ slots, footer, businessName }) {
   const { eyebrow, headline, date, time, where } = slots
   const details = [date, time, where].filter(Boolean)
   return (
@@ -199,7 +199,7 @@ export function EventBannerTemplate({ slots, nmls }) {
         justifyContent: 'space-between',
       }}
     >
-      <Wordmark />
+      <Wordmark businessName={businessName} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
         {eyebrow && (
           <span
@@ -226,12 +226,12 @@ export function EventBannerTemplate({ slots, nmls }) {
           ))}
         </div>
       </div>
-      <BrokerFooter nmls={nmls} />
+      <BrokerFooter footer={footer} />
     </div>
   )
 }
 
-export function TipsListTemplate({ slots, nmls }) {
+export function TipsListTemplate({ slots, footer, businessName }) {
   const { eyebrow, title, items } = slots
   const list = Array.isArray(items) ? items : []
   return (
@@ -244,7 +244,7 @@ export function TipsListTemplate({ slots, nmls }) {
         justifyContent: 'space-between',
       }}
     >
-      <Wordmark />
+      <Wordmark businessName={businessName} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
         <div>
           {eyebrow && (
@@ -275,12 +275,12 @@ export function TipsListTemplate({ slots, nmls }) {
           ))}
         </div>
       </div>
-      <BrokerFooter nmls={nmls} />
+      <BrokerFooter footer={footer} />
     </div>
   )
 }
 
-export function StoryCoverTemplate({ slots, nmls }) {
+export function StoryCoverTemplate({ slots, footer, businessName }) {
   const { eyebrow, headline, supporting_text, cta_label } = slots
   return (
     <div
@@ -293,7 +293,7 @@ export function StoryCoverTemplate({ slots, nmls }) {
         color: COLORS.cream,
       }}
     >
-      <Wordmark dark />
+      <Wordmark businessName={businessName} dark />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
         {eyebrow && (
           <span
@@ -331,7 +331,7 @@ export function StoryCoverTemplate({ slots, nmls }) {
             {cta_label}
           </span>
         )}
-        <BrokerFooter dark nmls={nmls} />
+        <BrokerFooter dark footer={footer} />
       </div>
     </div>
   )

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useWorkspaceData } from '../context/WorkspaceData.js'
+import { stripReviewNotes } from '../lib/publicationCopy.js'
 import platformBadge, { platformGradient } from './platformBadge'
 import { recommendedPostingTimes } from '../utils/postingTimes'
 
@@ -119,6 +121,7 @@ function parseDateInputValue(dateValue) {
 }
 
 export default function ContentBriefCard({ title, platform, format, script, direction, details, hashtags, onCopyText, onSaveToCalendar, saved, bookedTimes, children }) {
+  const { brand } = useWorkspaceData()
   const [copied, setCopied] = useState(false)
   const [pickingDate, setPickingDate] = useState(false)
   const [dateValue, setDateValue] = useState(todayInputValue)
@@ -149,7 +152,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(onCopyText())
+      await navigator.clipboard.writeText(stripReviewNotes(onCopyText()))
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -188,7 +191,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
           </div>
           <div className="min-w-0">
             <h4 className="text-sm font-bold text-slate-900 leading-snug truncate">{title}</h4>
-            <p className="text-xs text-slate-400">Joseph Kim · Mortgage Broker</p>
+            <p className="text-xs text-slate-400">{brand?.licensed_person_name || 'Configured mortgage broker'} · Mortgage Broker</p>
           </div>
         </div>
         <div className="shrink-0 flex items-center gap-1.5">
