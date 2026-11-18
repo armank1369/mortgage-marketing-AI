@@ -5,6 +5,7 @@ import { workspaceApi, apiErrorMessage } from '../lib/api'
 import { scopedRequest } from '../lib/workspaceConfiguration.js'
 import { useBrowserScope } from '../context/BrowserScope.js'
 import Section from './Section'
+import Dialog from './Dialog'
 import platformBadge from './platformBadge'
 import { ScriptLine, SlideCarousel, CreativeDirectionGrid, FORMAT_BADGES } from './ContentBriefCard'
 import SocialImageGenerator from './socialImage/SocialImageGenerator'
@@ -89,31 +90,56 @@ function calendarEntryDetails(entry, complianceFlags = []) {
 }
 
 function SaveCalendarButton({ calendar, batchId, complianceFlags }) {
-  const { upsertEntries, isBatchSaved } = useCalendar()
+  const [preview, setPreview] = useState(null)
+  const previewVersion = useRef(null)
+  const { entries, revision, error, upsertEntries, isBatchSaved, canWrite } = useCalendar()
   // Derived from the calendar's own persisted entries (via batchId) rather than local
   // component state — a reload or chat switch used to reset a plain useState flag back to
   // false, silently re-enabling the button and letting a second click duplicate every entry.
   const saved = isBatchSaved(batchId)
 
-  const handleSave = () => {
-    const dates = distributeCalendarDates(calendar)
-    upsertEntries(
+  const showPreview = () => {
+    previewVersion.current = revision
+    const fallback = distributeCalendarDates(calendar)
+    setPreview(calendar.map((entry, index) => {
+      const previous = entries.find(e => e.batchId === batchId && e.sourceIndex === index)
+      const date = previous?.date || fallback[index]
+      const local = [date.getFullYear(), String(date.getMonth()+1).padStart(2,'0'), String(date.getDate()).padStart(2,'0')].join('-')
+      return { date: !previous && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) ? entry.date : local,
+        time: previous?.time ?? entry.time, original: previous }
+    }))
+  }
+  const change = (i, field, value) => setPreview(rows => rows.map((r,j) => j === i ? { ...r, [field]: value, original: null } : r))
+  const handleSave = async () => {
+    if (await upsertEntries(
       batchId,
       calendar.map((entry, i) => ({
         topic: entry.category || entry.caption,
         platform: entry.platform,
         format: entry.format,
-        time: entry.time,
-        date: dates[i],
+        time: preview[i].time,
+        date: new Date(preview[i].date + "T00:00:00"),
+        original: preview[i].original,
         details: calendarEntryDetails(entry, complianceFlags),
-      }))
-    )
+      })), previewVersion.current
+    )) setPreview(null)
   }
 
+  if (preview) return <Dialog title="Review workspace schedule" onClose={() => setPreview(null)}><div className="space-y-3">
+    <p className="text-sm">New or edited times use {Intl.DateTimeFormat().resolvedOptions().timeZone}.</p>
+    {error && <p role="alert">{error}</p>}
+    {preview.map((row,i) => <label key={i} className="block">{calendar[i].category || calendar[i].platform}
+      <span className="block text-xs">{row.original?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+      <input className="rounded border p-1" aria-label="Posting date" type="date" value={row.date} onChange={e => change(i,'date',e.target.value)} />
+      <input className="w-28 rounded border p-1" aria-label="Posting time" value={row.time || ''} onChange={e => change(i,'time',e.target.value)} />
+    </label>)}
+    <button disabled={!canWrite || preview.some(r => !r.date)} onClick={handleSave}>Confirm schedule</button>
+    <button className="ml-3" onClick={() => setPreview(null)}>Cancel</button>
+  </div></Dialog>
   return (
     <button
       type="button"
-      onClick={handleSave}
+      disabled={!canWrite} onClick={showPreview}
       className="text-xs font-medium text-slate-500 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors"
     >
       {saved ? '🔄 Update Saved Calendar' : '📅 Save to Calendar'}

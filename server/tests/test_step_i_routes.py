@@ -100,6 +100,28 @@ def test_same_trusted_identity_in_every_output_and_cache(client, configured, kin
     configured[3].assert_called_once_with(W, P)
 
 
+@pytest.mark.parametrize("zone,expected", [
+    ("America/Los_Angeles", "Tuesday, 2026-11-03 23:30 -0800"),
+    ("Invalid/Place", "Wednesday, 2026-11-04 07:30 +0000"),
+])
+def test_chat_clock_uses_request_zone(client, configured, monkeypatch, zone, expected):
+    from datetime import datetime, timezone
+    from services import generation
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz):
+            return datetime(2026, 11, 4, 7, 30, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(generation, "datetime", Clock)
+    response = client.post("/api/chat", headers={**client.headers(), "X-Device-Timezone": zone},
+                           json={"message": "What time is it?", "persona_id": P})
+    assert response.status_code == 200
+    clock = client.ai.messages.create.call_args.kwargs["system"][-1]
+    assert expected in clock["text"]
+    assert "cache_control" not in clock
+
+
 def test_profile_and_persona_edits_change_next_prompt(client, configured):
     def generate():
         response = client.post('/api/chat', headers=client.headers(), json={'message': 'Educational post', 'persona_id': P})

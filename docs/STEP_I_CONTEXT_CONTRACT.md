@@ -118,6 +118,9 @@ variable blocks. Scoped brand/persona/identity are included in the cached prefix
 so changes produce different prefixes; request content stays in user messages.
 Context is re-read each generation request, with no application cache or history
 retrieval. Campaign clarification reuses the same context as the main call.
+Chat requests send the device's IANA timezone in `X-Device-Timezone`. Flask renders its
+clock in that zone for ordinary chat, campaign clarification and campaign generation.
+Missing or invalid zones fall back to labeled UTC. The clock is an uncached prompt block.
 
 One footer builder supplies name, NMLS, DRE and `Equal Housing Opportunity`, followed
 by any bounded supplemental disclosure and equal-housing text. Chat/posts/campaign

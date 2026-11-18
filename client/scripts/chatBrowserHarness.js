@@ -33,6 +33,21 @@ window.__stepJ.api = { getWorkspace: () => window.__stepJ.workspace, async send(
   if (workspace !== window.__stepJ.workspace) return reject(403, "workspace_access_denied")
   const { url, method, data } = config
   db.calls.push({ url, method, data }); save()
+  if (url === '/api/calendar') {
+    db.schedules ||= {}
+    const schedule = db.schedules[workspace] ||= { revision:'0', entries:[], campaigns:[] }
+    const etag = '"' + schedule.revision + '"'
+    if (method === 'GET') return config.headers?.['If-None-Match'] === etag
+      ? { status:304 } : { status:200, data:structuredClone(schedule) }
+    if (window.__stepJ.role === 'viewer') return reject(403,'permission_denied')
+    if (config.headers['If-Match'] !== etag) return reject(409,'conflict')
+    if (data.action !== 'save') throw Error('Unexpected fixture calendar action')
+    schedule.entries = data.entries.map((row,index) => ({ ...row, id: data.batch+'-'+index, sourceIndex:index,
+      batchId:data.batch, status:'planned' }))
+    schedule.revision = String(+schedule.revision+1)
+    save()
+    return { status:204 }
+  }
   if (url.startsWith('/api/brand-profile') && method === 'PUT') { if(window.__stepJ.failBrand) return reject(503, 'database_unavailable'); db.brand = { ...db.brand, ...data }; save(); return { data: db.brand } }
   if (url.startsWith('/api/personas') && ['PUT', 'POST'].includes(method)) {
     const row = { ...(db.personas || []).find(p => url.endsWith(p.id)), ...data, id: method === 'POST' ? crypto.randomUUID() : url.split('/').at(-1), is_starter: false }

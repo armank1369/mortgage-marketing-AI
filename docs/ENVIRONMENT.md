@@ -95,10 +95,9 @@ or test. Members can write chats without permission to change shared brand setti
 No account, including a staff/admin account, gains access to another workspace without
 membership. See the [authorization matrix](AUTHORIZATION_MATRIX.md).
 
-Shared configuration and chat history use Neon. Calendar, legacy Local history and
+Shared configuration and chat history use Neon. The [shared calendar](database/CALENDAR_SYNC.md) requires its migration in the selected branch. Legacy Local history and
 pending browser request records retain their existing browser/account/workspace scope.
-Unsent composer input is not a durable cross-device draft. No historical import or
-calendar synchronization is performed by startup or account switching.
+Unsent composer input is not a durable cross-device draft. Calendar caches revalidate after workspace selection. Legacy browser entries are imported only by explicit action.
 
 ## Offline checks and live verification
 

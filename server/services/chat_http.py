@@ -80,7 +80,7 @@ def submit(session_id):
     if fields["action"] in PROVIDER_ACTIONS:
         check_capability(g.workspace_context, "ai:generate")
         result = execute_operation(g.workspace_id, session_id, member_id(), fields,
-                                   current_app.extensions["generation_runtime"])
+                                   current_app.extensions["generation_runtime"], device_zone=request.headers.get("X-Device-Timezone"))
     else:
         result = chats.shorten_operation(g.workspace_id, session_id, member_id(), fields)
     response = jsonify(result)

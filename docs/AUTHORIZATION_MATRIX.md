@@ -11,6 +11,8 @@ Stored workspace selection is a preference, not permission.
 
 | Route | Authentication | Required capability | Additional boundary |
 |---|---|---|---|
+| GET /api/calendar | JWT + membership | workspace:read | Workspace snapshot or revision check |
+| POST /api/calendar | JWT + membership | chat:write | Current membership and revision locked in the write transaction |
 | GET /api/auth/me | JWT | None | Authenticated identity only |
 | GET /api/workspaces | JWT | None | Current recognized memberships; zero returns an empty list |
 | GET /api/brand-profile | JWT + membership | workspace:read | Selected authorized workspace |

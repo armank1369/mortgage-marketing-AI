@@ -74,7 +74,9 @@ for (const [url, method, payload] of [
     const { api } = setup((config) => { call = config; return new Promise((resolve) => { finish = resolve }) })
     const pending = scopedRequest(api, scope, new AbortController().signal, url, method, payload)
     await new Promise((resolve) => setImmediate(resolve))
-    assert.deepEqual(call.headers, { Authorization: 'Bearer synthetic', 'X-Workspace-Id': 'first' })
+    const expectedHeaders = { Authorization: 'Bearer synthetic', 'X-Workspace-Id': 'first' }
+    if (url === '/api/chat') expectedHeaders['X-Device-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone
+    assert.deepEqual(call.headers, expectedHeaders)
     assert.deepEqual(call.data, payload)
     if (payload?.persona_id) assert.equal(call.data.nmls_number, undefined)
     api.setWorkspace('a', 'second')
