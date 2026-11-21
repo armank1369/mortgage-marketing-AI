@@ -38,7 +38,7 @@ export default {
         // Darkest neutrals become Lucent's navy, so dark cards, the mobile bar and headings
         // share the brand color instead of Tailwind's stock slate.
         slate: { ...colors.slate, 900: lucentNavy, 950: '#10141B' },
-        lucent: { teal: lucentTeal, navy: lucentNavy, cream: '#F3F2EC' },
+        lucent: { teal: lucentTeal, navy: lucentNavy },
         // Primary buttons and active states. lucent-navy-light is the hover shade (a dark button
         // reads better lightening on hover than darkening further toward black).
         'lucent-navy': lucentNavy,
@@ -48,8 +48,15 @@ export default {
         // Classic iMessage "sent" bubble blue, deliberately distinct from the teal accent so the
         // user's own bubble still reads as its own conversational element.
         'imessage-blue': '#0B93F6',
+        // Hello Lucent's CTA red and cream section background (same pixel-sampled source as
+        // lucent-navy). Used on the sign-in screens to match the client's site.
+        'lucent-red': '#d42021',
+        'lucent-cream': '#f3f2ec',
       },
       fontFamily: {
+        // Playfair Display is already loaded in index.html for the social-image templates;
+        // reused for headings to echo Hello Lucent's serif headline style.
+        serif: ["'Playfair Display'", 'Georgia', 'serif'],
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         display: ['Montserrat', 'Inter', 'system-ui', 'sans-serif'],
       },
