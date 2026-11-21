@@ -25,6 +25,7 @@ ROUTES = [
     ("GET", "/api/history"), ("POST", "/api/chat"),
     ("POST", "/api/social-image"), ("POST", "/api/video-brief"),
     ("GET", "/api/personas"), ("POST", "/api/personas"), ("PUT", "/api/personas/" + S),
+    ("GET", "/api/insights"), ("POST", "/api/insights/imports"), ("POST", "/api/insights/analysis"),
 ]
 
 

@@ -15,6 +15,8 @@ import PersistedMessage from '../components/PersistedMessage.jsx'
 import TypingIndicator from '../components/TypingIndicator.jsx'
 import ConversationSkeleton from '../components/ConversationSkeleton.jsx'
 import CalendarPage from './CalendarPage.jsx'
+import InsightsPage from './InsightsPage.jsx'
+import { canSeeInsights } from '../lib/insights.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
 const button = 'rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
@@ -47,7 +49,7 @@ function OperationStatus({ operation, controller, canWrite, disabled, retryDisab
 export default function ChatPage() {
   const scope = useBrowserScope()
   const { brand, personas, loading: configLoading, error: configError, reload } = useWorkspaceData()
-  const { role } = useWorkspaceAccess()
+  const { role, environment } = useWorkspaceAccess()
   const canWrite = ['owner', 'admin', 'developer', 'member'].includes(role)
   const [state, controller] = useChatPersistence()
   const [view, setView] = useState('active')
@@ -139,7 +141,7 @@ export default function ChatPage() {
     finally { setExporting(false) }
   }
   const showingSetup = setup || (!setupDismissed && canWrite && view === 'active' && state.active?.unsaved && !state.active.default_persona_id && !state.loading)
-  if (nav !== 'calendar' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup onComplete={startPersonaChat} onCancel={() => { setSetup(false); setSetupDismissed(true) }} /></div>
+  if (nav === 'chat' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup onComplete={startPersonaChat} onCancel={() => { setSetup(false); setSetupDismissed(true) }} /></div>
   return <div className="flex h-dvh bg-slate-50 text-slate-800 overflow-hidden">
     {mobileMenu && <button className="fixed inset-0 z-30 bg-slate-900/50 md:hidden" aria-label="Close menu" onClick={() => setMobileMenu(false)} />}
     <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-slate-50 border-r border-slate-200`}>
@@ -149,7 +151,7 @@ export default function ChatPage() {
         <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
       </div>
       <nav aria-label="Main navigation" className="space-y-1 p-3">
-        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"]].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
+        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"], ...(canSeeInsights(role, environment) ? [["insights", "📊", "Insights"]] : [])].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
         <button type="button" aria-label="New Chat" disabled={!canWrite} onClick={newChat} className="mt-3 flex w-full items-center gap-3 rounded-lg border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base">➕</span>New Chat</button>
       </nav>
       <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded px-2 py-1 ${view === id ? 'bg-blue-50 text-blue-800' : 'text-slate-500'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
@@ -170,7 +172,7 @@ export default function ChatPage() {
     </aside>
     <main className="flex min-w-0 flex-1 flex-col">
       <div className="md:hidden bg-slate-900 text-white px-4 py-3"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}>☰ <span className="ml-3 font-semibold">Lucie</span></button></div>
-      {nav === 'calendar' ? <CalendarPage /> : <>
+      {nav === 'calendar' ? <CalendarPage /> : nav === 'insights' && canSeeInsights(role, environment) ? <InsightsPage /> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
           <div className="flex gap-2">{active && !active.unsaved && <button className={button} disabled={exporting || state.loading} onClick={exportChat}>{exporting ? 'Preparing export…' : 'Export chat'}</button>}<button className={button} disabled={!active} onClick={() => setSummaryOpen(true)}>Brand Summary</button></div>

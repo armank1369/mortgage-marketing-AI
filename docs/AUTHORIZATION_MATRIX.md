@@ -13,6 +13,9 @@ Stored workspace selection is a preference, not permission.
 |---|---|---|---|
 | GET /api/calendar | JWT + membership | workspace:read | Workspace snapshot or revision check |
 | POST /api/calendar | JWT + membership | chat:write | Current membership and revision locked in the write transaction |
+| GET /api/insights | JWT + membership | config:write | Selected workspace; read-only KPI snapshot and cached review |
+| POST /api/insights/imports | JWT + membership | config:write | Selected workspace; member re-locked in the write transaction; CSV parsed server-side (2 MB, 5,000 rows) |
+| POST /api/insights/analysis | JWT + membership | config:write | Selected workspace; one paid model call per click, sends computed KPIs only (no chat text) |
 | GET /api/auth/me | JWT | None | Authenticated identity only |
 | GET /api/workspaces | JWT | None | Current recognized memberships; zero returns an empty list |
 | GET /api/brand-profile | JWT + membership | workspace:read | Selected authorized workspace |

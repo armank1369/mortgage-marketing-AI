@@ -69,7 +69,7 @@ export default function WorkspaceGate({ children }) {
       )}
       {state.selected && (
         <BrowserScopeContext.Provider key={JSON.stringify([userId, state.selected])} value={JSON.stringify([userId, state.selected])}>
-          <WorkspaceAccessContext.Provider value={{ role: state.workspaces.find((row) => row.workspace_id === state.selected)?.role }}>
+          <WorkspaceAccessContext.Provider value={{ role: state.workspaces.find((row) => row.workspace_id === state.selected)?.role, environment: state.workspaces.find((row) => row.workspace_id === state.selected)?.environment }}>
             {children}
           </WorkspaceAccessContext.Provider>
         </BrowserScopeContext.Provider>
