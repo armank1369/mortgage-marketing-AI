@@ -32,3 +32,32 @@ body {
   --color-primary-foreground: #ffffff;
   --color-ring: #181e28;
 }
+
+/* Dark theme. Most screens get their dark colors from tailwind.darkTheme.js, which remaps the
+   light-theme utility classes while <html> has the `dark` class (set by Neon Auth's theme
+   provider from the browser/OS setting or the Appearance choice in Settings). These are the
+   pieces that live in plain CSS. */
+:root.dark {
+  --lucie-ink: #eef2f6;
+  --lucie-canvas: #0e1218;
+  --lucie-accent: #3fa3b7;
+  --lucie-selection: #1e4f5a;
+}
+
+/* Sign-in screens in dark mode: same Hello Lucent layout on a deep navy page. The primary
+   button flips to a light fill so it still stands out. */
+.dark .lucie-auth {
+  --neon-primary: #e8edf3;
+  --neon-primary-foreground: #161c25;
+  --neon-ring: #cbd5e1;
+  --neon-background: #0e1218;
+  --neon-card: #161c25;
+  --neon-card-foreground: #eef2f6;
+  --neon-foreground: #eef2f6;
+  --neon-muted-foreground: #9ba7b7;
+  --neon-border: #2a3340;
+  --neon-input: #3a4555;
+  --color-primary: #e8edf3;
+  --color-primary-foreground: #161c25;
+  --color-ring: #cbd5e1;
+}

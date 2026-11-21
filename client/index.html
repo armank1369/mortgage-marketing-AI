@@ -13,6 +13,18 @@
     />
     <title>Lucie</title>
     <meta name="description" content="Lucie, Lucent's AI social media strategist." />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Apply the saved or system theme before first paint, so dark-theme browsers don't flash a
+         white page. Neon Auth's theme provider (next-themes, storage key "theme") takes over
+         once the app loads. -->
+    <script>
+      try {
+        var saved = localStorage.getItem('theme')
+        var dark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,5 +1,9 @@
 /** @type {import('tailwindcss').Config} */
+import darkTheme from './tailwind.darkTheme.js'
+
 export default {
+  // Neon Auth's theme provider puts a `dark` class on <html>; see tailwind.darkTheme.js.
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -29,6 +33,6 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [darkTheme],
 }
 
