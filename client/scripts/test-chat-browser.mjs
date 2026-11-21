@@ -62,6 +62,11 @@ try {
     const expression = `[...document.querySelectorAll('button')].find(b => ${exact ? `(b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)})` : `b.textContent.includes(${JSON.stringify(label)})`} && !b.disabled)`
     await wait(expression, `button ${label}`); await evaluate(`${expression}.click()`)
   }
+  // Conversation rows live in the Finder-style list in the main pane (not the sidebar's folder list).
+  const openChat = async (title) => {
+    const expression = `[...document.querySelectorAll('ul[aria-label="Conversations"] button')].find(b => b.textContent.includes(${JSON.stringify(title)}))`
+    await wait(expression, `conversation ${title}`); await evaluate(`${expression}.click()`)
+  }
   const input = async (selector, value) => evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`)
   const enter = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter'}); await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter'}) }
   const text = () => evaluate('document.body.innerText')
@@ -203,7 +208,7 @@ try {
   const beforeReload = await posts(); await reload()
   await wait(`document.body.innerText.includes('Shortened synthetic text.')`); assert.equal(await posts(), beforeReload)
   await click('Clear / Archive'); await click('Archive and start new'); await choosePersona(); await click('Archive')
-  await click('Synthetic education audience', false); await click('Restore'); await click('Conversations')
+  await openChat('Synthetic education audience'); await click('Restore'); await click('Conversations')
   assert.match(await text(), /Shortened synthetic text/)
   await newChat(); await evaluate(`window.__stepJ.mode = 'posts'`)
   await input('textarea', 'Synthetic posts'); await click('Send'); await wait(`document.body.innerText.includes('Generate social image')`)
@@ -270,9 +275,9 @@ try {
     db.messages['page-34'] = Array.from({length:60},(_,i)=>({ id:'history-'+i, role:i%2?'assistant':'user', kind:'response', content:'History record '+i, created_at:new Date(Date.now()+i*1000).toISOString() }));
     window.__stepJ.save();
   })()`)
-  await click('Conversations'); await click('Load more conversations')
-  await wait(`document.querySelector('nav[aria-label="Conversation list"]').querySelectorAll('button').length > 30`)
-  await click('Paged conversation 34', false); await wait(`document.body.innerText.includes('History record 59')`)
+  await click('Conversations'); await click(personaFolder, false); await click('Load more conversations')
+  await wait(`document.querySelectorAll('ul[aria-label="Conversations"] button').length > 30`)
+  await openChat('Paged conversation 34'); await wait(`document.body.innerText.includes('History record 59')`)
   assert.doesNotMatch(await text(), /History record 0\b/)
   await click('Load earlier messages'); await wait(`document.body.innerText.includes('History record 0')`)
   await click('Export chat')
@@ -298,8 +303,10 @@ try {
   await wait(`window.__stepJ.db.sessions['page-33'].title === 'Shared collaboration'`)
   await input('textarea', 'Keep my unsent draft')
   await evaluate(`window.__stepJ.db.sessions['page-32'].title='Updated by teammate'; window.dispatchEvent(new Event('focus'))`)
-  await wait(`document.body.innerText.includes('Updated by teammate')`)
-  assert.equal(await evaluate(`document.querySelector('textarea').value`), 'Keep my unsent draft')
+  // The teammate's rename shows up in the folder's conversation list; the unsent draft survives leaving and returning.
+  await click(personaFolder, false); await wait(`document.body.innerText.includes('Updated by teammate')`)
+  await openChat('Shared collaboration')
+  await wait(`document.querySelector('textarea')?.value === 'Keep my unsent draft'`)
   await evaluate(`window.__stepJ.switchAccount('account-b', 'owner', 'workspace-b')`)
   await wait(`document.querySelector('button[aria-label^="Select persona:"]')`)
   assert.doesNotMatch(await text(), /Shared collaboration|Paged conversation/)
@@ -310,17 +317,35 @@ try {
   await click('Shared collaboration', false)
   await wait(`document.body.innerText.includes('A shared followup from account B')`)
   await click('Clear / Archive'); await click('Archive and start new'); await choosePersona(); await click('Archive')
-  await click('Shared collaboration', false); await click('Restore'); await click('Conversations')
-  // Persona folders: the overview lists one folder per persona; "New chat in this folder" skips the selector.
-  await click('← All persona folders')
-  await wait(`document.querySelector('nav[aria-label="Persona folders"]')?.innerText.includes(${JSON.stringify(personaFolder)})`)
-  const folderOverview = await cdp('Page.captureScreenshot', { format: 'png' })
-  await writeFile(path.join(screenshotDir, 'persona-folders-overview.png'), Buffer.from(folderOverview.data, 'base64'))
-  await click(personaFolder, false); await click('➕ New chat in this folder')
-  assert.equal(await evaluate(`!!document.querySelector('button[aria-label^="Select persona:"]')`), false)
-  await wait(`document.body.innerText.includes('Unsent conversation') && document.body.innerText.includes('Persona: ' + ${JSON.stringify(personaFolder)})`)
+  await openChat('Shared collaboration'); await click('Restore'); await click('Conversations')
+  // Finder-style folders: a chat's breadcrumb returns to its folder, whose contents are a list of conversations.
+  await click(`← ${personaFolder}`)
+  await wait(`document.querySelector('section[aria-label^="Folder:"]') && document.querySelectorAll('ul[aria-label="Conversations"] button').length > 0`)
+  assert.equal(await evaluate(`!!document.querySelector('textarea')`), false)
   const folderView = await cdp('Page.captureScreenshot', { format: 'png' })
   await writeFile(path.join(screenshotDir, 'persona-folder-open.png'), Buffer.from(folderView.data, 'base64'))
+  await click('Persona folders'); await wait(`document.querySelector('section[aria-label="Persona folders overview"]')`)
+  const folderOverview = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folders-overview.png'), Buffer.from(folderOverview.data, 'base64'))
+  // New chat inside the folder skips the persona selector; the persona is bound to the folder.
+  await click(`Open folder ${personaFolder}`); await click('➕ New chat in this folder')
+  assert.equal(await evaluate(`!!document.querySelector('button[aria-label^="Select persona:"]')`), false)
+  await wait(`document.body.innerText.includes('Unsent conversation') && document.body.innerText.includes('Persona: ' + ${JSON.stringify(personaFolder)})`)
+  // Tone and age are adjusted per conversation, and travel with the chat's first save.
+  await click('Voice settings for this chat'); await wait(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 5"]')`)
+  await evaluate(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 5"]').click()`)
+  const voiceDialog = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'chat-voice-settings.png'), Buffer.from(voiceDialog.data, 'base64'))
+  await click('Save for this chat'); await wait(`document.body.innerText.includes('Voice · 1 custom')`)
+  await evaluate(`window.__stepJ.mode = 'text'`)
+  await input('textarea', 'Voice check message'); await click('Send')
+  await wait(`window.__stepJ.db.calls.some(c => c.method === 'PUT' && /\\/api\\/chat\\/sessions\\/[^/]+$/.test(c.url) && c.data?.voice_settings?.tone?.serious === 5)`)
+  await wait(`document.body.innerText.includes('Voice · 1 custom')`)
+  // Changing it again on the saved chat uses the dedicated voice endpoint and never touches other chats.
+  await click('Voice settings for this chat'); await evaluate(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 2"]').click()`)
+  await click('Save for this chat')
+  await wait(`window.__stepJ.db.calls.some(c => c.method === 'PUT' && c.url.endsWith('/voice') && c.data.voice_settings.tone.serious === 2)`)
+  assert.equal(await evaluate(`Object.values(window.__stepJ.db.sessions).filter(s => s.voice_settings?.tone).length`), 1)
   await evaluate(`window.__stepJ.switchAccount('account-a', 'viewer')`)
   await wait(`document.body.innerText.includes('Your workspace role permits reading')`)
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('New Chat')).disabled`), true)

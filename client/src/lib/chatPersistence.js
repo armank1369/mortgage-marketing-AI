@@ -20,6 +20,7 @@ const apiError = (err) => {
     permission_denied: 'Your workspace role does not permit this action.', not_found: 'This conversation or source is unavailable.',
     generation_configuration_required: 'Review the brand and persona configuration in Settings.',
     database_unavailable: 'Conversation storage is unavailable. No unsaved generation will be started.',
+    voice_storage_missing: 'Per-chat voice settings need a database update before they can be saved.',
     validation_error: 'Check the selected persona, input and source before trying again.' })[code] ||
     'The request could not be confirmed. Check its status before making another attempt.'
 }
@@ -118,6 +119,20 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     emit({ active: { id: uuid(), title: 'New conversation', default_persona_id: personaId, unsaved: true },
       messages: [], operations: [], before_cursor: null, loading: false, error: state.storageError })
   }
+  // Tone scales and age range for this conversation only. {} restores the brand and persona defaults.
+  async function setVoice(voice = {}) {
+    const active = state.active
+    if (!active) return
+    if (active.unsaved) { emit({ active: { ...active, voice_settings: voice } }); return voice }
+    if (state.metadataSaving) throw Error('A conversation edit is already being saved.')
+    emit({ metadataSaving: true })
+    try {
+      const saved = await request(`${base}/${active.id}/voice`, 'PUT', { voice_settings: voice })
+      if (state.active?.id === active.id) emit({ active: { ...state.active, voice_settings: saved.voice_settings }, error: state.storageError })
+      return saved.voice_settings
+    } catch (err) { report(err); throw err }
+    finally { emit({ metadataSaving: false }) }
+  }
   async function patch(fields) {
     const active = state.active
     if (!active) return
@@ -199,7 +214,8 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     const body = { ...input, operation_key: uuid() }
     if (retryOf) { body.retry_of = retryOf; if (acknowledge) body.acknowledge_uncertain_outcome = true }
     const record = { session_id: active.id, body, needs_create: !!active.unsaved, create: { title: active.unsaved && active.title === 'New conversation' && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
-      persona_id: active.default_persona_id || input.persona_id || null }, state: 'checking' }
+      persona_id: active.default_persona_id || input.persona_id || null,
+      ...(active.unsaved && Object.keys(active.voice_settings || {}).length ? { voice_settings: active.voice_settings } : {}) }, state: 'checking' }
     return dispatch(record)
   }
   async function check(record) {
@@ -241,7 +257,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       await reconcile()
     },
     stop() { alive = false; ++epoch; ++selection; for (const controller of controllers) controller.abort(); controllers.clear() },
-    list, open, newChat, patch, submit, reconcile, operations, abandon, loadFolders, openFolder,
+    list, open, newChat, patch, setVoice, submit, reconcile, operations, abandon, loadFolders, openFolder,
     exportConversation(id) { return collectConversationExport((sessionId, cursor) => request(`${base}/${sessionId}?version=2&limit=100${cursor ? `&before=${encodeURIComponent(cursor)}` : ''}`), id) },
     async archive() { const active = state.active; if (await patch({ archived: true })) {
       if (state.active?.id === active.id) newChat()

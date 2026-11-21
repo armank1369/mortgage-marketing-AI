@@ -27,9 +27,12 @@ function fixture({ initial = new Map(), override } = {}) {
       for (const s of sessions.values()) if (!!s.archived_at === url.includes('archived=true')) counts.set(s.default_persona_id || null, (counts.get(s.default_persona_id || null) || 0) + 1)
       return { data: { folders: [...counts].map(([persona_id, chat_count]) => ({ persona_id, chat_count, available: !!persona_id })) } }
     }
+    if (method === 'PUT' && path.endsWith('/voice')) {
+      const sid = parts[4]; sessions.set(sid, { ...sessions.get(sid), voice_settings: data.voice_settings }); return { data: { voice_settings: data.voice_settings } }
+    }
     if (method === 'PUT') {
       assert.ok(initial.get(pendingStorageKey(scope)), 'pending identifier must precede first network write')
-      if (!sessions.has(id)) sessions.set(id, { id, title: data.title, default_persona_id: data.persona_id, etag: '"v1"' })
+      if (!sessions.has(id)) sessions.set(id, { id, title: data.title, default_persona_id: data.persona_id, voice_settings: data.voice_settings, etag: '"v1"' })
       return { data: sessions.get(id) }
     }
     if (method === 'PATCH') {
@@ -370,5 +373,31 @@ test('a slow list response from a previous folder never replaces the open folder
   await c.openFolder(persona)
   gate.resolve(); await slow
   assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
+  c.stop()
+})
+
+test('voice settings are chosen per conversation: sent with first creation, then saved on their own', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  assert.deepEqual(await c.setVoice({ tone: { serious: 5 } }), { tone: { serious: 5 } })
+  assert.equal(f.calls.filter((r) => r.method !== 'GET').length, 0, 'unsent chats keep voice local')
+  await c.submit({ action: 'send', message: 'First prompt', persona_id: persona })
+  const created = f.calls.find((r) => r.method === 'PUT')
+  assert.deepEqual(created.data.voice_settings, { tone: { serious: 5 } })
+  const id = c.getSnapshot().active.id
+  await c.setVoice({ tone: { serious: 1 }, ageRange: [22, 32] })
+  const put = f.calls.filter((r) => r.method === 'PUT').at(-1)
+  assert.ok(put.url.endsWith(`/${id}/voice`)); assert.deepEqual(put.data, { voice_settings: { tone: { serious: 1 }, ageRange: [22, 32] } })
+  assert.deepEqual(c.getSnapshot().active.voice_settings, { tone: { serious: 1 }, ageRange: [22, 32] })
+  await c.setVoice({})
+  assert.deepEqual(c.getSnapshot().active.voice_settings, {})
+  c.stop()
+})
+
+test('a chat without custom voice sends no voice_settings on creation', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  await c.submit({ action: 'send', message: 'Plain prompt', persona_id: persona })
+  assert.equal('voice_settings' in f.calls.find((r) => r.method === 'PUT').data, false)
   c.stop()
 })

@@ -9,11 +9,13 @@ import anthropic
 from errors import (ChatConflictError, DatabaseUnavailableError, NotFoundError,
                     PermissionDeniedError, ValidationError, WorkspaceAccessDeniedError)
 from repositories import chat_persistence_repository as chats
+from repositories import chat_voice_repository as voices
 from repositories import generation_operation_repository as runs
 from services.chat_contract import operation_fields
 from services.generation_context import resolve_generation_context
 from services.generation import generate_chat, generate_video, generate_image, InvalidGenerationOutputError
 from services.conversation_context import capture_context
+from services.voice_settings import apply_voice_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,8 @@ def execute_operation(workspace_id, session_id, member_id, data, runtime, *, dev
     if "replay" in prepared:
         return prepared["replay"]
     context = resolve_generation_context(workspace_id, persona_id=fields["persona_id"])
+    # This conversation's tone / age overrides sit on top of the brand and persona defaults.
+    context = apply_voice_overrides(context, voices.load(workspace_id, session_id))
     task = prepared["generation_input"]
     claim = chats.claim_operation(workspace_id, session_id, member_id, fields, generation_input=task,
                                   persona_snapshot={"id": context.persona.id, "name": context.persona.name,

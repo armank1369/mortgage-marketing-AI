@@ -71,9 +71,14 @@ window.__stepJ.api = { getWorkspace: () => window.__stepJ.workspace, async send(
       .filter((s) => !query.get('persona') || (query.get('persona') === 'none' ? !s.default_persona_id : s.default_persona_id === query.get('persona'))).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     return { data: { sessions: list.slice(offset, offset + 30).map(presentation), next_cursor: list.length > offset + 30 ? String(offset + 30) : null } }
   }
+  if (method === 'PUT' && parts[5] === 'voice') {
+    const row = db.sessions[id]
+    if (!row || row.workspace_id !== workspace) return reject(404, 'not_found')
+    row.voice_settings = data.voice_settings || {}; save(); return { data: { voice_settings: row.voice_settings } }
+  }
   if (method === 'PUT') {
     if (db.sessions[id] && db.sessions[id].workspace_id !== workspace) return reject(404, 'not_found')
-    db.sessions[id] ||= { id, owner: user, created_by_member_id: user, workspace_id: workspace, title: data.title, default_persona_id: data.persona_id, updated_at: nextTime(), etag: '"initial"' }
+    db.sessions[id] ||= { id, owner: user, created_by_member_id: user, workspace_id: workspace, title: data.title, default_persona_id: data.persona_id, voice_settings: data.voice_settings || {}, updated_at: nextTime(), etag: '"initial"' }
     db.messages[id] ||= []; save(); return { data: db.sessions[id] }
   }
   const session = db.sessions[id]

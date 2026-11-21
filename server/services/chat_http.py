@@ -5,6 +5,8 @@ from auth.workspace_context import require_workspace
 from auth.permissions import require_capability, check_capability
 from errors import ValidationError
 from repositories import chat_persistence_repository as chats
+from repositories import chat_voice_repository as voices
+from services.voice_settings import normalize_voice
 from services.chat_contract import (create_fields, patch_fields, operation_fields, only,
                                     page_limit, decode_cursor, MAX_BODY_BYTES, PROVIDER_ACTIONS)
 from validation import json_object, uuid_string
@@ -63,6 +65,7 @@ def detail_v2(session_id):
     result = chats.get_session(g.workspace_id, uuid_string(session_id, "session_id"), member_id(),
                                limit=page_limit(request.args.get("limit"), 50),
                                before=decode_cursor(request.args.get("before")))
+    result["voice_settings"] = voices.load(g.workspace_id, result["id"])
     response = jsonify(result)
     response.headers["ETag"] = result["etag"]
     return response
@@ -72,8 +75,13 @@ def detail_v2(session_id):
 @require_workspace
 @require_capability("chat:create")
 def create(session_id):
-    fields = create_fields(body())
+    data = body()
+    fields = create_fields(data)
+    voice = normalize_voice(data.get("voice_settings"))
     result, created = chats.create_session(g.workspace_id, uuid_string(session_id, "session_id"), member_id(), **fields)
+    if voice:
+        voices.save(g.workspace_id, result["id"], member_id(), voice)
+        result["voice_settings"] = voice
     response = jsonify(result)
     response.status_code = 201 if created else 200
     response.headers["ETag"] = result["etag"]
@@ -89,6 +97,17 @@ def patch(session_id):
     response = jsonify(result)
     response.headers["ETag"] = result["etag"]
     return response
+
+
+@blueprint.route("/api/chat/sessions/<session_id>/voice", methods=["PUT"])
+@require_workspace
+@require_capability("chat:write")
+def put_voice(session_id):
+    """Replace this conversation's tone/age overrides. An empty body object restores the defaults."""
+    data = body()
+    only(data, {"voice_settings"})
+    saved = voices.save(g.workspace_id, uuid_string(session_id, "session_id"), member_id(), data.get("voice_settings"))
+    return jsonify({"voice_settings": saved})
 
 
 @blueprint.route("/api/chat/sessions/<session_id>/operations", methods=["POST"])
