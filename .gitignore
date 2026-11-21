@@ -33,3 +33,6 @@ __pycache__
 *.njsproj
 *.sln
 *.sw?
+
+# Sensitive / Restricted Research Artifacts
+docs/research/joseph_chat_kit/

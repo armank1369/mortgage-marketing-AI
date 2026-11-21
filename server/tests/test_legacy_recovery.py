@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 import pytest
+import time
 
 from errors import ChatConflictError, PreconditionFailedError
 from repositories import chat_persistence_repository as repo
@@ -56,6 +57,7 @@ def test_claim_and_preparation_reject_mismatch_but_replay_still_works(world):
 
 def test_full_history_conflict_is_not_limited_to_latest_page(store):
     for i in range(65):
+        time.sleep(0.001)
         data = send(message=f'Idea {i}')
         claim = repo.claim_operation(W, S, M, data)
         repo.complete_operation(W, S, M, data['operation_key'], claim['request']['structured_data']['operation']['claim_token'],

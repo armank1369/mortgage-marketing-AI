@@ -1,0 +1,63 @@
+[
+  {
+    "title": "Synthetic First-Time Homebuyer Chat",
+    "created_at": "2026-09-15T14:30:00Z",
+    "persona_snapshot": {
+      "name": "First-Time Homebuyer Guide",
+      "pacing": "encouraging and educational"
+    },
+    "messages": [
+      {
+        "role": "user",
+        "text": "Give me a post idea for a first-time homebuyer tip",
+        "created_at": "2026-09-15T14:30:01Z"
+      },
+      {
+        "role": "assistant",
+        "text": "Here is a breakdown of down payment assistance programs available in California.",
+        "created_at": "2026-09-15T14:30:15Z",
+        "type": "text",
+        "payload": {
+          "type": "text",
+          "response": "Here is a breakdown of down payment assistance programs available in California."
+        }
+      }
+    ]
+  },
+  {
+    "title": "Synthetic Campaign & Social Graphic Chat",
+    "created_at": "2026-09-20T10:00:00Z",
+    "persona_snapshot": {
+      "name": "Realtor Partner Specialist"
+    },
+    "messages": [
+      {
+        "role": "user",
+        "text": "Generate a 3-part Instagram carousel for open house co-marketing.",
+        "created_at": "2026-09-20T10:00:02Z"
+      },
+      {
+        "role": "assistant",
+        "text": "Here is your 3-slide co-marketing breakdown.",
+        "created_at": "2026-09-20T10:00:25Z",
+        "type": "campaign",
+        "payload": {
+          "type": "campaign",
+          "slides": [
+            { "slide": 1, "headline": "Partner with a Local Lender", "body": "Why dual-branded open houses double your reach." },
+            { "slide": 2, "headline": "On-Site Prequalification", "body": "Clear answers for walk-in buyers right at the front door." },
+            { "slide": 3, "headline": "Co-Branded Follow Up", "body": "Automated nurture sequences that keep both of our names front and center." }
+          ],
+          "image_spec": {
+            "dimensions": "1080x1080",
+            "theme": "cream-gold"
+          },
+          "calendar_metadata": {
+            "suggested_date": "2026-09-25",
+            "channel": "Instagram"
+          }
+        }
+      }
+    ]
+  }
+]
