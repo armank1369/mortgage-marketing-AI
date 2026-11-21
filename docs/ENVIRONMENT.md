@@ -33,6 +33,9 @@ commands that preserve working local files. Replace placeholders before normal u
 | `server/.env` → `ANTHROPIC_MODEL` | Team-approved model identifier; replace the example's `replace_me` |
 | `server/.env` → `AI_PROVIDER` | Example defaults to `claude`; no alternate provider setup is introduced here |
 | `client/.env` → `VITE_NEON_AUTH_URL` | Public Auth endpoint matching the backend's Auth base URL |
+| `client/.env` → `VITE_CREATIVE_SKETCH_ENABLED` | Optional prototype. `true` shows the filming-setup diagram and the "Sketch this scene" button under Creative Direction. Off when unset. See `docs/CREATIVE_DIRECTION_VISUALS.md` |
+| `server/.env` → `CREATIVE_SKETCH_PROVIDER` | Optional prototype. `off` (default), `preview` (returns the image prompt, no cost) or `fal` (paid image call) |
+| `server/.env` → `CREATIVE_SKETCH_MODEL` / `FAL_KEY` | Only for `fal`: fal.ai model id (default `fal-ai/flux-2/klein`) and API key |
 
 The PostgreSQL URL and Auth URL are different values. The database name can remain
 `neondb` across branches; the hostname/branch determines which records/schema you

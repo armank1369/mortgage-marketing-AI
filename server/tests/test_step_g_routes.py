@@ -24,6 +24,7 @@ ROUTES = [
     ("GET", "/api/preferences"), ("POST", "/api/preferences"),
     ("GET", "/api/history"), ("POST", "/api/chat"),
     ("POST", "/api/social-image"), ("POST", "/api/video-brief"),
+    ("POST", "/api/creative-sketch"),
     ("GET", "/api/personas"), ("POST", "/api/personas"), ("PUT", "/api/personas/" + S),
 ]
 

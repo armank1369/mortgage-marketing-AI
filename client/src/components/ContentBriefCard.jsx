@@ -3,6 +3,7 @@ import { useWorkspaceData } from '../context/WorkspaceData.js'
 import { stripReviewNotes } from '../lib/publicationCopy.js'
 import platformBadge, { platformGradient } from './platformBadge'
 import { recommendedPostingTimes } from '../utils/postingTimes'
+import CreativeDirectionSketch from './CreativeDirectionSketch'
 
 export function ScriptLine({ label, time, text }) {
   if (!text) return null
@@ -71,7 +72,7 @@ export function SlideCarousel({ label, slides }) {
   )
 }
 
-export function CreativeDirectionGrid({ direction }) {
+export function CreativeDirectionGrid({ direction, format, platform }) {
   if (!direction) return null
   const fields = [
     ['Setting', direction.setting],
@@ -91,6 +92,9 @@ export function CreativeDirectionGrid({ direction }) {
           </div>
         ) : null
       )}
+      <div className="sm:col-span-2">
+        <CreativeDirectionSketch direction={direction} format={format} platform={platform} />
+      </div>
     </div>
   )
 }
@@ -228,7 +232,7 @@ export default function ContentBriefCard({ title, platform, format, script, dire
       {hasDirection && (
         <div className="px-4 py-4 border-t border-slate-100">
           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
-          <CreativeDirectionGrid direction={direction} />
+          <CreativeDirectionGrid direction={direction} format={format} platform={platform} />
         </div>
       )}
 

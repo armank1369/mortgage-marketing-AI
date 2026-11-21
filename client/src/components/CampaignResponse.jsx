@@ -359,7 +359,7 @@ function CalendarEntryCard({ entry, nmls, persona, onVideoGenerated, durable = f
 
           <div className="px-4 py-4 border-t border-slate-100">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Creative Direction</div>
-            <CreativeDirectionGrid direction={direction} />
+            <CreativeDirectionGrid direction={direction} format="video" platform={entry.platform} />
           </div>
 
           <div className="px-4 py-4 border-t border-slate-100 bg-slate-50/60">

@@ -334,6 +334,28 @@ def social_image():
     return _stateless_response(generate_image, data, context)
 
 
+@app.route('/api/creative-sketch', methods=['POST'])
+@require_workspace
+@require_capability("ai:generate")
+def creative_sketch():
+    """Prototype: one hand-drawn illustration of a brief's creative direction (see
+    services/creative_sketch.py). Disabled unless CREATIVE_SKETCH_PROVIDER is set."""
+    from services.creative_sketch import generate_sketch, SketchDisabled, SketchProviderError
+    data = json_object()
+    try:
+        result = generate_sketch(data)
+    except SketchDisabled:
+        return jsonify({'error': 'feature_disabled', 'message': 'Creative direction sketches are not enabled.'}), 404
+    except ValueError as error:
+        raise ValidationError(str(error))
+    except SketchProviderError as error:
+        app.logger.warning('Creative sketch provider failed: %s', error)
+        return jsonify({'error': 'sketch_failed', 'message': str(error)}), error.status
+    log_usage_sketch = {k: result[k] for k in ('provider', 'model', 'estimated_cost_usd')}
+    app.logger.info('creative_sketch %s', log_usage_sketch)
+    return jsonify(result)
+
+
 @app.route('/api/video-brief', methods=['POST'])
 @require_workspace
 @require_capability("ai:generate")
