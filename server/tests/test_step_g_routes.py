@@ -19,7 +19,7 @@ ORIGIN = "https://auth.example"
 ROUTES = [
     ("GET", "/api/calendar"), ("POST", "/api/calendar"),
     ("PUT", "/api/brand-profile"),
-    ("GET", "/api/brand-profile"), ("GET", "/api/chat/sessions"),
+    ("GET", "/api/brand-profile"), ("GET", "/api/chat/sessions"), ("GET", "/api/chat/folders"),
     ("POST", "/api/chat/sessions"), ("GET", "/api/chat/sessions/" + S),
     ("GET", "/api/preferences"), ("POST", "/api/preferences"),
     ("GET", "/api/history"), ("POST", "/api/chat"),

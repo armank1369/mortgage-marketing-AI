@@ -101,11 +101,24 @@ def create_session(workspace_id, session_id, member_id, *, title, persona_id):
     return result, created
 
 
-def list_sessions(workspace_id, member_id, *, archived=False, limit=30, cursor=None):
+UNSORTED_FOLDER = "none"
+
+
+def list_sessions(workspace_id, member_id, *, archived=False, limit=30, cursor=None, persona=None):
+    """List workspace chats, optionally inside one persona folder.
+
+    ``persona`` is None (every folder), a persona UUID, or ``"none"`` for chats
+    saved without a persona (older V1 imports).
+    """
     with get_db_transaction() as cur:
         lock_member(cur, workspace_id, member_id, "chat:read")
         params = [workspace_id]
         where = "AND archived_at IS NOT NULL" if archived else "AND archived_at IS NULL"
+        if persona == UNSORTED_FOLDER:
+            where += " AND default_persona_id IS NULL"
+        elif persona is not None:
+            where += " AND default_persona_id=%s"
+            params.append(uuid_string(persona, "persona"))
         if cursor:
             where += " AND (updated_at,id)<(%s,%s)"
             params.extend(cursor)
@@ -116,6 +129,32 @@ def list_sessions(workspace_id, member_id, *, archived=False, limit=30, cursor=N
         page = enrich_sessions(cur, [dict(row) for row in rows[:limit]])
     return {"sessions": [session_dto(row) for row in page],
             "next_cursor": encode_cursor(page[-1]["updated_at"], page[-1]["id"]) if len(rows) > limit else None}
+
+
+FOLDER_SQL = """
+SELECT s.default_persona_id AS persona_id, p.name AS persona_name, (p.id IS NOT NULL) AS available,
+  count(*) AS chat_count, max(s.updated_at) AS last_updated_at
+FROM public.chat_session s LEFT JOIN public.persona p
+  ON p.id=s.default_persona_id AND p.workspace_id=s.workspace_id AND p.deleted_at IS NULL
+WHERE s.workspace_id=%s AND {archived}
+GROUP BY s.default_persona_id, p.id, p.name
+ORDER BY max(s.updated_at) DESC
+"""
+
+
+def list_folders(workspace_id, member_id, *, archived=False):
+    """Summarize chats per persona folder. Personas without chats are not listed here;
+    the client merges this with the workspace persona list so every persona has a folder."""
+    with get_db_transaction() as cur:
+        lock_member(cur, workspace_id, member_id, "chat:read")
+        cur.execute(FOLDER_SQL.format(archived="s.archived_at IS NOT NULL" if archived else "s.archived_at IS NULL"),
+                    (workspace_id,))
+        rows = cur.fetchall()
+    return {"folders": [{"persona_id": str(row["persona_id"]) if row["persona_id"] else None,
+                         "persona_name": row["persona_name"], "available": bool(row["available"]),
+                         "chat_count": int(row["chat_count"]),
+                         "last_updated_at": row["last_updated_at"].isoformat() if row["last_updated_at"] else None}
+                        for row in rows]}
 
 
 def _unresolved_requests(cur, session_id):

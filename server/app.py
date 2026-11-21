@@ -41,7 +41,7 @@ app.register_blueprint(durable_chat_blueprint)
 
 @app.after_request
 def private_chat_cache_control(response):
-    if request.path == '/api/chat/sessions' or request.path.startswith('/api/chat/sessions/'):
+    if request.path in ('/api/chat/sessions', '/api/chat/folders') or request.path.startswith('/api/chat/sessions/'):
         response.headers['Cache-Control'] = 'no-store'
     return response
 

@@ -54,11 +54,21 @@ window.__stepJ.api = { getWorkspace: () => window.__stepJ.workspace, async send(
     db.personas = [...(db.personas || []).filter(p => p.id !== row.id), row]; save(); return { data: row }
   }
   if (window.__stepJ.role === 'viewer' && method !== 'GET') return reject(403, 'permission_denied')
+  if (url.startsWith('/api/chat/folders')) {
+    const archived = new URLSearchParams(url.split('?')[1]).get('archived') === 'true', groups = new Map()
+    for (const s of Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === archived)) {
+      const row = groups.get(s.default_persona_id || null) || { persona_id: s.default_persona_id || null, chat_count: 0, last_updated_at: s.updated_at }
+      row.chat_count++; if (s.updated_at > row.last_updated_at) row.last_updated_at = s.updated_at
+      groups.set(row.persona_id, row)
+    }
+    return { data: { folders: [...groups.values()].map((row) => ({ ...row, available: !!(db.personas || []).find((p) => p.id === row.persona_id) })) } }
+  }
   if (!url.startsWith('/api/chat/sessions')) throw Error('Unexpected stateless/provider request')
   const [path] = url.split('?'), parts = path.split('/'), id = parts[4], key = parts[6]
   if (url.includes('?version=2&archived=')) {
     const query = new URLSearchParams(url.split('?')[1]), offset = Number(query.get('cursor') || 0)
-    const list = Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === (query.get('archived') === 'true')).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    const list = Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === (query.get('archived') === 'true'))
+      .filter((s) => !query.get('persona') || (query.get('persona') === 'none' ? !s.default_persona_id : s.default_persona_id === query.get('persona'))).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     return { data: { sessions: list.slice(offset, offset + 30).map(presentation), next_cursor: list.length > offset + 30 ? String(offset + 30) : null } }
   }
   if (method === 'PUT') {

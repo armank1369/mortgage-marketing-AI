@@ -28,14 +28,34 @@ def _unique_args(names):
             raise ValidationError("Duplicate pagination parameter.")
 
 
-def list_v2():
-    _unique_args({"version", "archived", "limit", "cursor"})
+def _archived_arg():
     archived = request.args.get("archived", "false")
     if archived not in {"true", "false"}:
         raise ValidationError("archived must be true or false.")
-    return jsonify(chats.list_sessions(g.workspace_id, member_id(), archived=archived == "true",
+    return archived == "true"
+
+
+def _persona_folder_arg():
+    persona = request.args.get("persona")
+    if persona is None or persona == chats.UNSORTED_FOLDER:
+        return persona
+    return uuid_string(persona, "persona")
+
+
+def list_v2():
+    _unique_args({"version", "archived", "limit", "cursor", "persona"})
+    return jsonify(chats.list_sessions(g.workspace_id, member_id(), archived=_archived_arg(),
                                       limit=page_limit(request.args.get("limit"), 30),
-                                      cursor=decode_cursor(request.args.get("cursor"))))
+                                      cursor=decode_cursor(request.args.get("cursor")),
+                                      persona=_persona_folder_arg()))
+
+
+@blueprint.route("/api/chat/folders", methods=["GET"])
+@require_workspace
+@require_capability("chat:read")
+def folders():
+    _unique_args({"archived"})
+    return jsonify(chats.list_folders(g.workspace_id, member_id(), archived=_archived_arg()))
 
 
 def detail_v2(session_id):

@@ -76,6 +76,7 @@ try {
   await reload()
   const choosePersona = async () => { await wait(`document.querySelector('button[aria-label^="Select persona:"]')`); await evaluate(`document.querySelector('button[aria-label^="Select persona:"]').click()`); await click('Set Brand Guidelines') }
   const newChat = async () => { await click('New Chat'); await choosePersona() }
+  const personaFolder = JSON.parse(fixture).persona_snapshot.name
   await evaluate(`window.__stepJ.openConfiguration()`)
   await wait(`document.querySelector('[role=radio][aria-label="Professional to Casual: 2"]')`)
   await evaluate(`document.querySelector('[role=radio][aria-label="Professional to Casual: 2"]').click()`)
@@ -283,6 +284,9 @@ try {
   assert.equal(JSON.stringify(document).includes('claim_token'), false)
 
   await evaluate(`window.__stepJ.switchAccount('account-b')`)
+  // After a remount the sidebar opens on the persona folders; enter the folder to see its chats.
+  await wait(`document.querySelector('nav[aria-label="Persona folders"]')?.innerText.includes(${JSON.stringify(personaFolder)})`)
+  await click(personaFolder, false)
   await wait(`document.body.innerText.includes('Paged conversation 34')`)
   await click('Paged conversation 33', false)
   await wait(`document.querySelector('textarea')`)
@@ -302,10 +306,21 @@ try {
   assert.equal(await evaluate(`window.__stepJ.api.send({url:'/api/chat/sessions/page-33?version=2',method:'GET'}, {expectedScope:JSON.stringify(['account-b','workspace-b'])}).then(()=>false,e=>e.response.status===404)`), true)
   await evaluate(`window.__stepJ.switchAccount('account-a')`)
   await wait(`document.body.innerText.includes('Shared collaboration')`)
+  await click(personaFolder, false)
   await click('Shared collaboration', false)
   await wait(`document.body.innerText.includes('A shared followup from account B')`)
   await click('Clear / Archive'); await click('Archive and start new'); await choosePersona(); await click('Archive')
   await click('Shared collaboration', false); await click('Restore'); await click('Conversations')
+  // Persona folders: the overview lists one folder per persona; "New chat in this folder" skips the selector.
+  await click('← All persona folders')
+  await wait(`document.querySelector('nav[aria-label="Persona folders"]')?.innerText.includes(${JSON.stringify(personaFolder)})`)
+  const folderOverview = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folders-overview.png'), Buffer.from(folderOverview.data, 'base64'))
+  await click(personaFolder, false); await click('➕ New chat in this folder')
+  assert.equal(await evaluate(`!!document.querySelector('button[aria-label^="Select persona:"]')`), false)
+  await wait(`document.body.innerText.includes('Unsent conversation') && document.body.innerText.includes('Persona: ' + ${JSON.stringify(personaFolder)})`)
+  const folderView = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folder-open.png'), Buffer.from(folderView.data, 'base64'))
   await evaluate(`window.__stepJ.switchAccount('account-a', 'viewer')`)
   await wait(`document.body.innerText.includes('Your workspace role permits reading')`)
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('New Chat')).disabled`), true)
@@ -321,7 +336,7 @@ try {
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png' })
   const screenshotPath = path.join(screenshotDir, 'step-j4-mobile.png'); await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   assert.deepEqual(errors, [])
-  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
+  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, persona folders, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
   console.log(`Screenshot: ${screenshotPath}`)
 } finally {
   ws?.close()

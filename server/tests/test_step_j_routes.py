@@ -53,7 +53,7 @@ def test_v2_list_and_detail_preserve_legacy_shapes(client, monkeypatch):
     assert client.get("/api/chat/sessions", headers=client.headers()).json == []
     response = client.get("/api/chat/sessions?version=2&archived=true&limit=7", headers=client.headers())
     assert response.json == {"sessions": [], "next_cursor": None}
-    listing.assert_called_once_with(W, M, archived=True, limit=7, cursor=None)
+    listing.assert_called_once_with(W, M, archived=True, limit=7, cursor=None, persona=None)
     detail = Mock(return_value={"id": S, "etag": '"tag"', "messages": [], "operations": [], "before_cursor": None})
     monkeypatch.setattr(chats, "get_session", detail)
     client.context["role"] = "viewer"
@@ -63,7 +63,8 @@ def test_v2_list_and_detail_preserve_legacy_shapes(client, monkeypatch):
 
 
 @pytest.mark.parametrize("query", ["version=3", "version=2&limit=0", "version=2&limit=101", "version=2&limit=1.5",
-                                       "version=2&cursor=garbage", "version=2&archived=1", "version=2&limit=1&limit=2"])
+                                       "version=2&cursor=garbage", "version=2&archived=1", "version=2&limit=1&limit=2",
+                                       "version=2&persona=garbage", "version=2&persona=none&persona=none"])
 def test_pagination_validation_before_repository(client, monkeypatch, query):
     listing = Mock()
     monkeypatch.setattr(chats, "list_sessions", listing)
@@ -137,3 +138,21 @@ def test_head_options_never_modify_or_dispatch(client, monkeypatch):
     assert client.options(BASE + "/operations", headers=client.headers()).status_code == 200
     assert client.get(BASE + "/operations", headers=client.headers()).status_code == 405
     client.ai.messages.create.assert_not_called()
+
+
+def test_persona_folder_routes(client, monkeypatch):
+    listing = Mock(return_value={"sessions": [], "next_cursor": None})
+    monkeypatch.setattr(chats, "list_sessions", listing)
+    client.context["role"] = "viewer"
+    assert client.get(f"/api/chat/sessions?version=2&persona={P}", headers=client.headers()).status_code == 200
+    listing.assert_called_with(W, M, archived=False, limit=30, cursor=None, persona=P)
+    assert client.get("/api/chat/sessions?version=2&persona=none", headers=client.headers()).status_code == 200
+    listing.assert_called_with(W, M, archived=False, limit=30, cursor=None, persona="none")
+    folders = Mock(return_value={"folders": []})
+    monkeypatch.setattr(chats, "list_folders", folders)
+    response = client.get("/api/chat/folders?archived=true", headers=client.headers())
+    assert response.status_code == 200 and response.json == {"folders": []}
+    assert response.headers["Cache-Control"] == "no-store"
+    folders.assert_called_once_with(W, M, archived=True)
+    assert client.get("/api/chat/folders?archived=yes", headers=client.headers()).status_code == 400
+    assert folders.call_count == 1

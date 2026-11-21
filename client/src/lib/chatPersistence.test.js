@@ -17,7 +17,16 @@ function fixture({ initial = new Map(), override } = {}) {
     if (replacement) return await replacement
     const { url, method, data } = config
     const [path] = url.split('?'); const parts = path.split('/'); const id = parts[4], key = parts[6]
-    if (url.includes('?version=2&archived=')) return { data: { sessions: [...sessions.values()].filter((s) => !!s.archived_at === url.includes('archived=true')), next_cursor: null } }
+    if (url.includes('?version=2&archived=')) {
+      const folder = new URLSearchParams(url.split('?')[1]).get('persona')
+      return { data: { sessions: [...sessions.values()].filter((s) => !!s.archived_at === url.includes('archived=true'))
+        .filter((s) => !folder || (folder === 'none' ? !s.default_persona_id : s.default_persona_id === folder)), next_cursor: null } }
+    }
+    if (url.startsWith('/api/chat/folders')) {
+      const counts = new Map()
+      for (const s of sessions.values()) if (!!s.archived_at === url.includes('archived=true')) counts.set(s.default_persona_id || null, (counts.get(s.default_persona_id || null) || 0) + 1)
+      return { data: { folders: [...counts].map(([persona_id, chat_count]) => ({ persona_id, chat_count, available: !!persona_id })) } }
+    }
     if (method === 'PUT') {
       assert.ok(initial.get(pendingStorageKey(scope)), 'pending identifier must precede first network write')
       if (!sessions.has(id)) sessions.set(id, { id, title: data.title, default_persona_id: data.persona_id, etag: '"v1"' })
@@ -325,5 +334,41 @@ test('idle reconciliation refreshes shared sidebar and active history without re
   assert.equal(c.getSnapshot().active.title, 'Renamed by teammate')
   assert.equal(c.getSnapshot().messages.length, 2)
   assert.equal(f.calls.filter(call => call.method !== 'GET').length, 0)
+  c.stop()
+})
+
+test('persona folders filter the chat list and summarize chat counts', async () => {
+  const other = '22222222-2222-4222-8222-222222222222'
+  const f = fixture(), c = f.make(); await c.start()
+  f.sessions.set('a', { id: 'a', title: 'A', default_persona_id: persona })
+  f.sessions.set('b', { id: 'b', title: 'B', default_persona_id: other })
+  f.sessions.set('c', { id: 'c', title: 'Imported', default_persona_id: null })
+  await c.list()
+  assert.equal(c.getSnapshot().sessions.length, 3)
+  await c.openFolder(persona)
+  assert.equal(c.getSnapshot().folder, persona)
+  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
+  assert.ok(f.calls.at(-1).url.includes(`&persona=${persona}`))
+  await c.list() // later refreshes stay inside the open folder
+  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
+  await c.openFolder('none')
+  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['c'])
+  await c.openFolder(null)
+  assert.equal(c.getSnapshot().sessions.length, 3)
+  await c.loadFolders()
+  const counts = Object.fromEntries(c.getSnapshot().folders.map((row) => [row.persona_id, row.chat_count]))
+  assert.deepEqual(counts, { [persona]: 1, [other]: 1, null: 1 })
+  c.stop()
+})
+
+test('a slow list response from a previous folder never replaces the open folder', async () => {
+  const gate = deferred()
+  const f = fixture({ override: (config) => config.url.includes('persona=slow') ? gate.promise.then(() => ({ data: { sessions: [{ id: 'stale' }], next_cursor: null } })) : null })
+  const c = f.make(); await c.start()
+  f.sessions.set('a', { id: 'a', title: 'A', default_persona_id: persona })
+  const slow = c.openFolder('slow')
+  await c.openFolder(persona)
+  gate.resolve(); await slow
+  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
   c.stop()
 })
