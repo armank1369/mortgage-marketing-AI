@@ -18,3 +18,17 @@ body {
     font-size: 16px;
   }
 }
+
+/* Sign-in screens: theme Neon Auth's built-in form with the Hello Lucent palette. Scoped to
+   .lucie-auth so it doesn't change the account settings screens. */
+.lucie-auth {
+  --neon-primary: #181e28;
+  --neon-primary-foreground: #ffffff;
+  --neon-ring: #181e28;
+  --neon-background: #f3f2ec;
+  --neon-card: #ffffff;
+  /* Neon's utilities read --neon-*, but a few read the --color-* aliases, which resolve at :root. */
+  --color-primary: #181e28;
+  --color-primary-foreground: #ffffff;
+  --color-ring: #181e28;
+}

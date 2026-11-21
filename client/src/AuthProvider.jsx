@@ -10,7 +10,8 @@ export default function AuthProvider({ children }) {
       authClient={authClient}
       navigate={navigate}
       redirectTo="/"
-      Link={({ href, children }) => <Link to={href}>{children}</Link>}
+      // Forward className so Neon Auth's own link styling (e.g. "Forgot password?") survives.
+      Link={({ href, className, children }) => <Link to={href} className={className}>{children}</Link>}
     >
       {children}
     </NeonAuthUIProvider>

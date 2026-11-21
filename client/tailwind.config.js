@@ -17,6 +17,15 @@ export default {
         // for the user chat bubble specifically so it still reads as its own conversational
         // element rather than matching every button on the page.
         'imessage-blue': '#0B93F6',
+        // Hello Lucent's CTA red and cream section background (same pixel-sampled source as
+        // lucent-navy). Used on the sign-in screens to match the client's site.
+        'lucent-red': '#d42021',
+        'lucent-cream': '#f3f2ec',
+      },
+      fontFamily: {
+        // Playfair Display is already loaded in index.html for the social-image templates;
+        // reused for headings to echo Hello Lucent's serif headline style.
+        serif: ["'Playfair Display'", 'Georgia', 'serif'],
       },
     },
   },
