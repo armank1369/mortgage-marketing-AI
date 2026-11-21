@@ -43,7 +43,7 @@ export function createAuthenticatedApi({ getSession, request, storage, onAccessE
       canceled.code = 'ERR_CANCELED'
       throw canceled
     }
-    if (config.method === 'POST' && (config.url === '/api/chat' || config.url?.endsWith('/operations'))) {
+    if (config.method === 'POST' && (config.url === '/api/chat' || config.url === '/api/compare' || config.url?.endsWith('/operations'))) {
       const zone = globalThis.Intl?.DateTimeFormat().resolvedOptions().timeZone
       if (zone) headers['X-Device-Timezone'] = zone
     }

@@ -10,7 +10,7 @@ import { stripReviewNotes, buildCampaignEntryCopy } from '../lib/publicationCopy
 
 const button = 'text-xs rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
 
-export default function PersistedMessage({ message: msg, nmls, persona, onAction, disabled = false, providerDisabled = disabled, readOnly = false, legacy = false }) {
+export default function PersistedMessage({ message: msg, nmls, persona, onAction, disabled = false, providerDisabled = disabled, readOnly = false, legacy = false, statusLabel = 'Saved' }) {
   const [copyError, setCopyError] = useState('')
   const locked = readOnly || disabled
   const act = (action, extra = {}) => onAction?.({ action, source_message_id: msg.id, ...extra })
@@ -40,7 +40,7 @@ export default function PersistedMessage({ message: msg, nmls, persona, onAction
     {msg.role === 'assistant' && <>
       <div className="flex items-center gap-2 text-[11px] text-slate-500">
         <span>{msg.persona_snapshot?.name || (legacy ? 'Local history' : 'Lucie')}</span>
-        {!legacy && <span>· Saved</span>}
+        {!legacy && statusLabel && <span>· {statusLabel}</span>}
       </div>
       <ComplianceNotice flags={msg.compliance_flags} />
     </>}
