@@ -110,9 +110,9 @@ h3 {
    provider from the browser/OS setting or the Appearance choice in Settings). These are the
    pieces that live in plain CSS. */
 :root.dark {
-  --lucie-ink: #eef2f6;
-  --lucie-canvas: #0e1218;
-  --lucie-accent: #3fa3b7;
+  --lucie-ink: #f4f7fa;
+  --lucie-canvas: #1f2837;
+  --lucie-accent: #4fb3c7;
   --lucie-selection: #1e4f5a;
 }
 
@@ -120,16 +120,16 @@ h3 {
    button flips to a light fill so it still stands out. */
 .dark .lucie-auth {
   --neon-primary: #e8edf3;
-  --neon-primary-foreground: #161c25;
+  --neon-primary-foreground: #2b3649;
   --neon-ring: #cbd5e1;
-  --neon-background: #0e1218;
-  --neon-card: #161c25;
-  --neon-card-foreground: #eef2f6;
-  --neon-foreground: #eef2f6;
-  --neon-muted-foreground: #9ba7b7;
-  --neon-border: #2a3340;
-  --neon-input: #3a4555;
+  --neon-background: #1f2837;
+  --neon-card: #2b3649;
+  --neon-card-foreground: #f4f7fa;
+  --neon-foreground: #f4f7fa;
+  --neon-muted-foreground: #b0bbca;
+  --neon-border: #43506a;
+  --neon-input: #5a6985;
   --color-primary: #e8edf3;
-  --color-primary-foreground: #161c25;
+  --color-primary-foreground: #2b3649;
   --color-ring: #cbd5e1;
 }

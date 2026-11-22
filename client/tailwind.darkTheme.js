@@ -36,20 +36,26 @@ function sourceTokens() {
 
 // Neutral surfaces in dark mode, darkest to lightest.
 export const darkTokens = {
-  canvas: '#0e1218', // page background
-  surface: '#161c25', // cards, panels, inputs (light theme: white)
-  raised: '#1f2732', // hover rows, chips (light theme: slate-100)
-  raised2: '#29323f', // pressed / stronger fills (light theme: slate-200)
-  line: '#2a3340', // default borders
-  lineStrong: '#3a4555',
-  ink: '#eef2f6', // primary text
+  // Layered slate/navy surfaces: sidebar (darkest) < page < panels < cards < hover/chips, so each
+  // layer reads as separate from the next instead of everything sinking into one near-black.
+  sidebar: '#161d2a', // sidebar and mobile bar
+  canvas: '#1f2837', // page background
+  panel: '#243042', // subtle panels on the page (light theme: slate-50)
+  surface: '#2b3649', // cards, dialogs (light theme: white)
+  raised: '#364359', // hover rows, chips (light theme: slate-100)
+  raised2: '#425068', // pressed / stronger fills (light theme: slate-200)
+  field: '#222c3c', // inputs sit slightly below the card they are on
+  line: '#43506a', // default borders
+  lineStrong: '#5a6985',
+  ink: '#f4f7fa', // primary text
+  bubble: '#1a7f95', // user chat bubble: Lucent teal, white text 5:1
   // Dark buttons (bg-slate-900, bg-lucent-navy) flip to a light fill in dark mode so the main
   // action still stands out; dark *containers* (mobile bar, sign-in side panel) are lifted.
   invertBg: '#e8edf3',
   invertBgHover: '#ffffff',
   invertInk: '#161c25',
-  lifted: '#232c3a',
-  liftedHover: '#2c3747',
+  lifted: '#3a4760', // selected cards and other dark containers
+  liftedHover: '#44526d',
 }
 
 const t = darkTokens
@@ -57,12 +63,12 @@ const t = darkTokens
 // Background, text and border colors for the light-theme neutrals.
 const neutralBackgrounds = {
   white: t.surface,
-  'slate-50': '#121820',
+  'slate-50': t.panel,
   'slate-100': t.raised,
   'slate-200': t.raised2,
-  'slate-300': '#364051',
-  'slate-400': '#4b5668',
-  'gray-50': '#121820',
+  'slate-300': '#4d5b73',
+  'slate-400': '#64738c',
+  'gray-50': t.panel,
   'gray-100': t.raised,
   'gray-200': t.raised2,
   'lucent-cream': t.canvas,
@@ -70,27 +76,27 @@ const neutralBackgrounds = {
 const neutralText = {
   black: t.ink,
   'slate-900': t.ink,
-  'slate-800': '#e2e8f0',
-  'slate-700': '#d3dbe5',
-  'slate-600': '#b5c0ce',
-  'slate-500': '#9ba7b7',
-  'slate-400': '#838fa0',
-  'slate-300': '#5f6a7a',
+  'slate-800': '#e8edf3',
+  'slate-700': '#dbe2eb',
+  'slate-600': '#c6cfdb',
+  'slate-500': '#b0bbca',
+  'slate-400': '#9aa7b8',
+  'slate-300': '#7f8c9f',
   'gray-900': t.ink,
-  'gray-800': '#e2e8f0',
-  'gray-700': '#d3dbe5',
-  'gray-600': '#b5c0ce',
-  'gray-500': '#9ba7b7',
-  'gray-400': '#838fa0',
+  'gray-800': '#e8edf3',
+  'gray-700': '#dbe2eb',
+  'gray-600': '#c6cfdb',
+  'gray-500': '#b0bbca',
+  'gray-400': '#9aa7b8',
   'lucent-navy': t.ink,
 }
 const neutralBorders = {
-  'slate-100': '#222a35',
+  'slate-100': '#38455c',
   'slate-200': t.line,
   'slate-300': t.lineStrong,
-  'slate-400': '#4e5a6c',
+  'slate-400': '#6f7e99',
   'slate-900': '#cbd5e1',
-  'gray-100': '#222a35',
+  'gray-100': '#38455c',
   'gray-200': t.line,
   'gray-300': t.lineStrong,
   'lucent-navy': '#cbd5e1',
@@ -156,6 +162,9 @@ export default function darkThemePlugin({ addBase, theme }) {
   }
 
   for (const [key, color] of Object.entries(neutralBackgrounds)) addWithOpacity('bg', key, color, 'background-color')
+  // Faded cells (calendar days outside the month) must be opaque: translucent fills let the
+  // lighter grid lines show through and make them brighter than the active days.
+  for (const o of OPACITIES) add(`bg-slate-50/${o}`, { 'background-color': t.canvas })
   // Translucent white overlays on colored or dark fills (bg-white/10, /15) stay as they are.
   for (const o of [5, 10, 15, 20, 25]) {
     for (const variant of Object.keys(VARIANTS)) delete rules[selectorFor(variant, `bg-white/${o}`)]
@@ -205,6 +214,9 @@ export default function darkThemePlugin({ addBase, theme }) {
   const fillSel = darkFills.map((k) => cls(`bg-${k}`)).join(', ')
   const interactive = ":is(button, a, [role='button'], [role='radio'], [role='tab'])"
   rules[`${DARK} :is(${fillSel})`] = { 'background-color': t.lifted }
+  // The sidebar and mobile bar (navy containers) are the darkest layer; selected cards and
+  // other dark fills use the lighter `lifted` shade.
+  rules[`${DARK} :is(${cls('bg-lucent-navy')}, ${cls('bg-slate-900')}):is(aside, nav, header, div[class*='md:hidden'])`] = { 'background-color': t.sidebar }
   rules[`${DARK} ${interactive}:is(${fillSel})`] = { 'background-color': t.invertBg, color: t.invertInk }
   rules[`${DARK} ${interactive}:is(${fillSel}) :is(${cls('text-white')}, ${cls('text-slate-50')})`] = { color: 'inherit' }
   for (const k of darkFillHovers) {
@@ -219,6 +231,10 @@ export default function darkThemePlugin({ addBase, theme }) {
     rules[`${DARK} ${cls('hover:!bg-lucent-navy-light')}:hover`] = { 'background-color': `${t.invertBgHover} !important` }
   }
 
+  // The user's chat bubble: Lucent teal instead of the bright iMessage blue, which clashes
+  // with the navy surfaces.
+  if (used.has('bg-imessage-blue')) rules[`${DARK} ${cls('bg-imessage-blue')}`] = { 'background-color': t.bubble }
+
   // Muted text written for dark fills (text-slate-300 on bg-slate-900, etc.) keeps its light
   // color there instead of being darkened like muted text on a light card.
   const keepLight = ['200', '300', '400'].map((n) => [cls(`text-slate-${n}`), colors.slate?.[n]])
@@ -230,7 +246,7 @@ export default function darkThemePlugin({ addBase, theme }) {
     [`:where(${DARK}) *, :where(${DARK}) ::before, :where(${DARK}) ::after`]: { borderColor: t.line },
     // Form fields without a background class otherwise get the browser's gray dark-field fill.
     [`:where(${DARK}) :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']), textarea, select)`]: {
-      backgroundColor: '#121820',
+      backgroundColor: t.field,
       color: t.ink,
     },
     // next-themes also sets color-scheme inline; this keeps form controls and scrollbars dark
