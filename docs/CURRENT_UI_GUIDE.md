@@ -7,7 +7,7 @@ contracts, use the [feature reference](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md).
 ## Choose an audience and start a chat
 
 1. Sign in and select a workspace if you have access to more than one.
-2. On first use or **New Chat**, choose a persona card. Cards show initials, name,
+2. On first use or **New Persona**, choose a persona card. Cards show initials, name,
    description and active selection. Authorized editors also see edit controls and
    **New persona**, with a short name/description form.
 3. Review its numbered guidelines: **01 Brand Voice**, **02 Tone of Voice** and
@@ -18,7 +18,7 @@ contracts, use the [feature reference](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md).
 
 Once saved, a chat has one locked persona UUID. Multiple chats may use the same
 persona. The header shows a persistent persona badge and **Brand Summary**, rather
-than a persona dropdown. Use **Start another chat** or **New Chat** for a different
+than a persona dropdown. Use **Start another chat** or **New Persona** for a different
 audience. Editing the persona definition affects future generations in its chats;
 it does not change the saved messages or their historical persona labels.
 
@@ -108,7 +108,7 @@ persist it. This is a proposal, not an automatic copy of historical client setti
 
 ## Sidebar, output and shared chats
 
-The left side restores stacked **Chat**, **Calendar** and **New Chat** navigation,
+The left side restores stacked **Chat**, **Calendar** and **New Persona** navigation,
 active-view styling and a persona chip. Saved entries show title, persona, a preview
 and output-type badges. Archive and Local history remain separate views; Settings
 is at the bottom. Three suggestions appear per category; **More** rotates them.

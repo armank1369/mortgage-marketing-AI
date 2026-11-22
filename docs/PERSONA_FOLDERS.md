@@ -5,7 +5,7 @@ V2 organizes chats by persona. The Chat sidebar lists one **collapsible folder**
 ## How people use it
 
 - **Sidebar:** click a folder to expand or collapse it. The number beside it is how many chats it holds. Each expanded folder has **＋ New chat** (skips the persona selector), **Persona settings** (that persona's audience, guidance and shared brand fields) and its conversations, newest first, with **Load more conversations**. Which folders are open is remembered in this browser, and the folder of the chat you are in is always open.
-- **New Chat** (left navigation) opens the persona selector. Choosing a persona opens that persona's folder with a fresh chat inside it.
+- **New Persona** (left navigation) opens the persona selector. Choosing a persona opens that persona's folder with a fresh chat inside it.
 - **Archive** is a flat list of archived conversations across all folders. **Local history** is unchanged.
 - A chat's persona is the folder's persona and cannot change. Chats whose persona was deleted keep a read-only "Unavailable persona" folder, and chats saved without a persona (older imports) appear in "Unsorted chats". Neither offers a new chat.
 

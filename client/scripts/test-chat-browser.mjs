@@ -82,7 +82,7 @@ try {
   await evaluate(`localStorage.setItem(${JSON.stringify(legacyKey)}, ${JSON.stringify(legacyBytes)}); localStorage.setItem('lucent_chats', 'unscoped legacy bytes')`)
   await reload()
   const choosePersona = async () => { await wait(`document.querySelector('button[aria-label^="Select persona:"]')`); await evaluate(`document.querySelector('button[aria-label^="Select persona:"]').click()`); await click('Set Brand Guidelines') }
-  const newChat = async () => { await click('New Chat'); await choosePersona() }
+  const newChat = async () => { await click('New Persona'); await choosePersona() }
   const personaFolder = JSON.parse(fixture).persona_snapshot.name
   await evaluate(`window.__stepJ.openConfiguration()`)
   await wait(`document.querySelector('[role=radio][aria-label="Professional to Casual: 2"]')`)
@@ -185,7 +185,7 @@ try {
   assert.equal(await evaluate(`window.__stepJ.db.brand.tone.custom`), 'Preserve tone')
   assert.deepEqual(await evaluate(`window.__stepJ.db.brand.values`), ['Transparency','Accuracy'])
   // Match the old stacked primary navigation and highlight the current view.
-  const positions = await evaluate(`['Chat','Calendar','New Chat'].map(label=>{ const e=document.querySelector('nav[aria-label="Main navigation"] button[aria-label="'+label+'"]'),r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width} })`)
+  const positions = await evaluate(`['Chat','Calendar','New Persona'].map(label=>{ const e=document.querySelector('nav[aria-label="Main navigation"] button[aria-label="'+label+'"]'),r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width} })`)
   assert.ok(positions[0].y < positions[1].y && positions[1].y < positions[2].y)
   assert.equal(positions[0].x, positions[1].x); assert.equal(positions[1].w, positions[2].w)
   await click('Calendar'); assert.equal(await evaluate(`document.querySelector('button[aria-label="Calendar"]').getAttribute('aria-current')`), 'page')
@@ -351,7 +351,7 @@ try {
   assert.equal(await evaluate(`Object.values(window.__stepJ.db.sessions).filter(s => s.voice_settings?.tone).length`), 1)
   await evaluate(`window.__stepJ.switchAccount('account-a', 'viewer')`)
   await wait(`document.body.innerText.includes('Your workspace role permits reading')`)
-  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('New Chat')).disabled`), true)
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('New Persona')).disabled`), true)
   await evaluate(`window.__stepJ.openConfiguration()`)
   await wait(`document.querySelector('input[aria-label="Keywords"]')`)
   assert.equal(await evaluate(`document.querySelector('input[aria-label="Keywords"]').disabled`), true)

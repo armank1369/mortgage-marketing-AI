@@ -65,6 +65,7 @@ export default function ChatPage() {
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [promptCategory, setPromptCategory] = useState(null)
   const [setup, setSetup] = useState(false)
+  const [startNewPersona, setStartNewPersona] = useState(false)
   // Expanded persona folders in the sidebar (remembered per account and workspace in this browser).
   const [openIds, setOpenIds] = useState(() => {
     try { const saved = JSON.parse(globalThis.localStorage?.getItem(`lucie_open_folders:v1:${encodeURIComponent(scope)}`) || '[]'); return Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : [] } catch { return [] }
@@ -148,7 +149,8 @@ export default function ChatPage() {
     if (next === 'local') setLocalId(localChats[0]?.id || null)
     else controller.list(next === 'archive')
   }
-  // "New Chat" always starts at the persona selector, which then opens that persona's folder.
+  // "New Persona" always starts at the persona configurator; saving the persona creates its folder.
+  const newPersona = () => { setStartNewPersona(true); newChat() }
   const newChat = () => {
     setSetupDismissed(false); setSetup(true); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null)
     controller.list(false)
@@ -175,7 +177,7 @@ export default function ChatPage() {
     finally { setExporting(false) }
   }
   const showingSetup = setup || (!setupDismissed && canWrite && view === 'active' && state.active?.unsaved && !state.active.default_persona_id && !state.loading)
-  if (nav !== 'calendar' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup onComplete={startPersonaChat} onCancel={() => { setSetup(false); setSetupDismissed(true) }} /></div>
+  if (nav !== 'calendar' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup startNew={startNewPersona} onComplete={(row) => { setStartNewPersona(false); startPersonaChat(row) }} onCancel={() => { setSetup(false); setSetupDismissed(true); setStartNewPersona(false) }} /></div>
   return <div className="flex h-dvh bg-slate-50 text-slate-800 overflow-hidden">
     {mobileMenu && <button className="fixed inset-0 z-30 bg-slate-900/50 md:hidden" aria-label="Close menu" onClick={() => setMobileMenu(false)} />}
     <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-slate-50 border-r border-slate-200`}>
@@ -186,13 +188,13 @@ export default function ChatPage() {
       </div>
       <nav aria-label="Main navigation" className="space-y-1 p-3">
         {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"]].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
-        <button type="button" aria-label="New Chat" disabled={!canWrite} onClick={newChat} className="mt-3 flex w-full items-center gap-3 rounded-lg border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base">➕</span>New Chat</button>
+        <button type="button" aria-label="New Persona" disabled={!canWrite} onClick={newPersona} className="mt-3 flex w-full items-center gap-3 rounded-lg border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base">➕</span>New Persona</button>
       </nav>
       <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded px-2 py-1 ${view === id ? 'bg-blue-50 text-blue-800' : 'text-slate-500'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
       {view === 'active' && !local ? <nav aria-label="Persona folders" className="flex-1 overflow-y-auto p-3 space-y-0.5">
         <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Persona folders</p>
         {state.foldersError && <p role="status" className="px-2 text-xs text-amber-800">{state.foldersError} <button className="underline" onClick={() => controller.loadFolders(false)}>Retry</button></p>}
-        {!folders.length && <p className="p-3 text-xs text-slate-400">{configLoading ? 'Loading personas…' : 'No personas yet. Add one in Settings to start a folder.'}</p>}
+        {!folders.length && <p className="p-3 text-xs text-slate-400">{configLoading ? 'Loading personas…' : 'No personas yet. Choose New Persona to create your first folder.'}</p>}
         {folders.map((folder) => {
           const open = openIds.includes(folder.id), chats = state.folderChats[folder.id]
           return <div key={folder.id}>
@@ -248,7 +250,7 @@ export default function ChatPage() {
             {offline && <p role="status" className="text-sm text-amber-800">Offline. You can compose a message; generation needs durable storage online.</p>}
             {!canWrite && <p className="text-xs text-slate-500">Your workspace role permits reading this workspace’s saved conversations.</p>}
             {!local && !personaPending && (personaConflict || !persona || configError) && <div className="rounded-xl border bg-white p-3 text-sm">
-              <div className="flex flex-wrap justify-between items-center gap-3"><span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-900">Persona: {persona?.name || state.active?.persona_name || 'Unavailable'}</span><button className={button} disabled={!canWrite} onClick={newChat}>Start another chat</button></div>
+              <div className="flex flex-wrap justify-between items-center gap-3"><span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-900">Persona: {persona?.name || state.active?.persona_name || 'Unavailable'}</span><button className={button} disabled={!canWrite} onClick={() => newChatInFolder()}>Start another chat</button></div>
               <p className="text-xs text-slate-500 mt-2">This conversation stays with one persona. Multiple conversations can use the same persona.</p>
               {(personaConflict || !persona) && <p role="status" className="text-xs text-amber-800 mt-2">This conversation's persona is unavailable, mixed or unknown. History is preserved; start a new chat to generate content.</p>}
               {persona && (!Object.keys(persona.audience_profile || {}).length || !persona.prompt_guidance) && <p className="text-xs text-amber-800 mt-2">Audience details or content guidance are incomplete. Review configuration in Settings.</p>}

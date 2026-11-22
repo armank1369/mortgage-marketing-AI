@@ -6,7 +6,7 @@ import PersonaManager from '../components/PersonaManager.jsx'
 import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 
-export default function PreferenceSetup({ onComplete, onCancel }) {
+export default function PreferenceSetup({ onComplete, onCancel, startNew = false }) {
   const { preferences, setPreferences } = usePreferences()
   const { personas } = useWorkspaceData()
   const [selectedId, setSelectedId] = useState(null)
@@ -30,7 +30,7 @@ export default function PreferenceSetup({ onComplete, onCancel }) {
     <section className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       {onCancel && !selected && <button type="button" onClick={onCancel} className="mb-4 text-xs text-slate-500 hover:text-slate-700">← Back to chats</button>}
       {selected ? <PersonaGuidelines key={selected.id} persona={selected} startChat onBack={() => setEditingId(null)} onDone={complete} /> :
-        <PersonaManager selectedId={activeId} onSelect={(row) => { setSelectedId(row.id); setEditingId(row.id) }} legacyPersona={preferences?.persona} />}
+        <PersonaManager startNew={startNew} selectedId={activeId} onSelect={(row) => { setSelectedId(row.id); setEditingId(row.id) }} legacyPersona={preferences?.persona} />}
     </section>
   </div>
 }
