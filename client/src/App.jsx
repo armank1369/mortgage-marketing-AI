@@ -32,7 +32,10 @@ function ProtectedLucie() {
   return (
     <>
       <AuthLoading>
-        <div>Loading...</div>
+        <div role="status" className="min-h-dvh flex flex-col items-center justify-center gap-3 bg-lucent-cream text-lucent-navy">
+          <span aria-hidden="true" className="h-8 w-8 animate-spin rounded-full border-2 border-lucent-navy/20 border-t-lucent-navy" />
+          <p className="text-sm">Checking your sign-in…</p>
+        </div>
       </AuthLoading>
 
       <RedirectToSignIn />

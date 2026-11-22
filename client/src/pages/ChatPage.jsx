@@ -20,7 +20,7 @@ import ModelComparison from '../components/ModelComparison.jsx'
 import { workspaceApi, apiErrorMessage } from '../lib/api.js'
 import { getCompareConfig, runComparison, chooseComparison, combineComparison, saveRequest } from '../lib/modelCompare.js'
 
-const button = 'rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
+const button = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed'
 const resolved = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
 
 function OperationStatus({ operation, controller, canWrite, disabled, retryDisabled, onRetry }) {
@@ -193,17 +193,18 @@ export default function ChatPage() {
   if (nav !== 'calendar' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup onComplete={startPersonaChat} onCancel={() => { setSetup(false); setSetupDismissed(true) }} /></div>
   return <div className="flex h-dvh bg-slate-50 text-slate-800 overflow-hidden">
     {mobileMenu && <button className="fixed inset-0 z-30 bg-slate-900/50 md:hidden" aria-label="Close menu" onClick={() => setMobileMenu(false)} />}
-    <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-slate-50 border-r border-slate-200`}>
+    <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-lucent-navy shadow-xl md:shadow-none app-sidebar`}>
+      <div aria-hidden="true" className="h-1 shrink-0 bg-gradient-to-r from-lucent-accent via-blue-300 to-lucent-cream" />
       <div className="p-5 border-b border-slate-100">
-        <div className="flex items-center gap-2.5"><img src={lucieAvatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
-          <div className="leading-tight"><h1 className="text-xl font-extrabold text-slate-900">Lucie</h1><p className="text-[10px] font-medium text-slate-500">Lucent's AI Social Media Assistant</p></div></div>
-        <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
+        <div className="flex items-center gap-2.5"><img src={lucieAvatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-blue-300/60" />
+          <div className="leading-tight"><h1 className="text-xl font-extrabold text-slate-900">Lucie</h1><p className="whitespace-nowrap text-[9px] font-semibold uppercase tracking-wide text-blue-300">Lucent's AI Social Media Assistant</p></div></div>
+        <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
       </div>
       <nav aria-label="Main navigation" className="space-y-1 p-3">
-        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"]].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
-        <button type="button" aria-label="New Chat" disabled={!canWrite} onClick={newChat} className="mt-3 flex w-full items-center gap-3 rounded-lg border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base">➕</span>New Chat</button>
+        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"]].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-slate-100 text-slate-900 shadow-[inset_3px_0_0_#3FA3B7]' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
+        <button type="button" aria-label="New Chat" disabled={!canWrite} onClick={newChat} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-lucent-accent px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base leading-none">+</span>New Chat</button>
       </nav>
-      <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded px-2 py-1 ${view === id ? 'bg-blue-50 text-blue-800' : 'text-slate-500'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
+      <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded-md px-2 py-1 font-medium transition-colors ${view === id ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-900'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
       <nav aria-label="Conversation list" className="flex-1 overflow-y-auto p-3 space-y-2">
         {local && <p className="text-xs text-slate-500 px-2">Read-only history from this account and browser. Nothing is uploaded.</p>}
         {!list.length && <p className="p-3 text-xs text-slate-400">{local ? 'No local history in this account and workspace.' : 'No conversations in this view.'}</p>}
@@ -220,7 +221,7 @@ export default function ChatPage() {
       <p className="p-4 border-t border-slate-100 text-[11px] text-slate-400">{brand?.licensed_person_name || 'Identity not configured'} · NMLS #{nmls}</p>
     </aside>
     <main className="flex min-w-0 flex-1 flex-col">
-      <div className="md:hidden bg-slate-900 text-white px-4 py-3"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}>☰ <span className="ml-3 font-semibold">Lucie</span></button></div>
+      <div className="md:hidden bg-lucent-navy text-white px-4 py-3 border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
       {nav === 'calendar' ? <CalendarPage /> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
@@ -246,7 +247,7 @@ export default function ChatPage() {
             </div>}
             {state.loading && !local && <ConversationSkeleton />}
             {!local && state.before_cursor && <button className={button} onClick={() => controller.open(state.active.id, true)}>Load earlier messages</button>}
-            {!messages.length && !chatComparisons.length && !state.loading && <div className="py-14 text-center"><p className="font-semibold">{local ? 'Select local history' : 'Start a conversation'}</p><p className="text-xs text-slate-500 mt-2">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
+            {!messages.length && !chatComparisons.length && !state.loading && <div className="py-14 text-center"><img src={lucieAvatar} alt="" className="mx-auto mb-4 h-16 w-16 rounded-full object-cover ring-4 ring-blue-100" /><p className="font-display text-lg font-bold text-slate-900">{local ? 'Select local history' : 'Start a conversation'}</p><div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 rounded-full bg-lucent-accent" /><p className="text-sm text-slate-500 mt-3">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
             {messages.map((message) => <PersistedMessage key={message.id} message={message} nmls={nmls} persona={persona?.id} onAction={action} disabled={blocked} providerDisabled={providerBlocked} readOnly={readOnly} legacy={local} />)}
             {!local && chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onCombine={combine} onSave={saveComparison} canSave={!providerBlocked} />)}
             {operations.map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
@@ -265,9 +266,9 @@ export default function ChatPage() {
                   if (!event.repeat && !providerBlocked && input.trim()) event.currentTarget.form.requestSubmit()
                 }}
                 onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
-              <button type="submit" disabled={providerBlocked || !input.trim() || (compareEnabled && compareMode && comparing)} className={`${button} bg-lucent-navy text-white px-5`}>{state.submitting ? 'Saving / generating…' : compareEnabled && compareMode ? (comparing ? 'Comparing…' : 'Compare') : 'Send'}</button>
+              <button type="submit" disabled={providerBlocked || !input.trim() || (compareEnabled && compareMode && comparing)} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{state.submitting ? 'Saving / generating…' : compareEnabled && compareMode ? (comparing ? 'Comparing…' : 'Compare') : 'Send'}</button>
             </form>
-            {compareEnabled && <label className="mt-2 flex items-center gap-2 text-xs text-violet-800"><input type="checkbox" checked={compareMode} onChange={(event) => setCompareMode(event.target.checked)} />Compare and combine (beta). Lucie writes two versions with two AI models, then helps you merge the best of both. Costs about two AI calls per message, plus one per combine or adjustment. Not saved to this chat.</label>}
+            {compareEnabled && <label className="mt-2 flex items-center gap-2 text-xs text-violet-800"><input type="checkbox" checked={compareMode} onChange={(event) => setCompareMode(event.target.checked)} />Compare and combine (beta). Lucie writes two versions with two AI models, then helps you merge the best of both. Costs about two AI calls per message, plus one per combine or adjustment. Save the final version to this chat when you are happy with it.</label>}
             <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves are shared with this workspace.</p>
           </div>
         </footer>}
