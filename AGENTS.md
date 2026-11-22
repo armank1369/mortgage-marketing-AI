@@ -12,4 +12,4 @@ Before changing authentication, database access, personas, chat persistence or A
 6. Distinguish implemented features from reserved schema. Memory, RAG, calendar sync, auto workspace provisioning and historical chat imports are not automatically available merely because their tables exist.
 7. Run and report appropriate tests; separate synthetic/local test success from live integration or production certification. Update the docs when changing the current behavior.
 
-Existing maintained references: `docs/ENVIRONMENT.md`, `docs/AUTHORIZATION_MATRIX.md`, `docs/STEP_I_CONTEXT_CONTRACT.md`, `docs/STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md`, and `docs/WORKSPACE_CHAT_SHARING.md`.
+Existing maintained references: `docs/ENVIRONMENT.md`, `docs/AUTHORIZATION_MATRIX.md`, `docs/STEP_I_CONTEXT_CONTRACT.md`, `docs/STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md`, `docs/WORKSPACE_CHAT_SHARING.md`, and `docs/PERSONA_FOLDERS.md`.

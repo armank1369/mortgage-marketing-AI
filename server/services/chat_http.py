@@ -5,6 +5,10 @@ from auth.workspace_context import require_workspace
 from auth.permissions import require_capability, check_capability
 from errors import ValidationError
 from repositories import chat_persistence_repository as chats
+from repositories import chat_voice_repository as voices
+from repositories import chat_title_repository as titles
+from services.chat_titles import suggest_title
+from services.voice_settings import normalize_voice
 from services.chat_contract import (create_fields, patch_fields, operation_fields, only,
                                     page_limit, decode_cursor, MAX_BODY_BYTES, PROVIDER_ACTIONS)
 from validation import json_object, uuid_string
@@ -28,14 +32,34 @@ def _unique_args(names):
             raise ValidationError("Duplicate pagination parameter.")
 
 
-def list_v2():
-    _unique_args({"version", "archived", "limit", "cursor"})
+def _archived_arg():
     archived = request.args.get("archived", "false")
     if archived not in {"true", "false"}:
         raise ValidationError("archived must be true or false.")
-    return jsonify(chats.list_sessions(g.workspace_id, member_id(), archived=archived == "true",
+    return archived == "true"
+
+
+def _persona_folder_arg():
+    persona = request.args.get("persona")
+    if persona is None or persona == chats.UNSORTED_FOLDER:
+        return persona
+    return uuid_string(persona, "persona")
+
+
+def list_v2():
+    _unique_args({"version", "archived", "limit", "cursor", "persona"})
+    return jsonify(chats.list_sessions(g.workspace_id, member_id(), archived=_archived_arg(),
                                       limit=page_limit(request.args.get("limit"), 30),
-                                      cursor=decode_cursor(request.args.get("cursor"))))
+                                      cursor=decode_cursor(request.args.get("cursor")),
+                                      persona=_persona_folder_arg()))
+
+
+@blueprint.route("/api/chat/folders", methods=["GET"])
+@require_workspace
+@require_capability("chat:read")
+def folders():
+    _unique_args({"archived"})
+    return jsonify(chats.list_folders(g.workspace_id, member_id(), archived=_archived_arg()))
 
 
 def detail_v2(session_id):
@@ -43,6 +67,7 @@ def detail_v2(session_id):
     result = chats.get_session(g.workspace_id, uuid_string(session_id, "session_id"), member_id(),
                                limit=page_limit(request.args.get("limit"), 50),
                                before=decode_cursor(request.args.get("before")))
+    result["voice_settings"] = voices.load(g.workspace_id, result["id"])
     response = jsonify(result)
     response.headers["ETag"] = result["etag"]
     return response
@@ -52,8 +77,13 @@ def detail_v2(session_id):
 @require_workspace
 @require_capability("chat:create")
 def create(session_id):
-    fields = create_fields(body())
+    data = body()
+    fields = create_fields(data)
+    voice = normalize_voice(data.get("voice_settings"))
     result, created = chats.create_session(g.workspace_id, uuid_string(session_id, "session_id"), member_id(), **fields)
+    if voice:
+        voices.save(g.workspace_id, result["id"], member_id(), voice)
+        result["voice_settings"] = voice
     response = jsonify(result)
     response.status_code = 201 if created else 200
     response.headers["ETag"] = result["etag"]
@@ -69,6 +99,43 @@ def patch(session_id):
     response = jsonify(result)
     response.headers["ETag"] = result["etag"]
     return response
+
+
+@blueprint.route("/api/chat/sessions/<session_id>/voice", methods=["PUT"])
+@require_workspace
+@require_capability("chat:write")
+def put_voice(session_id):
+    """Replace this conversation's tone/age overrides. An empty body object restores the defaults."""
+    data = body()
+    only(data, {"voice_settings"})
+    saved = voices.save(g.workspace_id, uuid_string(session_id, "session_id"), member_id(), data.get("voice_settings"))
+    return jsonify({"voice_settings": saved})
+
+
+@blueprint.route("/api/chat/sessions/<session_id>/title", methods=["POST"])
+@require_workspace
+@require_capability("chat:write")
+def name_chat(session_id):
+    """Write a specific, folder-unique title from the chat's first exchange. One model call, never retried.
+
+    Only titles Lucie assigned are replaced. `{"force": true}` (the Suggest title button) also replaces a
+    title a person wrote. Repeating the request after a successful title changes nothing.
+    """
+    check_capability(g.workspace_context, "ai:generate")
+    data = body()
+    only(data, {"force"})
+    force = data.get("force", False)
+    if type(force) is not bool:
+        raise ValidationError("force must be a boolean.")
+    session_id = uuid_string(session_id, "session_id")
+    info = titles.title_context(g.workspace_id, session_id, member_id(), force=force)
+    if not info["eligible"]:
+        return jsonify({"changed": False, "session": info["session"]})
+    candidate = suggest_title(current_app.extensions["generation_runtime"], info["first_request"], info["first_reply"], info["taken"])
+    if not candidate:
+        return jsonify({"changed": False, "session": info["session"]})
+    session, changed = titles.apply_title(g.workspace_id, session_id, member_id(), info["title"], candidate)
+    return jsonify({"changed": changed, "session": session})
 
 
 @blueprint.route("/api/chat/sessions/<session_id>/operations", methods=["POST"])

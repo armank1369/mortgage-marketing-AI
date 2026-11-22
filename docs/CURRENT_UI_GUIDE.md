@@ -7,18 +7,18 @@ contracts, use the [feature reference](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md).
 ## Choose an audience and start a chat
 
 1. Sign in and select a workspace if you have access to more than one.
-2. On first use or **New Chat**, choose a persona card. Cards show initials, name,
+2. On first use or **New Persona**, choose a persona card. Cards show initials, name,
    description and active selection. Authorized editors also see edit controls and
    **New persona**, with a short name/description form.
-3. Review its numbered guidelines: **01 Brand Voice**, **02 Tone of Voice** and
-   **03 Target Audience**. Confirm with **Set Brand Guidelines** before composing.
+3. Review its numbered guidelines: **01 Brand-wide** (core values and tone) and
+   **02 Target Audience**. Confirm with **Set Brand Guidelines** before composing.
    Readers can review/use a persona; configuration changes require editor permission.
 4. Send your first request to create the saved conversation. Before this, the chat
    is an unsaved local draft and its persona selection may change.
 
 Once saved, a chat has one locked persona UUID. Multiple chats may use the same
 persona. The header shows a persistent persona badge and **Brand Summary**, rather
-than a persona dropdown. Use **Start another chat** or **New Chat** for a different
+than a persona dropdown. Use **Start another chat** or **New Persona** for a different
 audience. Editing the persona definition affects future generations in its chats;
 it does not change the saved messages or their historical persona labels.
 
@@ -119,7 +119,7 @@ the generated social images keep their own fonts. The user chat bubble stays iMe
 
 ## Sidebar, output and shared chats
 
-The left side restores stacked **Chat**, **Calendar** and **New Chat** navigation,
+The left side restores stacked **Chat**, **Calendar** and **New Persona** navigation,
 active-view styling and a persona chip. Saved entries show title, persona, a preview
 and output-type badges. Archive and Local history remain separate views; Settings
 is at the bottom. Three suggestions appear per category; **More** rotates them.

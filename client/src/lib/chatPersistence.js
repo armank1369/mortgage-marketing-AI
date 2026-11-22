@@ -20,6 +20,7 @@ const apiError = (err) => {
     permission_denied: 'Your workspace role does not permit this action.', not_found: 'This conversation or source is unavailable.',
     generation_configuration_required: 'Review the brand and persona configuration in Settings.',
     database_unavailable: 'Conversation storage is unavailable. No unsaved generation will be started.',
+    voice_storage_missing: 'Per-chat voice settings need a database update before they can be saved.',
     validation_error: 'Check the selected persona, input and source before trying again.' })[code] ||
     'The request could not be confirmed. Check its status before making another attempt.'
 }
@@ -42,7 +43,10 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       initialPending = parsed
     }
   } catch { initialError = 'Pending-request storage cannot be read. Resolve browser storage access before generating.' }
-  let state = { sessions: [], next_cursor: null, archived: false, active: null, messages: [], before_cursor: null,
+  // Persona folders live in the sidebar. `folders` holds per-persona counts and `folderChats` the
+  // conversations of each expanded folder, keyed by persona id ('none' = chats saved without a persona).
+  let openFolders = new Set(), folderSequence = new Map()
+  let state = { sessions: [], next_cursor: null, archived: false, folders: [], foldersError: '', folderChats: {}, active: null, messages: [], before_cursor: null,
     operations: [], pending: initialPending, loading: false, submitting: false, metadataSaving: false, error: initialError, storageError: initialError }
   const emit = (patch) => { if (!alive) return; state = { ...state, ...patch }; for (const listener of listeners) listener() }
   function persist(pending) {
@@ -72,6 +76,33 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       const data = await request(`${base}?version=2&archived=${archived}&limit=30${more && state.next_cursor ? `&cursor=${encodeURIComponent(state.next_cursor)}` : ''}`)
       if (seq === listSequence) emit({ archived, sessions: more ? [...new Map([...state.sessions, ...data.sessions].map((s) => [s.id, s])).values()] : data.sessions, next_cursor: data.next_cursor })
     } catch (err) { report(err) }
+    if (!archived) await Promise.all([...openFolders].map((id) => loadFolderChats(id)))
+  }
+  async function loadFolderChats(id, more = false) {
+    const seq = (folderSequence.get(id) || 0) + 1
+    folderSequence.set(id, seq)
+    const current = state.folderChats[id]
+    try {
+      const data = await request(`${base}?version=2&archived=false&limit=30&persona=${encodeURIComponent(id)}${more && current?.next_cursor ? `&cursor=${encodeURIComponent(current.next_cursor)}` : ''}`)
+      if (seq !== folderSequence.get(id) || !openFolders.has(id)) return
+      const sessions = more && current ? [...new Map([...current.sessions, ...data.sessions].map((row) => [row.id, row])).values()] : data.sessions
+      emit({ folderChats: { ...state.folderChats, [id]: { sessions, next_cursor: data.next_cursor } } })
+    } catch (err) { report(err) }
+  }
+  // The set of expanded sidebar folders. Newly expanded folders load their chats; collapsed ones are dropped.
+  function setOpenFolders(ids) {
+    openFolders = new Set(ids)
+    const kept = Object.fromEntries(Object.entries(state.folderChats).filter(([id]) => openFolders.has(id)))
+    if (Object.keys(kept).length !== Object.keys(state.folderChats).length) emit({ folderChats: kept })
+    return Promise.all([...openFolders].filter((id) => !kept[id]).map((id) => loadFolderChats(id)))
+  }
+  let folderCountSequence = 0
+  async function loadFolders(archived = state.archived) {
+    const seq = ++folderCountSequence
+    try {
+      const data = await request(`/api/chat/folders?archived=${archived}`)
+      if (seq === folderCountSequence) emit({ folders: data.folders || [], foldersError: '' })
+    } catch (err) { if (err.code !== 'ERR_CANCELED' && seq === folderCountSequence) emit({ foldersError: 'Persona folders could not be loaded.' }) }
   }
   async function open(id, older = false, refresh = false) {
     const seq = refresh || older ? selection : ++selection
@@ -101,6 +132,34 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     emit({ active: { id: uuid(), title: 'New conversation', default_persona_id: personaId, unsaved: true },
       messages: [], operations: [], before_cursor: null, loading: false, error: state.storageError })
   }
+  // Tone scales and age range for this conversation only. {} restores the brand and persona defaults.
+  async function setVoice(voice = {}) {
+    const active = state.active
+    if (!active) return
+    if (active.unsaved) { emit({ active: { ...active, voice_settings: voice } }); return voice }
+    if (state.metadataSaving) throw Error('A conversation edit is already being saved.')
+    emit({ metadataSaving: true })
+    try {
+      const saved = await request(`${base}/${active.id}/voice`, 'PUT', { voice_settings: voice })
+      if (state.active?.id === active.id) emit({ active: { ...state.active, voice_settings: saved.voice_settings }, error: state.storageError })
+      return saved.voice_settings
+    } catch (err) { report(err); throw err }
+    finally { emit({ metadataSaving: false }) }
+  }
+  // Ask the server to write a specific, folder-unique title from this chat's first exchange. Automatic
+  // naming runs once per chat after its first reply and never surfaces an error. `force` (the Suggest
+  // title button) also replaces a title a person wrote.
+  const named = new Set()
+  async function nameChat(id, { force = false } = {}) {
+    if (!force) { if (named.has(id)) return; named.add(id) }
+    try {
+      const data = await request(`${base}/${id}/title`, 'POST', force ? { force: true } : {})
+      const saved = data?.session
+      if (saved?.title && state.active?.id === saved.id && saved.title !== state.active.title) emit({ active: { ...state.active, title: saved.title, etag: saved.etag || state.active.etag } })
+      if (data?.changed) await list()
+      return data
+    } catch (err) { if (force) { report(err); throw err } }
+  }
   async function patch(fields) {
     const active = state.active
     if (!active) return
@@ -127,6 +186,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     try { persist(pending) } catch { /* Durable result is still available; retaining disk record is safe. */ }
     if (state.active?.id === record.session_id) await open(record.session_id, false, true)
     await list()
+    if (result.state === 'succeeded' && record.name_after) void nameChat(record.session_id)
     return result
   }
   function applyStatus(sessionId, result) {
@@ -181,8 +241,9 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     if (unresolved && !retryOf) throw Error('Check or close the active request first.')
     const body = { ...input, operation_key: uuid() }
     if (retryOf) { body.retry_of = retryOf; if (acknowledge) body.acknowledge_uncertain_outcome = true }
-    const record = { session_id: active.id, body, needs_create: !!active.unsaved, create: { title: active.unsaved && active.title === 'New conversation' && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
-      persona_id: active.default_persona_id || input.persona_id || null }, state: 'checking' }
+    const record = { session_id: active.id, body, needs_create: !!active.unsaved, name_after: !!active.unsaved, create: { title: active.unsaved && active.title === 'New conversation' && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
+      persona_id: active.default_persona_id || input.persona_id || null,
+      ...(active.unsaved && Object.keys(active.voice_settings || {}).length ? { voice_settings: active.voice_settings } : {}) }, state: 'checking' }
     return dispatch(record)
   }
   async function check(record) {
@@ -224,7 +285,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       await reconcile()
     },
     stop() { alive = false; ++epoch; ++selection; for (const controller of controllers) controller.abort(); controllers.clear() },
-    list, open, newChat, patch, submit, reconcile, operations, abandon,
+    list, open, newChat, patch, nameChat, setVoice, submit, reconcile, operations, abandon, loadFolders, loadFolderChats, setOpenFolders,
     exportConversation(id) { return collectConversationExport((sessionId, cursor) => request(`${base}/${sessionId}?version=2&limit=100${cursor ? `&before=${encodeURIComponent(cursor)}` : ''}`), id) },
     async archive() { const active = state.active; if (await patch({ archived: true })) {
       if (state.active?.id === active.id) newChat()

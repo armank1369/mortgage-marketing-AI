@@ -37,6 +37,9 @@ def isolate_database(request, monkeypatch):
         def forbidden(*args, **kwargs):
             raise AssertionError("Live database access is forbidden in unit tests")
         monkeypatch.setattr(connection._connection_pool, "connection", forbidden)
+        # Per-chat voice overrides live in their own table; most tests run without any.
+        from repositories import chat_voice_repository
+        monkeypatch.setattr(chat_voice_repository, "load", lambda workspace_id, session_id: {})
         yield
 
 

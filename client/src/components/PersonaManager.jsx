@@ -13,10 +13,10 @@ const proposals = [
   { name: 'First-Time Homebuyer', description: 'People new to the mortgage process who want understandable guidance.', audience_profile: { needs: ['Mortgage process education', 'Clear next steps'] }, prompt_guidance: 'Explain terms step by step without assuming age, income, family status or eligibility. No guarantees.' },
 ]
 
-export default function PersonaManager({ onSelect, legacyPersona, selectedId }) {
+export default function PersonaManager({ onSelect, legacyPersona, selectedId, startNew = false }) {
   const scope = useBrowserScope()
   const { personas, setPersonas, canWrite, loading, error: loadError, reload } = useWorkspaceData()
-  const [draft, setDraft] = useState(null)
+  const [draft, setDraft] = useState(() => startNew && canWrite ? { name: '', description: '' } : null)
   const [guidelinesId, setGuidelinesId] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
