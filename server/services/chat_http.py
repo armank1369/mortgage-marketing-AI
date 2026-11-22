@@ -6,6 +6,8 @@ from auth.permissions import require_capability, check_capability
 from errors import ValidationError
 from repositories import chat_persistence_repository as chats
 from repositories import chat_voice_repository as voices
+from repositories import chat_title_repository as titles
+from services.chat_titles import suggest_title
 from services.voice_settings import normalize_voice
 from services.chat_contract import (create_fields, patch_fields, operation_fields, only,
                                     page_limit, decode_cursor, MAX_BODY_BYTES, PROVIDER_ACTIONS)
@@ -108,6 +110,32 @@ def put_voice(session_id):
     only(data, {"voice_settings"})
     saved = voices.save(g.workspace_id, uuid_string(session_id, "session_id"), member_id(), data.get("voice_settings"))
     return jsonify({"voice_settings": saved})
+
+
+@blueprint.route("/api/chat/sessions/<session_id>/title", methods=["POST"])
+@require_workspace
+@require_capability("chat:write")
+def name_chat(session_id):
+    """Write a specific, folder-unique title from the chat's first exchange. One model call, never retried.
+
+    Only titles Lucie assigned are replaced. `{"force": true}` (the Suggest title button) also replaces a
+    title a person wrote. Repeating the request after a successful title changes nothing.
+    """
+    check_capability(g.workspace_context, "ai:generate")
+    data = body()
+    only(data, {"force"})
+    force = data.get("force", False)
+    if type(force) is not bool:
+        raise ValidationError("force must be a boolean.")
+    session_id = uuid_string(session_id, "session_id")
+    info = titles.title_context(g.workspace_id, session_id, member_id(), force=force)
+    if not info["eligible"]:
+        return jsonify({"changed": False, "session": info["session"]})
+    candidate = suggest_title(current_app.extensions["generation_runtime"], info["first_request"], info["first_reply"], info["taken"])
+    if not candidate:
+        return jsonify({"changed": False, "session": info["session"]})
+    session, changed = titles.apply_title(g.workspace_id, session_id, member_id(), info["title"], candidate)
+    return jsonify({"changed": changed, "session": session})
 
 
 @blueprint.route("/api/chat/sessions/<session_id>/operations", methods=["POST"])

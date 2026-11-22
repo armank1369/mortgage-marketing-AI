@@ -22,3 +22,17 @@ export function buildPersonaFolders(personas = [], summaries = []) {
 export function folderFor(folders, id) {
   return folders.find((folder) => folder.id === id) || null
 }
+
+// Sidebar chat rows: newest first, with the time of day as well as the date.
+export function newestFirst(sessions = []) {
+  const time = (row) => Date.parse(row.updated_at || '') || 0
+  return [...sessions].sort((a, b) => time(b) - time(a) || String(b.id).localeCompare(String(a.id)))
+}
+
+export function formatChatTime(value, now = new Date(), locale) {
+  const date = new Date(value || now)
+  if (Number.isNaN(date.getTime())) return ''
+  const options = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+  if (date.getFullYear() !== now.getFullYear()) options.year = 'numeric'
+  return date.toLocaleString(locale, options)
+}

@@ -7,7 +7,7 @@ import { useChatPersistence } from '../lib/useChatPersistence.js'
 import { projectConversation } from '../lib/chatSerialization.js'
 import { loadChatsFromStorage } from '../utils/storage.js'
 import { PROMPT_CATEGORIES } from '../lib/chatPrompts.js'
-import { buildPersonaFolders, folderFor } from '../lib/chatFolders.js'
+import { buildPersonaFolders, folderFor, newestFirst, formatChatTime } from '../lib/chatFolders.js'
 import { defaultVoice, customVoiceCount } from '../lib/voiceSettings.js'
 import VoiceSettings from '../components/VoiceSettings.jsx'
 import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
@@ -61,6 +61,7 @@ export default function ChatPage() {
   const [localId, setLocalId] = useState(null)
   const [inputs, setInputs] = useState({})
   const [titleEdit, setTitleEdit] = useState(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [promptCategory, setPromptCategory] = useState(null)
   const [setup, setSetup] = useState(false)
@@ -206,9 +207,9 @@ export default function ChatPage() {
               {!folder.available && <p className="px-1 py-1 text-[11px] text-slate-500">This persona is unavailable, so its chats are read only.</p>}
               {!chats && <p role="status" className="px-1 py-1 text-[11px] text-slate-400">Loading…</p>}
               {chats && !chats.sessions.length && <p className="px-1 py-1 text-[11px] text-slate-400">No chats yet.</p>}
-              {chats?.sessions.map((chat) => <button key={chat.id} type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg px-2 py-1.5 text-left ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
+              {chats && newestFirst(chats.sessions).map((chat) => <button key={chat.id} type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg px-2 py-1.5 text-left ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
                 <span className="block truncate text-[13px] font-medium">{chat.title || 'Conversation'}</span>
-                <span className="block text-[10px] text-slate-400">{new Date(chat.updated_at || Date.now()).toLocaleDateString()}</span>
+                <span className="block text-[10px] text-slate-400">{formatChatTime(chat.updated_at)}</span>
               </button>)}
               {chats?.next_cursor && <button type="button" className={`${button} w-full`} onClick={() => controller.loadFolderChats(folder.id, true)}>Load more conversations</button>}
             </div>}
@@ -287,7 +288,9 @@ export default function ChatPage() {
     {summaryOpen && <Dialog title="Brand Summary" onClose={() => setSummaryOpen(false)}><BrandSummary persona={local ? localChat?.persona : persona} brand={brand} /></Dialog>}
     {titleEdit !== null && <Dialog title="Rename conversation" onClose={() => setTitleEdit(null)}><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); run(() => controller.patch({ title: titleEdit.trim() })).then((saved) => { if (saved) setTitleEdit(null) }) }}>
       <label className="text-sm font-semibold">Conversation title<input autoFocus maxLength={200} value={titleEdit} onChange={(event) => setTitleEdit(event.target.value)} className="block w-full border rounded p-2 mt-2" /></label>
-      <div className="flex gap-2"><button type="button" className={button} onClick={() => setTitleEdit(null)}>Cancel</button><button type="submit" className={button} disabled={!titleEdit.trim()}>Save title</button></div>
+      <div className="flex flex-wrap gap-2"><button type="button" className={button} onClick={() => setTitleEdit(null)}>Cancel</button><button type="submit" className={button} disabled={!titleEdit.trim() || suggesting}>Save title</button>
+        <button type="button" className={button} disabled={suggesting || state.metadataSaving || !state.active?.id || state.active.unsaved} onClick={() => { setSuggesting(true); run(() => controller.nameChat(state.active.id, { force: true })).then((data) => { if (data?.session?.title) setTitleEdit(data.session.title) }).finally(() => setSuggesting(false)) }}>{suggesting ? 'Suggesting…' : 'Suggest a title'}</button></div>
+      <p className="text-[11px] text-slate-500">Suggest a title writes a specific, unique name from this conversation using one short AI call, and replaces the current title right away.</p>
     </form></Dialog>}
     {confirmArchive && <Dialog title="Archive this conversation?" onClose={() => setConfirmArchive(false)}><div className="space-y-4"><p className="text-sm">This archives the conversation for everyone in this workspace. Its messages remain available in Archive and can be restored. A new unsent conversation will open.</p><div className="flex gap-2"><button className={button} onClick={() => setConfirmArchive(false)}>Cancel</button><button className={button} onClick={() => run(() => controller.archive()).then(() => setConfirmArchive(false))}>Archive and start new</button></div></div></Dialog>}
   </div>

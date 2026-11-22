@@ -6,6 +6,8 @@ const otherScope = JSON.stringify(['account-b', 'workspace-a'])
 const persona = '11111111-1111-4111-8111-111111111111'
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r }); return { promise, resolve } }
+// Automatic chat naming is a separate, optional POST; operation tests count only provider operations.
+const isOperationPost = (r) => r.method === 'POST' && !r.url.endsWith('/title')
 const http = (status, error) => Object.assign(Error('synthetic'), { response: { status, data: { error } } })
 function fixture({ initial = new Map(), override } = {}) {
   const calls = [], writes = [], sessions = new Map(), messages = new Map(), results = new Map()
@@ -87,9 +89,9 @@ test('lost reply after commit reloads using GET only and never repeats provider 
   }
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona }); c.stop()
   assert.equal(c.getSnapshot().messages.length, 0)
-  const before = f.calls.filter((r) => r.method === 'POST').length
+  const before = f.calls.filter(isOperationPost).length
   const reloaded = f.make(); await reloaded.start()
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, before)
+  assert.equal(f.calls.filter(isOperationPost).length, before)
   assert.equal(reloaded.getSnapshot().messages.at(-1).content, 'saved text')
   assert.equal(reloaded.getSnapshot().pending.length, 0)
   reloaded.stop()
@@ -110,11 +112,11 @@ test('uncertain status remains unresolved; only explicit acknowledged retry crea
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
   const key = c.operations()[0].operation_key
   for (let i = 0; i < 2; i++) await c.reconcile()
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 1)
+  assert.equal(f.calls.filter(isOperationPost).length, 1)
   assert.equal(c.operations()[0].state, 'unknown')
   await assert.rejects(c.submit({ action: 'send', message: 'new', persona_id: persona }))
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona }, { retryOf: key, acknowledge: true })
-  const retry = f.calls.filter((r) => r.method === 'POST').at(-1).data
+  const retry = f.calls.filter(isOperationPost).at(-1).data
   assert.notEqual(retry.operation_key, key)
   assert.equal(retry.retry_of, key); assert.equal(retry.acknowledge_uncertain_outcome, true)
   c.stop()
@@ -124,13 +126,13 @@ test('404 status never auto-posts; deliberate resubmission preserves exact input
   let disconnect = true
   const f = fixture({ override: (config) => config.method === 'POST' && disconnect ? Promise.reject(Error('disconnected before dispatch')) : null })
   const c = f.make(); await c.start(); await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
-  const body = f.calls.find((r) => r.method === 'POST').data
+  const body = f.calls.find(isOperationPost).data
   await c.reconcile()
   assert.equal(c.operations()[0].state, 'unconfirmed')
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 1)
+  assert.equal(f.calls.filter(isOperationPost).length, 1)
   disconnect = false
   await c.resend(body.operation_key)
-  assert.deepEqual(f.calls.filter((r) => r.method === 'POST').at(-1).data, body)
+  assert.deepEqual(f.calls.filter(isOperationPost).at(-1).data, body)
   c.stop()
 })
 
@@ -142,7 +144,7 @@ test('scope change and disposal suppress late replies and subsequent requests', 
   f.switchScope(); c.stop(); const stopped = c.getSnapshot()
   barrier.resolve({ data: { id: before.id, title: 'foreign late title' } }); await send
   assert.equal(c.getSnapshot(), stopped)
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 0)
+  assert.equal(f.calls.filter(isOperationPost).length, 0)
   assert.ok(f.calls.find((r) => r.method === 'PUT').signal.aborted)
   assert.notEqual(pendingStorageKey(scope), pendingStorageKey(otherScope))
 })
@@ -163,10 +165,10 @@ test('rapid duplicate clicks dispatch once and terminal provider errors stay ope
   const c = f.make(); await c.start()
   const one = c.submit({ action: 'send', message: 'prompt', persona_id: persona }); await tick()
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
-  const key = f.calls.find((r) => r.method === 'POST').data.operation_key
+  const key = f.calls.find(isOperationPost).data.operation_key
   const result = { operation_key: key, state: 'failed', safe_error_code: 'generation_failed' }
   barrier.resolve({ data: result }); await one
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 1)
+  assert.equal(f.calls.filter(isOperationPost).length, 1)
   assert.deepEqual(c.getSnapshot().messages, [])
   c.stop()
 })
@@ -240,8 +242,8 @@ test('shortening an existing conversation does not require a new creation or a c
   const before = f.calls.filter((r) => r.method === 'PUT').length
   await c.submit({ action: 'shorten', source_message_id: 'response' })
   assert.equal(f.calls.filter((r) => r.method === 'PUT').length, before)
-  assert.deepEqual(f.calls.filter((r) => r.method === 'POST').at(-1).data, {
-    action: 'shorten', source_message_id: 'response', operation_key: f.calls.filter((r) => r.method === 'POST').at(-1).data.operation_key,
+  assert.deepEqual(f.calls.filter(isOperationPost).at(-1).data, {
+    action: 'shorten', source_message_id: 'response', operation_key: f.calls.filter(isOperationPost).at(-1).data.operation_key,
   })
   c.stop()
 })
@@ -398,5 +400,39 @@ test('a chat without custom voice sends no voice_settings on creation', async ()
   await c.patch({ default_persona_id: persona })
   await c.submit({ action: 'send', message: 'Plain prompt', persona_id: persona })
   assert.equal('voice_settings' in f.calls.find((r) => r.method === 'PUT').data, false)
+  c.stop()
+})
+
+test('a new chat is named once after its first reply; the title never blocks or errors the chat', async () => {
+  const f = fixture({ override: (config, ctx) => {
+    if (config.url.endsWith('/title')) {
+      const id = config.url.split('/')[4]
+      ctx.sessions.set(id, { ...ctx.sessions.get(id), title: 'Refinance Rate Drop Email', etag: '"v3"' })
+      return { data: { changed: true, session: ctx.sessions.get(id) } }
+    }
+  } })
+  const c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  await c.submit({ action: 'send', message: 'Write an email about refinancing', persona_id: persona })
+  await tick(); await tick()
+  const calls = f.calls.filter((r) => r.url.endsWith('/title'))
+  assert.equal(calls.length, 1); assert.equal(calls[0].method, 'POST')
+  assert.equal(c.getSnapshot().active.title, 'Refinance Rate Drop Email')
+  assert.equal(c.getSnapshot().active.etag, '"v3"')
+  await c.submit({ action: 'send', message: 'Now a shorter one', persona_id: persona })
+  await tick(); await tick()
+  assert.equal(f.calls.filter((r) => r.url.endsWith('/title')).length, 1, 'only the first reply names the chat')
+  c.stop()
+})
+
+test('a failing title request is silent for automatic naming and reported for Suggest a title', async () => {
+  const f = fixture({ override: (config) => config.url.endsWith('/title') ? Promise.reject(http(502, 'provider_unavailable')) : null })
+  const c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  await c.submit({ action: 'send', message: 'Hello there', persona_id: persona })
+  await tick(); await tick()
+  assert.equal(c.getSnapshot().error, '')
+  await assert.rejects(c.nameChat(c.getSnapshot().active.id, { force: true }))
+  assert.ok(c.getSnapshot().error)
   c.stop()
 })

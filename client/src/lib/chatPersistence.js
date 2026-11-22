@@ -146,6 +146,20 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     } catch (err) { report(err); throw err }
     finally { emit({ metadataSaving: false }) }
   }
+  // Ask the server to write a specific, folder-unique title from this chat's first exchange. Automatic
+  // naming runs once per chat after its first reply and never surfaces an error. `force` (the Suggest
+  // title button) also replaces a title a person wrote.
+  const named = new Set()
+  async function nameChat(id, { force = false } = {}) {
+    if (!force) { if (named.has(id)) return; named.add(id) }
+    try {
+      const data = await request(`${base}/${id}/title`, 'POST', force ? { force: true } : {})
+      const saved = data?.session
+      if (saved?.title && state.active?.id === saved.id && saved.title !== state.active.title) emit({ active: { ...state.active, title: saved.title, etag: saved.etag || state.active.etag } })
+      if (data?.changed) await list()
+      return data
+    } catch (err) { if (force) { report(err); throw err } }
+  }
   async function patch(fields) {
     const active = state.active
     if (!active) return
@@ -172,6 +186,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     try { persist(pending) } catch { /* Durable result is still available; retaining disk record is safe. */ }
     if (state.active?.id === record.session_id) await open(record.session_id, false, true)
     await list()
+    if (result.state === 'succeeded' && record.name_after) void nameChat(record.session_id)
     return result
   }
   function applyStatus(sessionId, result) {
@@ -226,7 +241,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     if (unresolved && !retryOf) throw Error('Check or close the active request first.')
     const body = { ...input, operation_key: uuid() }
     if (retryOf) { body.retry_of = retryOf; if (acknowledge) body.acknowledge_uncertain_outcome = true }
-    const record = { session_id: active.id, body, needs_create: !!active.unsaved, create: { title: active.unsaved && active.title === 'New conversation' && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
+    const record = { session_id: active.id, body, needs_create: !!active.unsaved, name_after: !!active.unsaved, create: { title: active.unsaved && active.title === 'New conversation' && input.action === 'send' ? [...input.message.trim()].slice(0, 200).join('') : active.title,
       persona_id: active.default_persona_id || input.persona_id || null,
       ...(active.unsaved && Object.keys(active.voice_settings || {}).length ? { voice_settings: active.voice_settings } : {}) }, state: 'checking' }
     return dispatch(record)
@@ -270,7 +285,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       await reconcile()
     },
     stop() { alive = false; ++epoch; ++selection; for (const controller of controllers) controller.abort(); controllers.clear() },
-    list, open, newChat, patch, setVoice, submit, reconcile, operations, abandon, loadFolders, loadFolderChats, setOpenFolders,
+    list, open, newChat, patch, nameChat, setVoice, submit, reconcile, operations, abandon, loadFolders, loadFolderChats, setOpenFolders,
     exportConversation(id) { return collectConversationExport((sessionId, cursor) => request(`${base}/${sessionId}?version=2&limit=100${cursor ? `&before=${encodeURIComponent(cursor)}` : ''}`), id) },
     async archive() { const active = state.active; if (await patch({ archived: true })) {
       if (state.active?.id === active.id) newChat()

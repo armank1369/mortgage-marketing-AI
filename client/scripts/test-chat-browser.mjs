@@ -72,7 +72,7 @@ try {
   const input = async (selector, value) => evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`)
   const enter = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter'}); await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter'}) }
   const text = () => evaluate('document.body.innerText')
-  const posts = () => evaluate(`window.__stepJ.db.calls.filter(c => c.method === 'POST').length`)
+  const posts = () => evaluate(`window.__stepJ.db.calls.filter(c => c.method === 'POST' && !c.url.endsWith('/title')).length`)
   await cdp('Runtime.enable'); await cdp('Page.enable')
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
   await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/__step_j__` })
@@ -336,8 +336,12 @@ try {
   const voiceDialog = await cdp('Page.captureScreenshot', { format: 'png' })
   await writeFile(path.join(screenshotDir, 'chat-voice-settings.png'), Buffer.from(voiceDialog.data, 'base64'))
   await click('Save for this chat'); await wait(`document.body.innerText.includes('Voice · 1 custom')`)
-  await evaluate(`window.__stepJ.mode = 'text'`)
+  await evaluate(`window.__stepJ.mode = 'text'; window.__stepJ.autoTitle = true`)
   await input('textarea', 'Voice check message'); await click('Send')
+  // The first reply names the chat from its content, and the sidebar lists it first with date and time.
+  const chatRows = `[...document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded])')].filter(b => /\\d:\\d{2}\\s?[AP]M/.test(b.textContent))`
+  await wait(`${chatRows}[0]?.textContent.startsWith('Auto: Voice check message')`)
+  await wait(`document.querySelector('h2')?.textContent === 'Auto: Voice check message'`)
   await wait(`window.__stepJ.db.calls.some(c => c.method === 'PUT' && /\\/api\\/chat\\/sessions\\/[^/]+$/.test(c.url) && c.data?.voice_settings?.tone?.serious === 5)`)
   await wait(`document.body.innerText.includes('Voice · 1 custom')`)
   // Changing it again on the saved chat uses the dedicated voice endpoint and never touches other chats.
@@ -360,7 +364,7 @@ try {
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png' })
   const screenshotPath = path.join(screenshotDir, 'step-j4-mobile.png'); await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   assert.deepEqual(errors, [])
-  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, collapsible persona folders, per-chat tone, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
+  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, collapsible persona folders, newest-first chats with time, automatic chat titles, per-chat tone, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
   console.log(`Screenshot: ${screenshotPath}`)
 } finally {
   ws?.close()

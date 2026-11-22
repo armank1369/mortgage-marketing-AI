@@ -9,6 +9,19 @@ V2 organizes chats by persona. The Chat sidebar lists one **collapsible folder**
 - **Archive** is a flat list of archived conversations across all folders. **Local history** is unchanged.
 - A chat's persona is the folder's persona and cannot change. Chats whose persona was deleted keep a read-only "Unavailable persona" folder, and chats saved without a persona (older imports) appear in "Unsorted chats". Neither offers a new chat.
 
+## Chat order and titles
+
+Inside a folder the most recently active chat is on top, and each row shows the date and the time (the year is added for older chats).
+
+Every chat gets a specific, unique title instead of the persona name:
+
+- **Automatic:** after a new chat's first reply, the server writes a 3 to 7 word title from that first exchange (for example "Refinance Rate Drop Email"). It makes one short call to the configured model (`ANTHROPIC_MODEL`), never retries it, and falls back to a trimmed version of the first request if the call fails. A failure never affects the chat.
+- **Unique:** titles are checked against the other chats in the same persona folder, case-insensitively, and numbered "(2)", "(3)" on a collision. The model is also shown the existing titles so it avoids them.
+- **Never overwrites a person:** only titles Lucie assigned (the persona name, "New conversation", or the pasted first request) are replaced, and the write is skipped if someone renamed the chat in the meantime. Renaming a chat yourself always sticks.
+- **Suggest a title:** the Rename dialog has a button that writes a new title from the conversation on demand (one short AI call). It is the way to name chats created before this feature.
+
+`POST /api/chat/sessions/<id>/title` (optional `{"force": true}`) needs `chat:write` and `ai:generate`, returns `{changed, session}`, and is safe to repeat: after a title is set it changes nothing and makes no model call. No database change is needed.
+
 ## Tone for this chat
 
 The persona (including audience age) belongs to the folder. Only the four tone scales (Professional to Casual, Authoritative to Conversational, Serious to Humorous, Matter of Fact to Enthusiastic) can differ from chat to chat. The chat header's **Voice** button opens them, starting from the shared brand tone in Settings. **Save for this chat** stores only the scales that differ, so later changes to the shared tone still flow into chats that did not override them. **Reset to defaults** removes the overrides. The button shows how many scales are customized.

@@ -71,6 +71,18 @@ window.__stepJ.api = { getWorkspace: () => window.__stepJ.workspace, async send(
       .filter((s) => !query.get('persona') || (query.get('persona') === 'none' ? !s.default_persona_id : s.default_persona_id === query.get('persona'))).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     return { data: { sessions: list.slice(offset, offset + 30).map(presentation), next_cursor: list.length > offset + 30 ? String(offset + 30) : null } }
   }
+  if (method === 'POST' && parts[5] === 'title') {
+    // Synthetic stand-in for the server's title writer; only active when a test turns it on.
+    const row = db.sessions[id]
+    if (!row || row.workspace_id !== workspace) return reject(404, 'not_found')
+    if (!window.__stepJ.autoTitle || (!data.force && row.title !== snapshot.name)) return { data: { changed: false, session: row } }
+    const first = (db.messages[id] || []).find((m) => m.role === 'user')?.content || 'Chat'
+    const taken = Object.values(db.sessions).filter((o) => o.id !== id && o.default_persona_id === row.default_persona_id).map((o) => o.title)
+    let title = `Auto: ${first.slice(0, 30)}`, n = 2
+    while (taken.includes(title)) title = `Auto: ${first.slice(0, 30)} (${n++})`
+    Object.assign(row, { title, etag: JSON.stringify(crypto.randomUUID()) }); save()
+    return { data: { changed: true, session: row } }
+  }
   if (method === 'PUT' && parts[5] === 'voice') {
     const row = db.sessions[id]
     if (!row || row.workspace_id !== workspace) return reject(404, 'not_found')
