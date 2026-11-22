@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 import colors from 'tailwindcss/colors'
+import darkTheme from './tailwind.darkTheme.js'
 
 // Lucie's palette. Both anchors are pixel-sampled from hellolucent.com, Joseph's own brand
 // site: the dark navy used across its large sections (#181E28) and the teal-blue on its
@@ -22,6 +23,8 @@ const lucentTeal = {
 const lucentNavy = '#181E28' // hellolucent.com section navy
 
 export default {
+  // Neon Auth's theme provider puts a `dark` class on <html>; see tailwind.darkTheme.js.
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -62,5 +65,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [darkTheme],
 }
