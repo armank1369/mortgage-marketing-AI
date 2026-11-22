@@ -24,6 +24,12 @@ export const chooseComparison = (api, comparisonId, choice, note) =>
   api.send({ method: 'POST', url: `/api/compare/${comparisonId}/choice`, data: { choice, ...(note ? { note } : {}) } })
     .then((response) => response.data)
 
+export const getComparisonDetail = (api, comparisonId, signal) =>
+  api.send({ method: 'GET', url: `/api/compare/${comparisonId}`, signal }).then((response) => response.data.comparison)
+
+// The request body that saves a result as a normal exchange in the chat (no AI call).
+export const saveRequest = (item, source) => ({ action: 'send', message: item.prompt, comparison: { id: item.data.comparison_id, source } })
+
 export const combineComparison = (api, comparisonId, { feedback, change, refine = false }) =>
   api.send({ method: 'POST', url: `/api/compare/${comparisonId}/combine`,
     data: { ...(feedback ? { feedback } : {}), ...(change ? { change } : {}), refine } })

@@ -39,6 +39,8 @@ def _metrics(result, elapsed):
 
 def execute_operation(workspace_id, session_id, member_id, data, runtime, *, device_zone=None):
     fields = operation_fields(data)
+    if fields.get("comparison"):
+        return chats.save_comparison_operation(workspace_id, session_id, member_id, fields)
     if fields["action"] == "shorten":
         return chats.shorten_operation(workspace_id, session_id, member_id, fields)
     prepared = runs.prepare_operation(workspace_id, session_id, member_id, fields)

@@ -8,7 +8,7 @@ export function decodeMessage(row) {
       (envelope.type === 'social_image' && envelope.render_version !== 1)) return { ...base, type: 'unsupported' }
   return { ...base, ...envelope.payload, type: envelope.type,
     text: envelope.type === 'text' ? envelope.payload?.response || '' : base.text,
-    persona_snapshot: envelope.persona_snapshot, target: envelope.target }
+    persona_snapshot: envelope.persona_snapshot, target: envelope.target, comparison: envelope.comparison }
 }
 
 export function mergeMessages(previous, incoming) {

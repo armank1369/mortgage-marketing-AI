@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createServer } from 'vite'
-import { aspectsFor, candidateMessage, candidateError, chooseComparison, choiceSummary, combineComparison, formatCost, hasFeedback, planSummary, runComparison } from './modelCompare.js'
+import { aspectsFor, candidateMessage, candidateError, chooseComparison, choiceSummary, combineComparison, formatCost, hasFeedback, planSummary, runComparison, saveRequest, getComparisonDetail } from './modelCompare.js'
+import { decodeMessage } from './chatSerialization.js'
 
 const footer = 'Synthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity'
 const textCandidate = { slot: 'A', response: { type: 'text', response: `Plain answer.\n\n${footer}`, compliance_flags: [] } }
@@ -56,6 +57,7 @@ const vite = await createServer({ server: { middlewareMode: true, hmr: false, ws
 } }] })
 after(() => vite.close())
 const { default: ModelComparison } = await vite.ssrLoadModule('/src/components/ModelComparison.jsx')
+const { default: PersistedMessage } = await vite.ssrLoadModule('/src/components/PersistedMessage.jsx')
 const { CalendarProvider } = await vite.ssrLoadModule('/src/context/CalendarContext.jsx')
 const { WorkspaceDataContext } = await vite.ssrLoadModule('/src/context/WorkspaceData.js')
 const { BrowserScopeContext } = await vite.ssrLoadModule('/src/context/BrowserScope.js')
@@ -137,4 +139,44 @@ test('combine requests send feedback, change and refine', async () => {
   const failed = { merge: { round: 2, error: 'provider_rate_limited' } }
   const broken = { send: async () => { throw Object.assign(new Error('502'), { response: { data: { error: 'combine_failed', ...failed } } }) } }
   assert.equal((await combineComparison(broken, 'c1', { refine: true, change: 'x' })).merge.error, 'provider_rate_limited')
+})
+
+test('the combined version and a picked draft can be saved into the chat', () => {
+  const merge = { round: 1, kind: 'combine', response: { type: 'text', response: `Combined answer.\n\n${footer}`, compliance_flags: [] } }
+  const combined = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both, merges: [merge], roundsLeft: 7,
+    reveal: { choice: 'merged', estimated_cost_usd: 0.01, candidates: [] } })
+  assert.match(combined, />Save to this chat</)
+  assert.match(combined, /in your history and Lucie can build on it/)
+  const picked = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both,
+    reveal: { choice: 'B', estimated_cost_usd: 0.01, candidates: [{ slot: 'A', model: 'm1', usage: {} }, { slot: 'B', model: 'm2', usage: {} }] } })
+  assert.match(picked, />Save Version B to this chat</)
+  assert.doesNotMatch(renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both }), /to this chat/)
+  assert.match(renderItem({ id: '1', prompt: 'x', status: 'done', data: both, merges: [merge], saveError: 'Could not save to this chat. Please try again.' }), /Could not save to this chat/)
+})
+
+test('saving is an ordinary send carrying the comparison link', () => {
+  assert.deepEqual(saveRequest({ prompt: 'Write a post', data: { comparison_id: 'c1' } }, 'combined'),
+    { action: 'send', message: 'Write a post', comparison: { id: 'c1', source: 'combined' } })
+})
+
+test('a saved message reopens its comparison; ordinary messages do not', () => {
+  const row = (extra = {}) => ({ id: 'm1', role: 'assistant', content: '', created_at: '2026-11-22T00:00:00Z', compliance_flags: [],
+    structured_data: { schema_version: 1, type: 'text', payload: { response: `Saved answer.\n\n${footer}` }, persona_snapshot: { name: 'Lucie' }, ...extra } })
+  const message = decodeMessage(row({ comparison: { id: 'c1', source: 'combined', round: 2 } }))
+  assert.deepEqual(message.comparison, { id: 'c1', source: 'combined', round: 2 })
+  const html = renderToStaticMarkup(React.createElement(BrowserScopeContext.Provider, { value: '["fake","workspace"]' },
+    React.createElement(WorkspaceDataContext.Provider, { value: { brand: {} } },
+      React.createElement(CalendarProvider, null, React.createElement(PersistedMessage, { message, nmls: '123456' })))))
+  assert.match(html, /How this was made \(combined from two models\)/)
+  assert.match(html, /Saved answer/)
+  assert.doesNotMatch(renderToStaticMarkup(React.createElement(BrowserScopeContext.Provider, { value: '["fake","workspace"]' },
+    React.createElement(WorkspaceDataContext.Provider, { value: { brand: {} } },
+      React.createElement(CalendarProvider, null, React.createElement(PersistedMessage, { message: decodeMessage(row()), nmls: '123456' }))))), /How this was made/)
+})
+
+test('comparison detail is fetched from its own route', async () => {
+  const sent = []
+  const api = { send: async (config) => { sent.push(config); return { data: { comparison: { id: 'c1' } } } } }
+  assert.deepEqual(await getComparisonDetail(api, 'c1'), { id: 'c1' })
+  assert.deepEqual([sent[0].method, sent[0].url], ['GET', '/api/compare/c1'])
 })

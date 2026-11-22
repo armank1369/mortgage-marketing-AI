@@ -435,3 +435,28 @@ def test_merge_model_can_be_configured(monkeypatch):
 def test_clean_feedback_dedupes_and_drops_empty():
     cleaned = model_compare.clean_feedback({"A": {"aspects": [" Hook ", "Hook"], "note": " "}, "B": {"aspects": []}})
     assert cleaned == {"A": {"aspects": ["Hook"], "note": ""}}
+
+
+# ---------------------------------------------------------------- reopening a saved comparison
+
+def test_detail_returns_the_whole_record_for_saved_history(stored, monkeypatch):
+    import datetime
+    from decimal import Decimal
+    monkeypatch.delenv("LUCIE_COMPARE_BETA")  # history stays readable after the beta is switched off
+    record = dict(STORED, feedback={"A": {"aspects": ["Opening hook"], "note": ""}}, chosen_slot="merged",
+                  estimated_cost_usd=Decimal("0.0123"), created_at=datetime.datetime(2026, 11, 22, tzinfo=datetime.timezone.utc),
+                  merges=[{"round": 1, "kind": "combine", "response": {"type": "text", "response": "COMBINED"}}])
+    stored.repo.get_comparison.return_value = record
+    body = stored.get(f"/api/compare/{CID}", headers=stored.headers()).get_json()["comparison"]
+    assert body["prompt"] == STORED["prompt"] and body["chosen_slot"] == "merged"
+    assert body["estimated_cost_usd"] == pytest.approx(0.0123)
+    assert [c["model"] for c in body["candidates"]] == ["claude-sonnet-5-5", "gpt-test"]
+    assert body["candidates"][0]["response"]["response"].startswith("DRAFT-A")
+    assert body["feedback"]["A"]["aspects"] == ["Opening hook"]
+    assert body["merges"][0]["response"]["response"] == "COMBINED"
+    assert stored.repo.get_comparison.call_args.args == (stored.context["workspace_id"], CID)
+
+
+def test_detail_unknown_comparison_is_404(stored):
+    stored.repo.get_comparison.return_value = None
+    assert stored.get(f"/api/compare/{CID}", headers=stored.headers()).status_code == 404

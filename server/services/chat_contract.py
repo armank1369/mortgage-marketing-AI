@@ -12,6 +12,7 @@ from validation import uuid_string
 PROVIDER_ACTIONS = frozenset({"send", "clarify", "regenerate", "video", "social_image"})
 ACTIONS = PROVIDER_ACTIONS | {"shorten"}
 TYPES = frozenset({"text", "posts", "clarification", "campaign", "video", "social_image"})
+COMPARISON_SOURCES = frozenset({"combined", "A", "B"})
 MAX_BODY_BYTES = 128 * 1024
 UNCERTAIN_AFTER_SECONDS = 300
 
@@ -60,7 +61,7 @@ def patch_fields(data):
 
 def operation_fields(data):
     only(data, {"operation_key", "action", "persona_id", "message", "source_message_id",
-                "target", "answers", "retry_of", "acknowledge_uncertain_outcome"})
+                "target", "answers", "retry_of", "acknowledge_uncertain_outcome", "comparison"})
     try:
         if len(canonical(data).encode("utf-8")) > MAX_BODY_BYTES:
             raise ValidationError("Operation body exceeds 128 KiB.")
@@ -78,6 +79,14 @@ def operation_fields(data):
         result["message"] = text(data.get("message"), "message")
         if set(data) & {"source_message_id", "target", "answers"}:
             raise ValidationError("send accepts a message, not a source or answers.")
+        if "comparison" in data:
+            # Saves an already generated compare-and-combine result as this send's response (no provider call).
+            comparison = data["comparison"]
+            only(comparison, {"id", "source"})
+            if comparison.get("source") not in COMPARISON_SOURCES:
+                raise ValidationError("comparison source must be combined, A or B.")
+            result["comparison"] = {"id": uuid_string(comparison.get("id"), "comparison id"),
+                                    "source": comparison["source"]}
     else:
         result["source_message_id"] = uuid_string(data.get("source_message_id"), "source_message_id")
         if "message" in data:
@@ -110,6 +119,8 @@ def operation_fields(data):
         result["answers"].sort(key=lambda answer: answer["question_index"])
     elif "answers" in data:
         raise ValidationError("Only clarify accepts answers.")
+    if "comparison" in data and action != "send":
+        raise ValidationError("Only send accepts a saved comparison.")
     if "retry_of" in data:
         result["retry_of"] = uuid_string(data["retry_of"], "retry_of")
         if result["retry_of"] == result["operation_key"]:

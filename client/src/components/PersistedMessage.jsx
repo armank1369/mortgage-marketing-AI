@@ -6,6 +6,7 @@ import ContentBriefCard from './ContentBriefCard.jsx'
 import SocialImageGenerator from './socialImage/SocialImageGenerator.jsx'
 import ComplianceNotice from './ComplianceNotice.jsx'
 import Section from './Section.jsx'
+import SavedComparison from './SavedComparison.jsx'
 import { stripReviewNotes, buildCampaignEntryCopy } from '../lib/publicationCopy.js'
 
 const button = 'text-xs rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
@@ -59,6 +60,7 @@ export default function PersistedMessage({ message: msg, nmls, persona, onAction
       {!readOnly && msg.type === 'text' && <button className={button} disabled={disabled} onClick={() => act('shorten')}>Make it shorter</button>}
     </div>}
     {copyError && <p role="alert" className="text-xs text-red-700">{copyError}</p>}
+    {msg.role === 'assistant' && msg.comparison?.id && <SavedComparison link={msg.comparison} nmls={nmls} />}
     {msg.previous?.length > 0 && <details className="rounded-lg border border-slate-200 p-3">
       <summary className="cursor-pointer text-xs text-slate-600">Previous versions ({msg.previous.length})</summary>
       <div className="mt-3 space-y-5">{msg.previous.map((prior) => <PersistedMessage key={prior.id} message={{ ...prior, previous: [] }} nmls={nmls} readOnly />)}</div>

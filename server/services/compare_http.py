@@ -166,6 +166,29 @@ def combine(comparison_id):
     return jsonify(body), 200
 
 
+@blueprint.route("/api/compare/<comparison_id>", methods=["GET"])
+@require_workspace
+@require_capability("chat:read")
+def detail(comparison_id):
+    """Full record of a comparison, for reopening one that was saved into a chat.
+
+    Deliberately works even if the beta is later switched off, so saved history stays readable.
+    """
+    comparison_id = uuid_string(comparison_id, "comparison_id")
+    row = comparisons.get_comparison(g.workspace_id, comparison_id)
+    if not row:
+        raise NotFoundError("Comparison not found in this workspace.")
+    cost = row.get("estimated_cost_usd")
+    created = row.get("created_at")
+    return jsonify({"comparison": {
+        "id": comparison_id, "prompt": row["prompt"], "chosen_slot": row.get("chosen_slot"),
+        "candidates": [{**model_compare.reveal_view(c), **({"response": c["response"]} if c.get("response") else {})}
+                       for c in row["candidates"]],
+        "feedback": row.get("feedback") or {}, "merges": row.get("merges") or [],
+        "estimated_cost_usd": float(cost) if cost is not None else None,
+        "created_at": created.isoformat() if hasattr(created, "isoformat") else created}})
+
+
 @blueprint.route("/api/compare/summary", methods=["GET"])
 @require_workspace
 @require_capability("workspace:read")

@@ -18,7 +18,7 @@ import CalendarPage from './CalendarPage.jsx'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 import ModelComparison from '../components/ModelComparison.jsx'
 import { workspaceApi, apiErrorMessage } from '../lib/api.js'
-import { getCompareConfig, runComparison, chooseComparison, combineComparison } from '../lib/modelCompare.js'
+import { getCompareConfig, runComparison, chooseComparison, combineComparison, saveRequest } from '../lib/modelCompare.js'
 
 const button = 'rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
 const resolved = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
@@ -141,6 +141,16 @@ export default function ChatPage() {
         : row) })))
       .catch((err) => updateComparison(key, item.id, { combining: false, choiceError: apiErrorMessage(err, 'Lucie could not combine the versions. Please try again.') }))
   }
+  const saveComparison = (item, source) => {
+    const key = inputKey
+    updateComparison(key, item.id, { saving: true, saveError: '' })
+    // An ordinary send whose result was already generated: it creates the chat if needed and is
+    // idempotent, saved durably like any other message. No AI call is made.
+    action(saveRequest(item, source)).then((result) => {
+      if (result?.request_message_id) setComparisons((previous) => ({ ...previous, [key]: (previous[key] || []).filter((row) => row.id !== item.id) }))
+      else updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' })
+    }).catch(() => updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' }))
+  }
   const send = (text = input) => {
     if (!text.trim() || providerBlocked || !state.active) return
     if (compareEnabled && compareMode) { if (!comparing) compare(text.trim()); return }
@@ -238,7 +248,7 @@ export default function ChatPage() {
             {!local && state.before_cursor && <button className={button} onClick={() => controller.open(state.active.id, true)}>Load earlier messages</button>}
             {!messages.length && !chatComparisons.length && !state.loading && <div className="py-14 text-center"><p className="font-semibold">{local ? 'Select local history' : 'Start a conversation'}</p><p className="text-xs text-slate-500 mt-2">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
             {messages.map((message) => <PersistedMessage key={message.id} message={message} nmls={nmls} persona={persona?.id} onAction={action} disabled={blocked} providerDisabled={providerBlocked} readOnly={readOnly} legacy={local} />)}
-            {!local && chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onCombine={combine} />)}
+            {!local && chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onCombine={combine} onSave={saveComparison} canSave={!providerBlocked} />)}
             {operations.map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
             <div ref={bottom} />
           </div>

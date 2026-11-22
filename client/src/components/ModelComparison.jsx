@@ -24,7 +24,7 @@ function LucieSays({ children }) {
 
 // One beta comparison, as a guided flow: read both drafts, say what works in each, let Lucie
 // combine them, then keep adjusting the combined version until it is ready to copy.
-export default function ModelComparison({ item, nmls, onChoose, onCombine }) {
+export default function ModelComparison({ item, nmls, onChoose, onCombine, onSave, canSave = true }) {
   const [feedback, setFeedback] = useState({ A: { aspects: [], note: '' }, B: { aspects: [], note: '' } })
   const [change, setChange] = useState('')
   const [adjust, setAdjust] = useState('')
@@ -35,7 +35,7 @@ export default function ModelComparison({ item, nmls, onChoose, onCombine }) {
   const usable = candidates.filter((row) => row.response)
   const canAct = !!data?.comparison_id && usable.length > 0
   const picked = reveal && ['A', 'B', 'tie', 'neither'].includes(reveal.choice)
-  const busy = item.choosing || item.combining
+  const busy = item.choosing || item.combining || item.saving
   const toggle = (slot, aspect) => setFeedback((previous) => {
     const aspects = previous[slot].aspects.includes(aspect) ? previous[slot].aspects.filter((a) => a !== aspect) : [...previous[slot].aspects, aspect]
     return { ...previous, [slot]: { ...previous[slot], aspects } }
@@ -112,10 +112,19 @@ export default function ModelComparison({ item, nmls, onChoose, onCombine }) {
               <button type="submit" className={primary} disabled={busy || !adjust.trim()}>Adjust</button>
             </form>
           </div>}
+          {latest && !item.combining && <div className="space-y-1">
+            <button type="button" className={primary} disabled={busy || !canSave} onClick={() => onSave(item, 'combined')}>{item.saving ? 'Saving…' : 'Save to this chat'}</button>
+            <p className="text-xs text-slate-500">Adds your request and this combined version to the conversation, so it is in your history and Lucie can build on it. You can keep adjusting first.</p>
+          </div>}
           {latest && item.roundsLeft === 0 && <p className="text-xs text-slate-500">That's the last adjustment for this comparison. Start a new one to keep going.</p>}
           {!latest && !item.combining && merges.length > 0 && <button type="button" className={primary} disabled={busy} onClick={() => onCombine(item, { feedback, change: change.trim() })}>Try combining again</button>}
         </Step>}
 
+        {picked && ['A', 'B'].includes(reveal.choice) && <div className="space-y-1">
+          <button type="button" className={primary} disabled={busy || !canSave} onClick={() => onSave(item, reveal.choice)}>{item.saving ? 'Saving…' : `Save Version ${reveal.choice} to this chat`}</button>
+          <p className="text-xs text-slate-500">Adds your request and this version to the conversation so it is in your history.</p>
+        </div>}
+        {item.saveError && <p role="alert" className="text-xs text-red-700">{item.saveError}</p>}
         {item.choiceError && <p role="alert" className="text-xs text-red-700">{item.choiceError}</p>}
         {reveal && <div className="rounded-lg bg-white p-3 text-xs text-slate-600 space-y-1">
           <p className="font-medium text-slate-800">{choiceSummary(reveal.choice, reveal.candidates)} Thanks, this helps Lucie learn what you like.</p>

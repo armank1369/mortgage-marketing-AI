@@ -27,13 +27,21 @@ model is better at hooks, tone, calls to action and so on.
 7. **Step 3, adjust until it's right.** Quick chips (*Make it shorter*, *Sound more casual*,
    *Stronger call to action*, …) or a typed instruction rework the latest combined version,
    one call each, up to 8 rounds per comparison. Earlier rounds stay viewable. Copy when happy.
-8. If one draft is already right, *Use Version A/B as is* or *Neither works* records that
+8. **Save to this chat.** Under the combined version (or after picking a draft) *Save to this
+   chat* adds the original request and the chosen version to the conversation as an ordinary
+   exchange: it appears in history, the chat list preview, and later Lucie replies can build on it;
+   Regenerate and Make it shorter work on it. A *How this was made* section under the saved reply
+   reopens both drafts, what was liked, every round and the cost. Saving makes no AI call, creates
+   the chat if it is still unsent, and is safe to retry (the same save is never added twice).
+9. If one draft is already right, *Use Version A/B as is* or *Neither works* records that
    instead. Either way Lucie then reveals the models, tokens, latency and cost of each side.
 
 Scope and limits of this beta:
 
-- Comparison prompts are **single-turn**: earlier messages in the chat are not sent, and
-  neither version is saved into the conversation. Use Copy to keep a version.
+- Comparison prompts are **single-turn**: earlier messages in the chat are not sent to the
+  models. The comparison itself is always stored in `public.model_comparison`; it only enters the
+  chat history when the user clicks *Save to this chat*. An unsaved comparison disappears from
+  the screen on refresh (the record stays in the database).
 - Images and video scripts are not compared; only the chat reply.
 - Viewers can read the summary but cannot run comparisons (`ai:generate` is required).
 - A failed side shows a friendly error; the other side is still shown and logged.
@@ -104,6 +112,11 @@ combined, "neither" votes, unvoted comparisons, failures, total estimated cost, 
   `POST /api/compare/<id>/choice`, `POST /api/compare/<id>/combine` (combine, or
   `refine: true` to adjust the latest combined version), `GET /api/compare/summary`.
 - `server/repositories/model_comparison_repository.py`: workspace-scoped storage.
+- Saving into a chat: a normal `send` operation carrying `comparison: {id, source}`
+  (`source` = `combined`, `A` or `B`). `generation_operations.execute_operation` routes it to
+  `chat_persistence_repository.save_comparison_operation`, which claims and completes it in one
+  transaction from the stored comparison (no provider call). `GET /api/compare/<id>` reads the
+  record back and keeps working if the beta is later switched off.
 - `client/src/components/ModelComparison.jsx`, `client/src/lib/modelCompare.js`, and the
   toggle in `client/src/pages/ChatPage.jsx`.
 - Tests: `server/tests/test_model_compare.py`, `client/src/lib/modelCompare.test.js`

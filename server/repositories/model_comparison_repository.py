@@ -65,7 +65,7 @@ def get_comparison(workspace_id: str, comparison_id: str) -> Optional[Dict[str, 
     def work(cursor):
         cursor.execute(
             """
-            SELECT id, persona_id, prompt, candidates, feedback, merges, chosen_slot, estimated_cost_usd
+            SELECT id, persona_id, prompt, candidates, feedback, merges, chosen_slot, estimated_cost_usd, created_at
             FROM public.model_comparison
             WHERE id = %s AND workspace_id = %s;
             """,

@@ -400,7 +400,7 @@ def _owned_claim(cur, session_id, key, token, member_id):
     return row
 
 
-def _complete_locked(cur, session_id, row, response):
+def _complete_locked(cur, session_id, row, response, extra=None):
     operation = row["structured_data"]["operation"]
     if operation["state"] == "succeeded":
         return _status(cur, row)
@@ -466,6 +466,8 @@ def _complete_locked(cur, session_id, row, response):
                 "original_request_id": row["structured_data"].get("original_request_id") or str(row["id"])}
     if fields.get("target"):
         envelope["target"] = fields["target"]
+    if extra:
+        envelope.update(extra)
     if kind == "social_image":
         envelope["render_version"] = 1
     content = response["response"] if kind == "text" else canonical(response)
@@ -543,3 +545,44 @@ def shorten_operation(workspace_id, session_id, member_id, data):
             result = _complete_locked(cur, session_id, row,
                                       {"type": "text", "response": shortened, "compliance_flags": source["compliance_flags"]})
     return result
+
+
+def save_comparison_operation(workspace_id, session_id, member_id, fields):
+    """Save a compare-and-combine result as an ordinary send/response exchange. No provider call.
+
+    The user message is the stored original prompt; the assistant message is the chosen draft or
+    the latest combined version, linked to its full comparison record. Claim and completion share
+    one transaction, so a failure leaves no half-saved request.
+    """
+    link = fields["comparison"]
+    with get_db_transaction() as cur:
+        lock_member(cur, workspace_id, member_id, "chat:write", "ai:generate")
+        workspace_session(cur, workspace_id, session_id, lock=True)
+        row, created = _claim_locked(cur, workspace_id, session_id, member_id, fields)
+        if not created:
+            return _status(cur, row)
+        cur.execute("SELECT prompt, persona_id, candidates, merges FROM public.model_comparison "
+                    "WHERE id=%s AND workspace_id=%s", (link["id"], workspace_id))
+        found = cur.fetchone()
+        if not found:
+            raise NotFoundError("Comparison not found in this workspace.")
+        if found["prompt"].strip() != fields["message"]:
+            raise ValidationError("The message must match the comparison prompt.")
+        if str(found["persona_id"] or "") != fields["persona_id"]:
+            raise ValidationError("This comparison was made with a different persona.")
+        round_number = None
+        if link["source"] == "combined":
+            rounds = [m for m in found["merges"] if isinstance(m, dict) and m.get("response")]
+            if not rounds:
+                raise ValidationError("There is no combined version to save yet.")
+            response, round_number = rounds[-1]["response"], rounds[-1].get("round")
+        else:
+            draft = next((c for c in found["candidates"] if c.get("slot") == link["source"]), None)
+            if not draft or not draft.get("response"):
+                raise ValidationError("That draft is not available to save.")
+            response = draft["response"]
+        if not isinstance(response, dict) or response.get("type") not in {"text", "posts", "campaign"}:
+            raise ValidationError("This kind of response cannot be saved from a comparison.")
+        extra = {"comparison": {"id": link["id"], "source": link["source"],
+                                **({"round": round_number} if round_number else {})}}
+        return _complete_locked(cur, session_id, row, response, extra=extra)
