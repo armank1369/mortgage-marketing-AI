@@ -15,7 +15,9 @@ ANALYSIS_PROMPT = (
     "Rules: use only numbers that appear in the data, and quote them exactly; never estimate, "
     "extrapolate or invent figures, benchmarks or industry averages. If something cannot be judged "
     "from the data (for example performance when no exports were imported), say what data is missing "
-    "instead of guessing. 'Posts scheduled' counts calendar slots, which may not all have been posted. "
+    "instead of guessing. Prefer 'activity' (posts that actually went out, from imported platform exports) over kpis.posts_scheduled, "
+    "which counts calendar slots that may never have been posted. 'activity' is null when nothing has been imported: "
+    "then say actual posting cannot be verified. Calendar-based fields describe plans, not what happened. "
     "Be specific and practical: name the platform, persona, weekday or campaign involved. "
     "Recommend marketing actions only; never suggest rates, pricing, guarantees or borrower outcomes. "
     "Plain sentences, no markdown, no emoji. Keep each item to one or two sentences."
@@ -50,7 +52,7 @@ def kpi_hash(kpis):
 
 
 def _brief(kpis):
-    data = {key: kpis[key] for key in ("period", "kpis", "mix", "campaigns", "flags", "performance") if key in kpis}
+    data = {key: kpis[key] for key in ("period", "kpis", "mix", "campaigns", "flags", "activity", "performance") if key in kpis}
     return json.dumps(data, default=str, separators=(",", ":"))
 
 

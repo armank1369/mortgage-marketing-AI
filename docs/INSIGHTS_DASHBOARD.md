@@ -4,19 +4,9 @@ The **Insights** page (sidebar, owners and admins only) shows KPIs for the selec
 
 ## What it measures
 
-**Content pipeline** (works today, from existing tables):
+**Posting activity** (what actually went out): posts published, posts per week, longest gap, days since the last post, and platform / persona / weekday mix. These come from the imported platform exports, not from Lucie's calendar, because people do not reliably log every post in Lucie. The measured window ends on the day of the newest import (or today), so an old export is not read as "nothing posted". With no import, the page falls back to calendar slots and says plainly that they are not confirmed posts.
 
-| KPI | Source |
-|---|---|
-| Posts scheduled, posts per week, change vs. previous period | `calendar_entry` (not cancelled), local day in the entry's timezone |
-| Longest gap without a scheduled post | same |
-| Next 14 days: planned posts and empty days | same |
-| Platform, format, persona and weekday mix | `calendar_entry` + `content_item` + `persona` |
-| Drafts Lucie wrote, and share that reached the calendar | assistant `chat_message` rows of type `posts`/`campaign`, and whether a `content_item` cites them |
-| Compliance flags on scheduled posts | `display_data.details.compliance_flags` |
-| Campaign progress | `campaign` with linked calendar entries |
-
-Lucie has no "mark as posted" action yet, so "scheduled" means a calendar slot, not a confirmed post.
+**Planning in Lucie** (from existing tables): empty days in the next 14, drafts Lucie wrote and the share that reached the calendar, compliance flags on planned posts, and active campaign slots. These describe plans, not outcomes.
 
 **Results** (needs the migration below and an import): reach, engagements (likes + comments + shares + saves), engagement rate (engagements / reach, falling back to impressions then views), clicks, follows, rate by platform / persona / weekday, top posts, and Lucie-scheduled posts vs. everything else.
 

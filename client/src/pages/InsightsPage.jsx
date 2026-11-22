@@ -42,6 +42,47 @@ function Bars({ title, rows, value = (r) => r.count, label = (r) => r.label, for
   </section>
 }
 
+function PostingActivity({ activity, data }) {
+  const k = data.kpis
+  const calendar = changeLabel(k.posts_scheduled.change_pct)
+  if (activity?.available) {
+    const rate = changeLabel(activity.posts_per_week.change_pct)
+    const since = activity.days_since_last_post.value
+    return <section className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posting activity</h3>
+      <p className={subtle}>What actually went out, from your imported exports (data through {activity.data_through}). Import a newer export to extend it.</p>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Posts published" value={activity.posts.value} detail={`${activity.posts.previous} in the previous period`} />
+        <Stat label="Posts per week" value={activity.posts_per_week.value} detail={rate.text} tone={rate.tone} />
+        <Stat label="Longest gap" value={`${activity.longest_gap_days.value} days`} detail="Without a post" />
+        <Stat label="Since last post" value={since === null ? '—' : `${since} days`} detail={activity.days_since_last_post.last_post_day ? `Last: ${activity.days_since_last_post.last_post_day}` : undefined} />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Bars title="Posts by platform" rows={activity.mix.platform} />
+        <Bars title="Posts by persona" note="Posts not matched to Lucie's calendar are grouped separately" rows={activity.mix.persona} />
+        <Bars title="Posts by weekday" rows={activity.mix.weekday} />
+      </div>
+    </section>
+  }
+  const reason = activity && activity.reason === 'export_too_old'
+    ? `The newest import covers data only through ${activity.data_through}, which is before this period. Import a newer export.`
+    : 'Import a Meta Business Suite or LinkedIn export to see what was actually posted. Until then these figures are calendar slots only, and Lucie cannot tell whether each one went out.'
+  return <section className="space-y-3">
+    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posting activity</h3>
+    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{reason}</p>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Stat label="Calendar slots" value={k.posts_scheduled.value} detail={calendar.text} tone={calendar.tone} hint="Slots on the calendar in this period, not confirmed posts" />
+      <Stat label="Slots per week" value={k.posts_per_week.value} detail={`${k.posts_per_week.previous} in the previous period`} />
+      <Stat label="Longest gap" value={`${k.longest_gap_days.value} days`} detail="Without a calendar slot" />
+    </div>
+    <div className="grid gap-3 lg:grid-cols-3">
+      <Bars title="Slots by platform" rows={data.mix.platform} />
+      <Bars title="Slots by persona" rows={data.mix.persona} />
+      <Bars title="Slots by weekday" rows={data.mix.weekday} />
+    </div>
+  </section>
+}
+
 function Analysis({ report, busy, error, onRun, hasData }) {
   return <section className={`${card} border-blue-200`}>
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -186,7 +227,6 @@ export default function InsightsPage() {
   }, [scope, days])
 
   const k = data?.kpis
-  const posts = k && changeLabel(k.posts_scheduled.change_pct)
   const drafts = k && changeLabel(k.drafts_generated.change_pct)
   return <div className="flex min-w-0 flex-1 flex-col">
     <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
@@ -215,26 +255,20 @@ export default function InsightsPage() {
             <ImportPanel scope={scope} onImported={() => setRevision((n) => n + 1)} />
           </section>
 
+          <PostingActivity activity={data.activity} data={data} />
+
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Content pipeline</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planning in Lucie</h3>
+            <p className={subtle}>What is planned and drafted inside Lucie. This is not a record of what was posted.</p>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label="Posts scheduled" value={k.posts_scheduled.value} detail={posts.text} tone={posts.tone} hint="Calendar slots in this period. Lucie cannot yet tell whether each one was actually posted." />
-              <Stat label="Posts per week" value={k.posts_per_week.value} detail={`${k.posts_per_week.previous} in the previous period`} />
-              <Stat label="Longest gap" value={`${k.longest_gap_days.value} days`} detail="Without anything scheduled" />
               <Stat label={`Next ${k.upcoming.days} days`} value={`${k.upcoming.value} planned`} detail={`${k.upcoming.empty_days} empty days`} tone={k.upcoming.empty_days > k.upcoming.days / 2 ? 'down' : 'neutral'} />
               <Stat label="Drafts Lucie wrote" value={k.drafts_generated.value} detail={drafts.text} tone={drafts.tone} hint="Post and campaign responses in chat" />
-              <Stat label="Drafts that reached the calendar" value={formatRate(k.draft_to_calendar_pct.value)} detail={`${k.draft_to_calendar_pct.saved} saved`} />
-              <Stat label="Compliance flags" value={k.compliance_flagged.value} detail="Scheduled posts with a review flag" tone={k.compliance_flagged.value ? 'down' : 'neutral'} />
-              <Stat label="Active campaigns" value={data.campaigns.length} />
-            </div>
-            <div className="grid gap-3 lg:grid-cols-3">
-              <Bars title="Platform mix" rows={data.mix.platform} />
-              <Bars title="Persona mix" rows={data.mix.persona} />
-              <Bars title="Scheduled by weekday" rows={data.mix.weekday} />
+              <Stat label="Drafts saved to the calendar" value={formatRate(k.draft_to_calendar_pct.value)} detail={`${k.draft_to_calendar_pct.saved} saved`} />
+              <Stat label="Compliance flags" value={k.compliance_flagged.value} detail="Planned posts with a review flag" tone={k.compliance_flagged.value ? 'down' : 'neutral'} />
             </div>
             {data.campaigns.length > 0 && <section className={card}>
-              <h3 className="text-sm font-semibold text-slate-900">Campaigns</h3>
-              <table className="mt-2 w-full text-xs"><thead><tr className="text-left text-slate-500"><th className="font-medium">Campaign</th><th className="font-medium">Dates</th><th className="font-medium text-right">Posts done / planned</th></tr></thead>
+              <h3 className="text-sm font-semibold text-slate-900">Active campaigns</h3>
+              <table className="mt-2 w-full text-xs"><thead><tr className="text-left text-slate-500"><th className="font-medium">Campaign</th><th className="font-medium">Dates</th><th className="font-medium text-right">Slots passed / planned</th></tr></thead>
                 <tbody className="text-slate-800">{data.campaigns.map((c) => <tr key={c.name + c.start_date}><td className="py-1">{c.name}</td><td>{c.start_date || '—'} to {c.end_date || '—'}</td><td className="text-right tabular-nums">{c.past} / {c.scheduled}</td></tr>)}</tbody></table>
             </section>}
           </section>

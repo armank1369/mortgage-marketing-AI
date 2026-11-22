@@ -72,6 +72,7 @@ def compute(entries, generated, campaigns, *, today, days, metrics=None):
                    if today + timedelta(days=n) not in covered_ahead]
     weekday_counts = Counter(WEEKDAYS[e["day"].weekday()] for e in current)
 
+    activity = posting_activity(metrics, start=start, previous_start=previous_start, today=today)
     saved_rate = (round(generated["current_saved"] / generated["current"] * 100)
                   if generated["current"] else None)
     active_campaigns = [c for c in campaigns if c["status"] != "archived" and
@@ -105,25 +106,69 @@ def compute(entries, generated, campaigns, *, today, days, metrics=None):
                        "start_date": c["start_date"].isoformat() if c["start_date"] else None,
                        "end_date": c["end_date"].isoformat() if c["end_date"] else None,
                        "scheduled": c["scheduled"], "past": c["past"]} for c in active_campaigns],
-        "flags": _flags(current, upcoming, empty_ahead, days, start, today),
+        "flags": _flags(current, upcoming, empty_ahead, days, start, today, activity),
+        "activity": activity,
         "performance": performance(metrics, start=start, previous_start=previous_start, today=today),
     }
 
 
-def _flags(current, upcoming, empty_ahead, days, start, today):
+def posting_activity(metrics, *, start, previous_start, today):
+    """What was actually posted, taken from imported platform exports rather than the calendar.
+
+    Imports are a snapshot, so the measured window ends on the day of the newest import (or today,
+    if sooner). Counting days after that as "nothing posted" would punish an old export. Because
+    the window can be shorter than the period, comparisons use posts per week, not raw counts.
+    """
+    if not metrics:
+        return None
+    end = min(today, max(m["imported_at"] for m in metrics).date())
+    if end < start:
+        return {"available": False, "reason": "export_too_old", "data_through": end.isoformat()}
+    current = [m for m in metrics if start <= m["day"] <= end]
+    previous = [m for m in metrics if previous_start <= m["day"] < start]
+    period_days = (end - start).days + 1
+    prev_days = (start - previous_start).days
+    rate = round(len(current) / (period_days / 7), 1)
+    prev_rate = round(len(previous) / (prev_days / 7), 1)
+    weekday = Counter(WEEKDAYS[m["day"].weekday()] for m in current)
+    latest = max((m["day"] for m in metrics if m["day"] <= end), default=None)
+    return {
+        "available": True,
+        "data_through": end.isoformat(),
+        "window_days": period_days,
+        "posts": {"value": len(current), "previous": len(previous)},
+        "posts_per_week": {"value": rate, "previous": prev_rate, "change_pct": _change(rate, prev_rate)},
+        "longest_gap_days": {"value": _longest_gap({m["day"] for m in current}, start, end)},
+        "days_since_last_post": {"value": (today - latest).days if latest else None,
+                                 "last_post_day": latest.isoformat() if latest else None},
+        "mix": {"platform": _mix(Counter(m["platform"] for m in current), len(current)),
+                "persona": _mix(Counter(m["persona"] or "Not from Lucie" for m in current), len(current)),
+                "weekday": [{"label": d, "count": weekday.get(d, 0)} for d in WEEKDAYS]},
+    }
+
+
+def _flags(current, upcoming, empty_ahead, days, start, today, activity=None):
     """Rule-based observations shown even before any written analysis exists."""
     flags = []
-    if not current:
-        flags.append({"level": "warn", "text": f"Nothing was scheduled in the last {days} days."})
-    gap = _longest_gap({e["day"] for e in current}, start, today)
-    if current and gap >= STALE_GAP_DAYS:
-        flags.append({"level": "warn", "text": f"The longest stretch without a scheduled post was {gap} days."})
+    if activity and activity.get("available"):
+        if not activity["posts"]["value"]:
+            flags.append({"level": "warn", "text": f"No posts went out in the last {days} days (data through {activity['data_through']})."})
+        elif activity["longest_gap_days"]["value"] >= STALE_GAP_DAYS:
+            flags.append({"level": "warn", "text": f"The longest stretch without a post was {activity['longest_gap_days']['value']} days."})
+        top = activity["mix"]["platform"][:1]
+        if activity["posts"]["value"] >= 4 and top and top[0]["share"] >= 75:
+            flags.append({"level": "info", "text": f"{top[0]['label']} accounts for most posts. Other channels are quiet."})
+    elif not activity:
+        if not current:
+            flags.append({"level": "warn", "text": f"Nothing was scheduled in the last {days} days."})
+        gap = _longest_gap({e["day"] for e in current}, start, today)
+        if current and gap >= STALE_GAP_DAYS:
+            flags.append({"level": "warn", "text": f"The longest stretch without a scheduled post was {gap} days."})
+        platforms = Counter(e["platform"] or "Other" for e in current)
+        if len(current) >= 4 and platforms.most_common(1)[0][1] / len(current) >= 0.75:
+            flags.append({"level": "info", "text": f"{platforms.most_common(1)[0][0]} carries most of the calendar. Other channels are quiet."})
     if len(empty_ahead) >= UPCOMING_DAYS // 2:
         flags.append({"level": "warn", "text": f"{len(empty_ahead)} of the next {UPCOMING_DAYS} days have nothing scheduled."})
-    platforms = Counter(e["platform"] or "Other" for e in current)
-    if len(current) >= 4 and platforms and platforms.most_common(1)[0][1] / len(current) >= 0.75:
-        name = platforms.most_common(1)[0][0]
-        flags.append({"level": "info", "text": f"{name} carries most of the calendar. Other channels are quiet."})
     if upcoming and not empty_ahead:
         flags.append({"level": "good", "text": f"Every day in the next {UPCOMING_DAYS} days has something planned."})
     return flags

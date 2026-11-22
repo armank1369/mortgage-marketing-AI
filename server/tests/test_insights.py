@@ -187,3 +187,25 @@ def test_analysis_route_uses_only_computed_numbers(client, monkeypatch):
     assert client.post("/api/insights/analysis", headers=client.headers(), json={}).status_code == 502
     client.context["role"] = "viewer"
     assert client.post("/api/insights/analysis", headers=client.headers(), json={}).status_code == 403
+
+
+def test_activity_comes_from_imports_not_the_calendar():
+    # The calendar shows posts that were never logged; the import is the source of truth.
+    rows = [metric(date(2026, 11, d)) for d in (2, 4, 9, 16)] + [metric(date(2026, 10, 5))]
+    result = insights.compute([entry(date(2026, 11, 20))], GENERATED, [], today=TODAY, days=30, metrics=rows)
+    a = result["activity"]
+    assert a["available"] and a["data_through"] == "2026-11-20"  # Import day, not today.
+    assert a["posts"] == {"value": 4, "previous": 1}
+    assert a["longest_gap_days"]["value"] == 10  # Oct 23 - Nov 1; the stale tail is not counted.
+    assert a["days_since_last_post"] == {"value": 5, "last_post_day": "2026-11-16"}
+    assert a["mix"]["platform"] == [{"label": "Instagram", "count": 4, "share": 100}]
+    assert "10 days" in " ".join(f["text"] for f in result["flags"] if f["level"] == "warn")
+    assert not any("scheduled post was" in f["text"] for f in result["flags"])
+
+
+def test_activity_absent_without_imports_and_old_export_is_flagged():
+    assert insights.compute([], GENERATED, [], today=TODAY, days=30)["activity"] is None
+    old = metric(date(2026, 8, 1))
+    old["imported_at"] = datetime(2026, 8, 2, tzinfo=timezone.utc)
+    result = insights.compute([], GENERATED, [], today=TODAY, days=30, metrics=[old])
+    assert result["activity"] == {"available": False, "reason": "export_too_old", "data_through": "2026-08-02"}
