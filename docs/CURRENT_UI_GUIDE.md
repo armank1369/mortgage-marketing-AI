@@ -106,6 +106,17 @@ change. It is disabled with other profile controls for readers, while saving, or
 when no brand profile exists. Review wording and choose **Save brand profile** to
 persist it. This is a proposal, not an automatic copy of historical client settings.
 
+## Look and colors
+
+Lucie's palette comes from hellolucent.com: navy `#181E28` and the teal-blue `#17788C`
+from its buttons, with cream `#F3F2EC`. It is defined once in `client/tailwind.config.js`
+(Tailwind's stock blue/sky/indigo point at the Lucent teal scale, and `slate-900` is the
+Lucent navy), and the few values plain CSS needs are `--lucie-*` variables in
+`client/src/index.css`. The sidebar is dark navy; `.app-sidebar` in `index.css` remaps
+light-surface utilities inside it, so new sidebar content needs no per-element colors.
+**New Chat** is the one teal accent button. Body text is Inter and headings Montserrat;
+the generated social images keep their own fonts. The user chat bubble stays iMessage blue.
+
 ## Sidebar, output and shared chats
 
 The left side restores stacked **Chat**, **Calendar** and **New Chat** navigation,

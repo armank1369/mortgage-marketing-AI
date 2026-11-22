@@ -212,6 +212,13 @@ export default function darkThemePlugin({ addBase, theme }) {
     rules[`${DARK} ${interactive}${cls(`hover:bg-${k}`)}:hover:is(${fillSel})`] = { 'background-color': t.invertBgHover }
   }
 
+  // Buttons forced to the navy fill with `!` utilities (the chat Send button) flip like other
+  // dark buttons. Their forced colors need !important to beat the utilities.
+  if (used.has('!bg-lucent-navy')) {
+    rules[`${DARK} ${cls('!bg-lucent-navy')}`] = { 'background-color': `${t.invertBg} !important`, color: `${t.invertInk} !important`, 'border-color': `${t.invertBg} !important` }
+    rules[`${DARK} ${cls('hover:!bg-lucent-navy-light')}:hover`] = { 'background-color': `${t.invertBgHover} !important` }
+  }
+
   // Muted text written for dark fills (text-slate-300 on bg-slate-900, etc.) keeps its light
   // color there instead of being darkened like muted text on a light card.
   const keepLight = ['200', '300', '400'].map((n) => [cls(`text-slate-${n}`), colors.slate?.[n]])
