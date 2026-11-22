@@ -76,14 +76,13 @@ export default function PersonaGuidelines({ persona, onBack, onDone, startChat =
     {configError && <p role="alert" className="mb-4 text-sm text-red-700">{configError}</p>}
     {!canWrite && <p className="mb-5 text-xs text-slate-500">Your role can review these guidelines. An owner or administrator can edit them.</p>}
     <fieldset disabled={disabled}>
-      <BrandSetupSection number="01" title="Brand Voice" note="Brand-wide: applies to every persona and folder in this workspace. Change it here and all of them follow.">
+      <BrandSetupSection number="01" title="Brand-wide" note="Applies to every persona and folder in this workspace; change it here and all of them follow. In any single chat, the Voice button can adjust the tone for that conversation only.">
         <p className="mb-3 text-xs text-slate-500">What principles guide everything your brand does?</p>
         <TagInput label="Core values" value={draft.coreValues} pending={pendingValue} onPendingChange={setPendingValue} disabled={!brand?.exists || disabled} placeholder="e.g. Transparency" onChange={(value) => setDraft({ ...draft, coreValues: value })} />
-      </BrandSetupSection>
-      <BrandSetupSection number="02" title="Brand-wide Tone of Voice" note="This is the starting tone for every persona and folder. In any single chat, the Voice button can adjust it for that conversation only.">
+        <h3 className="mb-3 mt-6 text-sm font-semibold text-slate-900">Tone of voice</h3>
         <ToneScales value={draft.tone} disabled={disabled || !brand?.exists} onChange={(key, value) => { const tone = { ...draft.tone }; if (value === undefined) delete tone[key]; else tone[key] = value; setDraft({ ...draft, tone }) }} />
       </BrandSetupSection>
-      <BrandSetupSection number="03" title="Target Audience">
+      <BrandSetupSection number="02" title="Target Audience">
         {audience && <>
           <div className="mb-6">
             <div className="mb-3 flex items-center justify-between gap-3"><span className="text-sm font-semibold text-slate-900">Age range: {configuredAge ? `${audience.ageRange[0]}-${audience.ageRange[1]}` : customAge ? 'Custom stored value' : 'Not set'}</span>
