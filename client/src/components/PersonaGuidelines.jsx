@@ -83,7 +83,7 @@ export default function PersonaGuidelines({ persona, onBack, onDone, startChat =
       <BrandSetupSection number="02" title="Brand-wide Tone of Voice" note="This is the starting tone for every persona and folder. In any single chat, the Voice button can adjust it for that conversation only.">
         <ToneScales value={draft.tone} disabled={disabled || !brand?.exists} onChange={(key, value) => { const tone = { ...draft.tone }; if (value === undefined) delete tone[key]; else tone[key] = value; setDraft({ ...draft, tone }) }} />
       </BrandSetupSection>
-      <BrandSetupSection number="03" title="Target Audience" note="Specific to this persona (its folder). Every chat in the folder uses it; it is not changed per chat.">
+      <BrandSetupSection number="03" title="Target Audience">
         {audience && <>
           <div className="mb-6">
             <div className="mb-3 flex items-center justify-between gap-3"><span className="text-sm font-semibold text-slate-900">Age range: {configuredAge ? `${audience.ageRange[0]}-${audience.ageRange[1]}` : customAge ? 'Custom stored value' : 'Not set'}</span>
