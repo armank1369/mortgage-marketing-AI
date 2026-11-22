@@ -20,9 +20,7 @@ load_real = voices.load  # captured before conftest stubs it out
 
 @pytest.mark.parametrize("data,expected", [
     (None, {}), ({}, {}), ({"tone": {}}, {}),
-    ({"tone": {"serious": 5, "professional": 1}, "ageRange": [22, 32]},
-     {"tone": {"professional": 1, "serious": 5}, "ageRange": [22, 32]}),
-    ({"ageRange": [1, 100]}, {"ageRange": [1, 100]}),
+    ({"tone": {"serious": 5, "professional": 1}}, {"tone": {"professional": 1, "serious": 5}}),
 ])
 def test_normalize_accepts_valid_settings(data, expected):
     assert normalize_voice(data) == expected
@@ -30,32 +28,30 @@ def test_normalize_accepts_valid_settings(data, expected):
 
 @pytest.mark.parametrize("data", [
     "loud", [], {"voice": "casual"}, {"tone": {"serious": 6}}, {"tone": {"serious": 0}}, {"tone": {"serious": True}},
-    {"tone": {"serious": "3"}}, {"tone": {"loud": 3}}, {"tone": []}, {"ageRange": [40, 20]}, {"ageRange": [0, 30]},
-    {"ageRange": [20, 101]}, {"ageRange": [20]}, {"ageRange": "20-30"}, {"ageRange": [20.5, 30]},
+    {"tone": {"serious": "3"}}, {"tone": {"loud": 3}}, {"tone": []}, {"ageRange": [20, 30]},
 ])
 def test_normalize_rejects_invalid_settings(data):
     with pytest.raises(ValidationError):
         normalize_voice(data)
 
 
-def test_overrides_merge_over_brand_and_persona_defaults(world, monkeypatch):
+def test_overrides_merge_over_the_brand_tone(world, monkeypatch):
     from services import generation_context as gc
     context = gc.resolve_generation_context(W, persona_id=world[1][1]["id"].__str__())
     brand_tone = json.loads(context.brand.tone or "{}")
-    merged = apply_voice_overrides(context, {"tone": {"serious": 5}, "ageRange": [22, 32]})
+    merged = apply_voice_overrides(context, {"tone": {"serious": 5}})
     tone = json.loads(merged.brand.tone)
     assert tone["serious"] == 5 and {k: v for k, v in tone.items() if k != "serious"} == {k: v for k, v in brand_tone.items() if k != "serious"}
-    assert json.loads(merged.persona.audience_profile)["ageRange"] == [22, 32]
+    assert merged.persona == context.persona
     assert apply_voice_overrides(context, {}) is context
     assert context.brand.tone == json.dumps(brand_tone, ensure_ascii=False, sort_keys=True) or not brand_tone  # original untouched
 
 
 def test_generation_uses_this_conversations_overrides(world, monkeypatch):
-    monkeypatch.setattr(voices, "load", lambda workspace_id, session_id: {"tone": {"serious": 5, "professional": 1}, "ageRange": [22, 32]})
+    monkeypatch.setattr(voices, "load", lambda workspace_id, session_id: {"tone": {"serious": 5, "professional": 1}})
     _, create = run(world)
     system = json.dumps(create.call_args.kwargs["system"])
     assert re.search(r'serious\\+": 5', system) and re.search(r'professional\\+": 1', system)
-    assert re.search(r'ageRange\\+": \[\s*22,\s*32\s*\]', system)
 
 
 def test_generation_without_overrides_is_unchanged(world):
@@ -102,8 +98,8 @@ def voice_db(monkeypatch):
 
 
 def test_save_load_and_clear_round_trip(voice_db):
-    saved = voices.save(W, S, M, {"tone": {"serious": 4}, "ageRange": [30, 50]})
-    assert saved == {"tone": {"serious": 4}, "ageRange": [30, 50]}
+    saved = voices.save(W, S, M, {"tone": {"serious": 4, "professional": 2}})
+    assert saved == {"tone": {"serious": 4, "professional": 2}}
     assert load_real(W, S) == saved
     chats.lock_member.assert_called_with(voice_db, W, M, "chat:write")
     assert voices.save(W, S, M, None) == {} and load_real(W, S) == {}
@@ -146,7 +142,7 @@ def test_create_with_voice_and_detail_expose_settings(client, monkeypatch):
     monkeypatch.setattr(chats, "create_session", create)
     save = Mock()
     monkeypatch.setattr(voices, "save", save)
-    voice = {"tone": {"serious": 5}, "ageRange": [22, 32]}
+    voice = {"tone": {"serious": 5}}
     body = {"title": "Synthetic", "persona_id": "44444444-4444-4444-8444-444444444444", "voice_settings": voice}
     response = client.put(f"/api/chat/sessions/{S}", json=body, headers=client.headers())
     assert response.status_code == 201 and response.json["voice_settings"] == voice

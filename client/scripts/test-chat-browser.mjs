@@ -62,11 +62,13 @@ try {
     const expression = `[...document.querySelectorAll('button')].find(b => ${exact ? `(b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)})` : `b.textContent.includes(${JSON.stringify(label)})`} && !b.disabled)`
     await wait(expression, `button ${label}`); await evaluate(`${expression}.click()`)
   }
-  // Conversation rows live in the Finder-style list in the main pane (not the sidebar's folder list).
+  // Conversation rows live under their persona folder in the sidebar (or in the flat Archive list).
   const openChat = async (title) => {
-    const expression = `[...document.querySelectorAll('ul[aria-label="Conversations"] button')].find(b => b.textContent.includes(${JSON.stringify(title)}))`
+    const expression = `[...document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded]), nav[aria-label="Conversation list"] button')].find(b => b.textContent.includes(${JSON.stringify(title)}))`
     await wait(expression, `conversation ${title}`); await evaluate(`${expression}.click()`)
   }
+  const folderToggle = `document.querySelector('button[aria-label="' + ${JSON.stringify(JSON.parse(fixture).persona_snapshot.name + ' folder')} + '"]')`
+  const expandFolder = async () => { await wait(folderToggle); if (await evaluate(`${folderToggle}.getAttribute('aria-expanded') === 'false'`)) await evaluate(`${folderToggle}.click()`); await wait(`${folderToggle}.getAttribute('aria-expanded') === 'true'`) }
   const input = async (selector, value) => evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`)
   const enter = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter'}); await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter'}) }
   const text = () => evaluate('document.body.innerText')
@@ -275,8 +277,8 @@ try {
     db.messages['page-34'] = Array.from({length:60},(_,i)=>({ id:'history-'+i, role:i%2?'assistant':'user', kind:'response', content:'History record '+i, created_at:new Date(Date.now()+i*1000).toISOString() }));
     window.__stepJ.save();
   })()`)
-  await click('Conversations'); await click(personaFolder, false); await click('Load more conversations')
-  await wait(`document.querySelectorAll('ul[aria-label="Conversations"] button').length > 30`)
+  await click('Conversations'); await expandFolder(); await click('Load more conversations')
+  await wait(`document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded])').length > 30`)
   await openChat('Paged conversation 34'); await wait(`document.body.innerText.includes('History record 59')`)
   assert.doesNotMatch(await text(), /History record 0\b/)
   await click('Load earlier messages'); await wait(`document.body.innerText.includes('History record 0')`)
@@ -289,11 +291,10 @@ try {
   assert.equal(JSON.stringify(document).includes('claim_token'), false)
 
   await evaluate(`window.__stepJ.switchAccount('account-b')`)
-  // After a remount the sidebar opens on the persona folders; enter the folder to see its chats.
-  await wait(`document.querySelector('nav[aria-label="Persona folders"]')?.innerText.includes(${JSON.stringify(personaFolder)})`)
-  await click(personaFolder, false)
+  // After a remount the sidebar shows the persona folders; expand the folder to see its chats.
+  await expandFolder()
   await wait(`document.body.innerText.includes('Paged conversation 34')`)
-  await click('Paged conversation 33', false)
+  await openChat('Paged conversation 33')
   await wait(`document.querySelector('textarea')`)
   await evaluate(`window.__stepJ.mode = 'text'`)
   await input('textarea', 'A shared followup from account B'); await click('Send')
@@ -303,35 +304,33 @@ try {
   await wait(`window.__stepJ.db.sessions['page-33'].title === 'Shared collaboration'`)
   await input('textarea', 'Keep my unsent draft')
   await evaluate(`window.__stepJ.db.sessions['page-32'].title='Updated by teammate'; window.dispatchEvent(new Event('focus'))`)
-  // The teammate's rename shows up in the folder's conversation list; the unsent draft survives leaving and returning.
-  await click(personaFolder, false); await wait(`document.body.innerText.includes('Updated by teammate')`)
-  await openChat('Shared collaboration')
-  await wait(`document.querySelector('textarea')?.value === 'Keep my unsent draft'`)
+  await wait(`document.body.innerText.includes('Updated by teammate')`)
+  assert.equal(await evaluate(`document.querySelector('textarea').value`), 'Keep my unsent draft')
   await evaluate(`window.__stepJ.switchAccount('account-b', 'owner', 'workspace-b')`)
   await wait(`document.querySelector('button[aria-label^="Select persona:"]')`)
   assert.doesNotMatch(await text(), /Shared collaboration|Paged conversation/)
   assert.equal(await evaluate(`window.__stepJ.api.send({url:'/api/chat/sessions/page-33?version=2',method:'GET'}, {expectedScope:JSON.stringify(['account-b','workspace-b'])}).then(()=>false,e=>e.response.status===404)`), true)
   await evaluate(`window.__stepJ.switchAccount('account-a')`)
   await wait(`document.body.innerText.includes('Shared collaboration')`)
-  await click(personaFolder, false)
-  await click('Shared collaboration', false)
+  await expandFolder()
+  await openChat('Shared collaboration')
   await wait(`document.body.innerText.includes('A shared followup from account B')`)
   await click('Clear / Archive'); await click('Archive and start new'); await choosePersona(); await click('Archive')
   await openChat('Shared collaboration'); await click('Restore'); await click('Conversations')
-  // Finder-style folders: a chat's breadcrumb returns to its folder, whose contents are a list of conversations.
-  await click(`← ${personaFolder}`)
-  await wait(`document.querySelector('section[aria-label^="Folder:"]') && document.querySelectorAll('ul[aria-label="Conversations"] button').length > 0`)
-  assert.equal(await evaluate(`!!document.querySelector('textarea')`), false)
-  const folderView = await cdp('Page.captureScreenshot', { format: 'png' })
-  await writeFile(path.join(screenshotDir, 'persona-folder-open.png'), Buffer.from(folderView.data, 'base64'))
-  await click('Persona folders'); await wait(`document.querySelector('section[aria-label="Persona folders overview"]')`)
-  const folderOverview = await cdp('Page.captureScreenshot', { format: 'png' })
-  await writeFile(path.join(screenshotDir, 'persona-folders-overview.png'), Buffer.from(folderOverview.data, 'base64'))
+  // Persona folders collapse and expand in the sidebar; the folder of the open chat stays visible.
+  await expandFolder()
+  const sidebar = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folder-expanded.png'), Buffer.from(sidebar.data, 'base64'))
+  await evaluate(`${folderToggle}.click()`); await wait(`${folderToggle}.getAttribute('aria-expanded') === 'false'`)
+  assert.equal(await evaluate(`[...document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded])')].some(b => b.textContent.includes('Paged conversation'))`), false)
+  const collapsed = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folder-collapsed.png'), Buffer.from(collapsed.data, 'base64'))
+  await expandFolder()
   // New chat inside the folder skips the persona selector; the persona is bound to the folder.
-  await click(`Open folder ${personaFolder}`); await click('➕ New chat in this folder')
+  await click('＋ New chat')
   assert.equal(await evaluate(`!!document.querySelector('button[aria-label^="Select persona:"]')`), false)
   await wait(`document.body.innerText.includes('Unsent conversation') && document.body.innerText.includes('Persona: ' + ${JSON.stringify(personaFolder)})`)
-  // Tone and age are adjusted per conversation, and travel with the chat's first save.
+  // Tone is adjusted per conversation and travels with the chat's first save.
   await click('Voice settings for this chat'); await wait(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 5"]')`)
   await evaluate(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 5"]').click()`)
   const voiceDialog = await cdp('Page.captureScreenshot', { format: 'png' })
@@ -361,7 +360,7 @@ try {
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png' })
   const screenshotPath = path.join(screenshotDir, 'step-j4-mobile.png'); await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   assert.deepEqual(errors, [])
-  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, persona folders, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
+  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, collapsible persona folders, per-chat tone, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
   console.log(`Screenshot: ${screenshotPath}`)
 } finally {
   ws?.close()

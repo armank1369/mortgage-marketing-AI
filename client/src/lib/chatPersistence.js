@@ -43,9 +43,10 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       initialPending = parsed
     }
   } catch { initialError = 'Pending-request storage cannot be read. Resolve browser storage access before generating.' }
-  // `folder` is the open persona folder: null shows every chat (the folder overview),
-  // a persona id or 'none' (chats saved without a persona) filters the list.
-  let state = { sessions: [], next_cursor: null, archived: false, folder: null, folders: [], foldersError: '', active: null, messages: [], before_cursor: null,
+  // Persona folders live in the sidebar. `folders` holds per-persona counts and `folderChats` the
+  // conversations of each expanded folder, keyed by persona id ('none' = chats saved without a persona).
+  let openFolders = new Set(), folderSequence = new Map()
+  let state = { sessions: [], next_cursor: null, archived: false, folders: [], foldersError: '', folderChats: {}, active: null, messages: [], before_cursor: null,
     operations: [], pending: initialPending, loading: false, submitting: false, metadataSaving: false, error: initialError, storageError: initialError }
   const emit = (patch) => { if (!alive) return; state = { ...state, ...patch }; for (const listener of listeners) listener() }
   function persist(pending) {
@@ -71,25 +72,37 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   function report(err) { if (err.code !== 'ERR_CANCELED') emit({ error: apiError(err) }) }
   async function list(archived = state.archived, more = false) {
     const seq = ++listSequence
-    const folder = state.folder
     try {
-      const data = await request(`${base}?version=2&archived=${archived}&limit=30${folder ? `&persona=${encodeURIComponent(folder)}` : ''}${more && state.next_cursor ? `&cursor=${encodeURIComponent(state.next_cursor)}` : ''}`)
-      if (seq === listSequence && state.folder === folder) emit({ archived, sessions: more ? [...new Map([...state.sessions, ...data.sessions].map((s) => [s.id, s])).values()] : data.sessions, next_cursor: data.next_cursor })
+      const data = await request(`${base}?version=2&archived=${archived}&limit=30${more && state.next_cursor ? `&cursor=${encodeURIComponent(state.next_cursor)}` : ''}`)
+      if (seq === listSequence) emit({ archived, sessions: more ? [...new Map([...state.sessions, ...data.sessions].map((s) => [s.id, s])).values()] : data.sessions, next_cursor: data.next_cursor })
+    } catch (err) { report(err) }
+    if (!archived) await Promise.all([...openFolders].map((id) => loadFolderChats(id)))
+  }
+  async function loadFolderChats(id, more = false) {
+    const seq = (folderSequence.get(id) || 0) + 1
+    folderSequence.set(id, seq)
+    const current = state.folderChats[id]
+    try {
+      const data = await request(`${base}?version=2&archived=false&limit=30&persona=${encodeURIComponent(id)}${more && current?.next_cursor ? `&cursor=${encodeURIComponent(current.next_cursor)}` : ''}`)
+      if (seq !== folderSequence.get(id) || !openFolders.has(id)) return
+      const sessions = more && current ? [...new Map([...current.sessions, ...data.sessions].map((row) => [row.id, row])).values()] : data.sessions
+      emit({ folderChats: { ...state.folderChats, [id]: { sessions, next_cursor: data.next_cursor } } })
     } catch (err) { report(err) }
   }
-  let folderSequence = 0
+  // The set of expanded sidebar folders. Newly expanded folders load their chats; collapsed ones are dropped.
+  function setOpenFolders(ids) {
+    openFolders = new Set(ids)
+    const kept = Object.fromEntries(Object.entries(state.folderChats).filter(([id]) => openFolders.has(id)))
+    if (Object.keys(kept).length !== Object.keys(state.folderChats).length) emit({ folderChats: kept })
+    return Promise.all([...openFolders].filter((id) => !kept[id]).map((id) => loadFolderChats(id)))
+  }
+  let folderCountSequence = 0
   async function loadFolders(archived = state.archived) {
-    const seq = ++folderSequence
+    const seq = ++folderCountSequence
     try {
       const data = await request(`/api/chat/folders?archived=${archived}`)
-      if (seq === folderSequence) emit({ folders: data.folders || [], foldersError: '' })
-    } catch (err) { if (err.code !== 'ERR_CANCELED' && seq === folderSequence) emit({ foldersError: 'Persona folders could not be loaded.' }) }
-  }
-  function openFolder(folder = null, archived = state.archived) {
-    if (folder === state.folder && archived === state.archived) return list(archived)
-    ++listSequence
-    emit({ folder, archived, sessions: [], next_cursor: null })
-    return list(archived)
+      if (seq === folderCountSequence) emit({ folders: data.folders || [], foldersError: '' })
+    } catch (err) { if (err.code !== 'ERR_CANCELED' && seq === folderCountSequence) emit({ foldersError: 'Persona folders could not be loaded.' }) }
   }
   async function open(id, older = false, refresh = false) {
     const seq = refresh || older ? selection : ++selection
@@ -257,7 +270,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       await reconcile()
     },
     stop() { alive = false; ++epoch; ++selection; for (const controller of controllers) controller.abort(); controllers.clear() },
-    list, open, newChat, patch, setVoice, submit, reconcile, operations, abandon, loadFolders, openFolder,
+    list, open, newChat, patch, setVoice, submit, reconcile, operations, abandon, loadFolders, loadFolderChats, setOpenFolders,
     exportConversation(id) { return collectConversationExport((sessionId, cursor) => request(`${base}/${sessionId}?version=2&limit=100${cursor ? `&before=${encodeURIComponent(cursor)}` : ''}`), id) },
     async archive() { const active = state.active; if (await patch({ archived: true })) {
       if (state.active?.id === active.id) newChat()

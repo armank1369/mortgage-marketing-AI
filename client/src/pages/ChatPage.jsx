@@ -9,7 +9,6 @@ import { loadChatsFromStorage } from '../utils/storage.js'
 import { PROMPT_CATEGORIES } from '../lib/chatPrompts.js'
 import { buildPersonaFolders, folderFor } from '../lib/chatFolders.js'
 import { defaultVoice, customVoiceCount } from '../lib/voiceSettings.js'
-import { FolderContents, FolderOverview } from '../components/FolderView.jsx'
 import VoiceSettings from '../components/VoiceSettings.jsx'
 import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
 import PreferenceSetup from './PreferenceSetup.jsx'
@@ -65,10 +64,12 @@ export default function ChatPage() {
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [promptCategory, setPromptCategory] = useState(null)
   const [setup, setSetup] = useState(false)
-  // Finder-style browsing: true shows the contents of the selected folder (or the folder overview) instead of a chat.
-  const [browsing, setBrowsing] = useState(false)
+  // Expanded persona folders in the sidebar (remembered per account and workspace in this browser).
+  const [openIds, setOpenIds] = useState(() => {
+    try { const saved = JSON.parse(globalThis.localStorage?.getItem(`lucie_open_folders:v1:${encodeURIComponent(scope)}`) || '[]'); return Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : [] } catch { return [] }
+  })
   const [voiceOpen, setVoiceOpen] = useState(false)
-  const [personaOpen, setPersonaOpen] = useState(false)
+  const [personaOpen, setPersonaOpen] = useState(null)
   const [setupDismissed, setSetupDismissed] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -97,15 +98,15 @@ export default function ChatPage() {
   const nmls = brand?.nmls_id || 'Not configured'
   const error = localError || state.error
   const lastMessageId = state.messages.at(-1)?.id
-  // Persona folders: the sidebar opens on one folder per persona; a folder lists that persona's chats.
+  // Persona folders: collapsible folders in the sidebar, one per persona, each holding that persona's chats.
   const folders = buildPersonaFolders(personas, state.folders)
-  const openFolder = local ? null : folderFor(folders, state.folder) || (state.folder ? { id: state.folder, name: 'Persona folder', available: false, chat_count: 0 } : null)
+  const openFolder = local ? null : folderFor(folders, state.active?.default_persona_id)
   const sessionCount = state.sessions.length
-  const browsingFolders = !local && browsing && nav === 'chat'
-  // The persona belongs to the folder; tone and age are per conversation, layered over the defaults.
-  const voiceDefaults = defaultVoice(brand, persona)
+  // The persona belongs to the folder; tone is per conversation, layered over the shared brand tone.
+  const voiceDefaults = defaultVoice(brand)
   const voiceCustom = customVoiceCount(state.active?.voice_settings)
-  const activeFolder = local ? null : folderFor(folders, state.active?.default_persona_id)
+  const toggleFolder = (id) => setOpenIds((current) => current.includes(id) ? current.filter((row) => row !== id) : [...current, id])
+  const openFolderIds = (...ids) => setOpenIds((current) => [...current, ...ids.filter((id) => !current.includes(id))])
 
   useEffect(() => {
     const online = () => setOffline(false), offline = () => setOffline(true)
@@ -114,7 +115,13 @@ export default function ChatPage() {
   }, [])
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [lastMessageId, state.submitting])
   // Refresh folder counts whenever the chat list refreshes (new chat, archive, periodic reconcile).
-  useEffect(() => { if (!local) controller.loadFolders(view === 'archive') }, [controller, local, view, state.sessions, sessionCount])
+  useEffect(() => { if (!local) controller.loadFolders(false) }, [controller, local, state.sessions, sessionCount])
+  // Keep the chat lists of expanded folders loaded, and remember which are expanded.
+  useEffect(() => { controller.setOpenFolders(view === 'active' && !local ? openIds : []) }, [controller, openIds, view, local])
+  useEffect(() => { try { globalThis.localStorage?.setItem(`lucie_open_folders:v1:${encodeURIComponent(scope)}`, JSON.stringify(openIds)) } catch { /* remembering is optional */ } }, [scope, openIds])
+  // The folder of the chat you are in is always expanded so it stays visible in the sidebar.
+  const activePersonaId = state.active?.default_persona_id
+  useEffect(() => { if (activePersonaId) openFolderIds(activePersonaId) }, [activePersonaId])
 
   const run = async (task) => {
     setLocalError('')
@@ -138,31 +145,26 @@ export default function ChatPage() {
   const chooseView = (next) => {
     setSetup(false); setView(next); setNav('chat'); setMobileMenu(false); setLocalError(''); setTitleEdit(null)
     if (next === 'local') setLocalId(localChats[0]?.id || null)
-    else { if (next === 'archive') setBrowsing(true); controller.openFolder(state.folder, next === 'archive') }
-  }
-  // Opening a folder shows its conversations in the main pane, like a Finder window.
-  const enterFolder = (folder) => {
-    setSetup(false); setNav('chat'); setView((current) => current === 'local' ? 'active' : current); setBrowsing(true); setMobileMenu(false); setLocalError(''); setTitleEdit(null)
-    controller.openFolder(folder ? folder.id : null, view === 'archive')
+    else controller.list(next === 'archive')
   }
   // "New Chat" always starts at the persona selector, which then opens that persona's folder.
   const newChat = () => {
-    setSetupDismissed(false); setSetup(true); setBrowsing(false); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null)
-    controller.openFolder(state.folder, false)
+    setSetupDismissed(false); setSetup(true); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null)
+    controller.list(false)
   }
   // Inside a persona folder, a new chat skips the selector and stays in the folder.
   const newChatInFolder = (folder = openFolder) => {
     if (!folder?.available) return newChat()
-    setSetup(false); setBrowsing(false); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null); setLocalError('')
-    controller.openFolder(folder.id, false); controller.newChat(folder.id); controller.patch({ title: folder.name })
+    setSetup(false); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null); setLocalError('')
+    openFolderIds(folder.id); controller.newChat(folder.id); controller.patch({ title: folder.name })
   }
   const select = (chat) => {
-    setSetup(false); setBrowsing(false); setNav('chat'); setMobileMenu(false); setTitleEdit(null); setLocalError('')
+    setSetup(false); setNav('chat'); setMobileMenu(false); setTitleEdit(null); setLocalError('')
     if (local) setLocalId(chat.id); else controller.open(chat.id)
   }
   const list = local ? localChats.filter((row) => row.messages?.length) : state.sessions
   // The persona selector opens that persona's folder with a fresh chat inside it.
-  const startPersonaChat = (row) => { controller.openFolder(row.id, false); setBrowsing(false); setView('active'); controller.newChat(row.id); controller.patch({ title: row.name }); setSetup(false); setSetupDismissed(false) }
+  const startPersonaChat = (row) => { openFolderIds(row.id); setView('active'); controller.newChat(row.id); controller.patch({ title: row.name }); setSetup(false); setSetupDismissed(false) }
   const exportChat = async () => {
     setExporting(true); setLocalError('')
     try {
@@ -186,43 +188,52 @@ export default function ChatPage() {
         <button type="button" aria-label="New Chat" disabled={!canWrite} onClick={newChat} className="mt-3 flex w-full items-center gap-3 rounded-lg border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base">➕</span>New Chat</button>
       </nav>
       <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded px-2 py-1 ${view === id ? 'bg-blue-50 text-blue-800' : 'text-slate-500'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
-      {local ? <nav aria-label="Conversation list" className="flex-1 overflow-y-auto p-3 space-y-2">
-        <p className="text-xs text-slate-500 px-2">Read-only history from this account and browser. Nothing is uploaded.</p>
-        {!list.length && <p className="p-3 text-xs text-slate-400">No local history in this account and workspace.</p>}
+      {view === 'active' && !local ? <nav aria-label="Persona folders" className="flex-1 overflow-y-auto p-3 space-y-0.5">
+        <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Persona folders</p>
+        {state.foldersError && <p role="status" className="px-2 text-xs text-amber-800">{state.foldersError} <button className="underline" onClick={() => controller.loadFolders(false)}>Retry</button></p>}
+        {!folders.length && <p className="p-3 text-xs text-slate-400">{configLoading ? 'Loading personas…' : 'No personas yet. Add one in Settings to start a folder.'}</p>}
+        {folders.map((folder) => {
+          const open = openIds.includes(folder.id), chats = state.folderChats[folder.id]
+          return <div key={folder.id}>
+            <button type="button" aria-expanded={open} aria-label={`${folder.name} folder`} onClick={() => toggleFolder(folder.id)} className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-100 ${openFolder?.id === folder.id ? 'text-blue-800' : ''}`}>
+              <span aria-hidden="true" className="w-3 text-[10px] text-slate-400">{open ? '▾' : '▸'}</span><span aria-hidden="true" className="text-base">{open ? '📂' : folder.available ? '📁' : '🗂️'}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{folder.name}</span><span className="text-[10px] text-slate-400">{folder.chat_count}</span>
+            </button>
+            {open && <div className="ml-5 space-y-0.5 border-l border-slate-200 pb-1 pl-2">
+              {folder.available && <div className="flex flex-wrap gap-1.5 py-1">
+                <button type="button" disabled={!canWrite} onClick={() => newChatInFolder(folder)} className={button}>＋ New chat</button>
+                <button type="button" onClick={() => setPersonaOpen(folder.id)} className={button}>Persona settings</button></div>}
+              {!folder.available && <p className="px-1 py-1 text-[11px] text-slate-500">This persona is unavailable, so its chats are read only.</p>}
+              {!chats && <p role="status" className="px-1 py-1 text-[11px] text-slate-400">Loading…</p>}
+              {chats && !chats.sessions.length && <p className="px-1 py-1 text-[11px] text-slate-400">No chats yet.</p>}
+              {chats?.sessions.map((chat) => <button key={chat.id} type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg px-2 py-1.5 text-left ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
+                <span className="block truncate text-[13px] font-medium">{chat.title || 'Conversation'}</span>
+                <span className="block text-[10px] text-slate-400">{new Date(chat.updated_at || Date.now()).toLocaleDateString()}</span>
+              </button>)}
+              {chats?.next_cursor && <button type="button" className={`${button} w-full`} onClick={() => controller.loadFolderChats(folder.id, true)}>Load more conversations</button>}
+            </div>}
+          </div>
+        })}
+        {state.pending.filter((record) => !list.some((chat) => chat.id === record.session_id)).map((record) => <button key={record.body.operation_key} className={`${button} w-full text-left`} onClick={() => controller.open(record.session_id)}>Recover pending request</button>)}
+      </nav> : <nav aria-label="Conversation list" className="flex-1 overflow-y-auto p-3 space-y-2">
+        {local && <p className="text-xs text-slate-500 px-2">Read-only history from this account and browser. Nothing is uploaded.</p>}
+        {!list.length && <p className="p-3 text-xs text-slate-400">{local ? 'No local history in this account and workspace.' : 'No archived conversations.'}</p>}
         {list.map((chat) => <button key={chat.id} onClick={() => select(chat)} className={`w-full rounded-xl p-3 text-left border ${active?.id === chat.id ? 'bg-slate-100 border-transparent' : 'border-transparent hover:bg-slate-100'}`}>
           <span className="block truncate text-sm font-medium">{chat.title || 'Conversation'}</span>
           <span className="block text-[10px] text-slate-400 mt-1">Last edited: {new Date(chat.updated_at || chat.updatedAt || chat.createdAt || Date.now()).toLocaleString()}</span>
           <span className="flex flex-wrap gap-1 mt-2"><span className="max-w-full truncate rounded border border-slate-300 px-1.5 py-0.5 text-[9px] text-slate-600">{chat.persona_name || chat.persona?.name || 'Persona unavailable'}</span></span>
           <span className="block truncate text-[10px] text-slate-500 mt-1.5">{chat.preview || chat.summary || ''}</span>
         </button>)}
-      </nav> : <nav aria-label="Persona folders" className="flex-1 overflow-y-auto p-3 space-y-1">
-        <p className="px-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Persona folders</p>
-        {state.foldersError && <p role="status" className="px-2 text-xs text-amber-800">{state.foldersError} <button className="underline" onClick={() => controller.loadFolders(view === 'archive')}>Retry</button></p>}
-        {!folders.length && <p className="p-3 text-xs text-slate-400">{configLoading ? 'Loading personas…' : 'No personas yet. Add one in Settings to start a folder.'}</p>}
-        {folders.map((folder) => {
-          const selected = state.folder ? state.folder === folder.id : activeFolder?.id === folder.id
-          return <button key={folder.id} onClick={() => enterFolder(folder)} aria-current={selected ? 'true' : undefined} className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${selected ? 'bg-blue-50 text-blue-800' : 'hover:bg-slate-100'}`}>
-            <span aria-hidden="true" className="text-base">{selected ? '📂' : folder.available ? '📁' : '🗂️'}</span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">{folder.name}</span>
-            <span className="text-[10px] text-slate-400">{folder.chat_count}</span>
-          </button>
-        })}
-        {state.pending.filter((record) => !list.some((chat) => chat.id === record.session_id)).map((record) => <button key={record.body.operation_key} className={`${button} w-full text-left`} onClick={() => controller.open(record.session_id)}>Recover pending request</button>)}
+        {!local && state.next_cursor && <button className={`${button} w-full`} onClick={() => controller.list(state.archived, true)}>Load more conversations</button>}
       </nav>}
       <div className="px-4 py-3 border-t border-slate-100"><Link to="/settings" className="text-xs text-slate-500 hover:text-slate-900">Settings</Link></div>
       <p className="p-4 border-t border-slate-100 text-[11px] text-slate-400">{brand?.licensed_person_name || 'Identity not configured'} · NMLS #{nmls}</p>
     </aside>
     <main className="flex min-w-0 flex-1 flex-col">
       <div className="md:hidden bg-slate-900 text-white px-4 py-3"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}>☰ <span className="ml-3 font-semibold">Lucie</span></button></div>
-      {nav === 'calendar' ? <CalendarPage /> : browsingFolders ? <div className="flex-1 overflow-y-auto">
-        {error && <div role="alert" className="mx-4 mt-4 border border-red-200 bg-red-50 rounded-lg p-3 text-sm text-red-800 sm:mx-6">{error} <button className="underline ml-2" onClick={() => { setLocalError(''); controller.clearError(); controller.list() }}>Refresh</button></div>}
-        {state.folder || view === 'archive'
-          ? <FolderContents folder={openFolder} archived={view === 'archive'} chats={state.sessions} activeId={state.active?.id} canWrite={canWrite} hasMore={!!state.next_cursor} loading={state.loading || configLoading}
-            onOpen={select} onNewChat={() => newChatInFolder()} onSettings={() => setPersonaOpen(true)} onMore={() => controller.list(state.archived, true)} onUp={() => enterFolder(null)} />
-          : <FolderOverview folders={folders} error={state.foldersError} loading={configLoading} onOpen={enterFolder} onRetry={() => controller.loadFolders(false)} />}
-      </div> : <>
+      {nav === 'calendar' ? <CalendarPage /> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0">{!local && activeFolder && <button type="button" className="mb-0.5 block text-[11px] text-slate-500 hover:text-slate-900" onClick={() => enterFolder(activeFolder)}>← {activeFolder.name}</button>}<h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
+          <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
           <div className="flex gap-2">{active && !active.unsaved && <button className={button} disabled={exporting || state.loading} onClick={exportChat}>{exporting ? 'Preparing export…' : 'Export chat'}</button>}{!local && state.active && <button className={button} aria-label="Voice settings for this chat" disabled={!persona || state.loading} onClick={() => setVoiceOpen(true)}>Voice{voiceCustom ? ` · ${voiceCustom} custom` : ''}</button>}<button className={button} disabled={!active} onClick={() => setSummaryOpen(true)}>Brand Summary</button></div>
           {!local && state.active && <div className="flex gap-2">
             <button className={button} disabled={readOnly || pending || state.loading || state.metadataSaving || state.active.unsaved} onClick={() => setTitleEdit(state.active.title)}>Rename</button>
@@ -272,7 +283,7 @@ export default function ChatPage() {
     </main>
     {voiceOpen && state.active && <Dialog title="Voice for this chat" onClose={() => setVoiceOpen(false)}><VoiceSettings defaults={voiceDefaults} overrides={state.active.voice_settings} personaName={persona?.name} disabled={readOnly || state.loading} saving={state.metadataSaving}
       onCancel={() => setVoiceOpen(false)} onSave={(voice) => run(() => controller.setVoice(voice)).then((saved) => { if (saved) setVoiceOpen(false) })} /></Dialog>}
-    {personaOpen && openFolder?.available && personas.find((row) => row.id === openFolder.id) && <Dialog wide title={`${openFolder.name} persona settings`} onClose={() => setPersonaOpen(false)}><PersonaGuidelines key={openFolder.id} persona={personas.find((row) => row.id === openFolder.id)} onBack={() => setPersonaOpen(false)} onDone={() => setPersonaOpen(false)} /></Dialog>}
+    {personaOpen && personas.find((row) => row.id === personaOpen) && <Dialog wide title={`${personas.find((row) => row.id === personaOpen).name} persona settings`} onClose={() => setPersonaOpen(null)}><PersonaGuidelines key={personaOpen} persona={personas.find((row) => row.id === personaOpen)} onBack={() => setPersonaOpen(null)} onDone={() => setPersonaOpen(null)} /></Dialog>}
     {summaryOpen && <Dialog title="Brand Summary" onClose={() => setSummaryOpen(false)}><BrandSummary persona={local ? localChat?.persona : persona} brand={brand} /></Dialog>}
     {titleEdit !== null && <Dialog title="Rename conversation" onClose={() => setTitleEdit(null)}><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); run(() => controller.patch({ title: titleEdit.trim() })).then((saved) => { if (saved) setTitleEdit(null) }) }}>
       <label className="text-sm font-semibold">Conversation title<input autoFocus maxLength={200} value={titleEdit} onChange={(event) => setTitleEdit(event.target.value)} className="block w-full border rounded p-2 mt-2" /></label>

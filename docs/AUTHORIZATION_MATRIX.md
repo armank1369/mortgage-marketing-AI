@@ -26,7 +26,7 @@ Stored workspace selection is a preference, not permission.
 | PUT /api/chat/sessions/<id> | JWT + membership | chat:create | Idempotent empty creation, workspace-scoped replay; no overwrite |
 | GET /api/chat/sessions?version=2 | JWT + membership | chat:read | Paginated active/archive list for selected workspace; optional `persona` folder filter |
 | GET /api/chat/folders | JWT + membership | chat:read | Per-persona chat counts for the selected workspace ([persona folders](PERSONA_FOLDERS.md)) |
-| PUT /api/chat/sessions/<id>/voice | JWT + membership | chat:write | Replaces one conversation's tone/age overrides; workspace-scoped, archived chats refused ([voice](PERSONA_FOLDERS.md)) |
+| PUT /api/chat/sessions/<id>/voice | JWT + membership | chat:write | Replaces one conversation's tone overrides; workspace-scoped, archived chats refused ([voice](PERSONA_FOLDERS.md)) |
 | GET /api/chat/sessions/<id>?version=2 | JWT + membership | chat:read | Workspace active or archived session, full typed fields, bounded message page |
 | PATCH /api/chat/sessions/<id> | JWT + membership | chat:write | Workspace session; If-Match required; archive blocked while unresolved |
 | POST /api/chat/sessions/<id>/operations | JWT + membership | chat:write; also ai:generate for provider actions | J.3 durable generation/replay: same-session source projection, Step I context, committed claim/run before call, atomic response/final-run completion. Shortening remains deterministic. |

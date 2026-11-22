@@ -340,39 +340,38 @@ test('idle reconciliation refreshes shared sidebar and active history without re
   c.stop()
 })
 
-test('persona folders filter the chat list and summarize chat counts', async () => {
+test('expanded persona folders load their own chats and keep counts', async () => {
   const other = '22222222-2222-4222-8222-222222222222'
   const f = fixture(), c = f.make(); await c.start()
   f.sessions.set('a', { id: 'a', title: 'A', default_persona_id: persona })
   f.sessions.set('b', { id: 'b', title: 'B', default_persona_id: other })
   f.sessions.set('c', { id: 'c', title: 'Imported', default_persona_id: null })
+  await c.setOpenFolders([persona, 'none'])
+  const chats = () => Object.fromEntries(Object.entries(c.getSnapshot().folderChats).map(([id, row]) => [id, row.sessions.map((s) => s.id)]))
+  assert.deepEqual(chats(), { [persona]: ['a'], none: ['c'] })
+  assert.ok(f.calls.some((r) => r.url.includes(`&persona=${persona}`)))
+  await c.list() // refreshes keep every expanded folder current
+  assert.deepEqual(chats(), { [persona]: ['a'], none: ['c'] })
+  f.sessions.set('d', { id: 'd', title: 'D', default_persona_id: persona })
   await c.list()
-  assert.equal(c.getSnapshot().sessions.length, 3)
-  await c.openFolder(persona)
-  assert.equal(c.getSnapshot().folder, persona)
-  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
-  assert.ok(f.calls.at(-1).url.includes(`&persona=${persona}`))
-  await c.list() // later refreshes stay inside the open folder
-  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
-  await c.openFolder('none')
-  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['c'])
-  await c.openFolder(null)
-  assert.equal(c.getSnapshot().sessions.length, 3)
+  assert.deepEqual(chats()[persona].sort(), ['a', 'd'])
+  await c.setOpenFolders([other])
+  assert.deepEqual(chats(), { [other]: ['b'] }, 'collapsed folders are dropped')
+  assert.equal(c.getSnapshot().sessions.length, 4, 'the unfiltered list is unchanged')
   await c.loadFolders()
   const counts = Object.fromEntries(c.getSnapshot().folders.map((row) => [row.persona_id, row.chat_count]))
-  assert.deepEqual(counts, { [persona]: 1, [other]: 1, null: 1 })
+  assert.deepEqual(counts, { [persona]: 2, [other]: 1, null: 1 })
   c.stop()
 })
 
-test('a slow list response from a previous folder never replaces the open folder', async () => {
+test('a slow response for a folder collapsed in the meantime is ignored', async () => {
   const gate = deferred()
   const f = fixture({ override: (config) => config.url.includes('persona=slow') ? gate.promise.then(() => ({ data: { sessions: [{ id: 'stale' }], next_cursor: null } })) : null })
   const c = f.make(); await c.start()
-  f.sessions.set('a', { id: 'a', title: 'A', default_persona_id: persona })
-  const slow = c.openFolder('slow')
-  await c.openFolder(persona)
+  const slow = c.setOpenFolders(['slow'])
+  await c.setOpenFolders([])
   gate.resolve(); await slow
-  assert.deepEqual(c.getSnapshot().sessions.map((s) => s.id), ['a'])
+  assert.deepEqual(c.getSnapshot().folderChats, {})
   c.stop()
 })
 
@@ -385,10 +384,10 @@ test('voice settings are chosen per conversation: sent with first creation, then
   const created = f.calls.find((r) => r.method === 'PUT')
   assert.deepEqual(created.data.voice_settings, { tone: { serious: 5 } })
   const id = c.getSnapshot().active.id
-  await c.setVoice({ tone: { serious: 1 }, ageRange: [22, 32] })
+  await c.setVoice({ tone: { serious: 1, professional: 4 } })
   const put = f.calls.filter((r) => r.method === 'PUT').at(-1)
-  assert.ok(put.url.endsWith(`/${id}/voice`)); assert.deepEqual(put.data, { voice_settings: { tone: { serious: 1 }, ageRange: [22, 32] } })
-  assert.deepEqual(c.getSnapshot().active.voice_settings, { tone: { serious: 1 }, ageRange: [22, 32] })
+  assert.ok(put.url.endsWith(`/${id}/voice`)); assert.deepEqual(put.data, { voice_settings: { tone: { serious: 1, professional: 4 } } })
+  assert.deepEqual(c.getSnapshot().active.voice_settings, { tone: { serious: 1, professional: 4 } })
   await c.setVoice({})
   assert.deepEqual(c.getSnapshot().active.voice_settings, {})
   c.stop()
