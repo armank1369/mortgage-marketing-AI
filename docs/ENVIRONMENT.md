@@ -34,6 +34,7 @@ commands that preserve working local files. Replace placeholders before normal u
 | `server/.env` → `AI_PROVIDER` | Example defaults to `claude`; no alternate provider setup is introduced here |
 | `server/.env` → `LUCIE_COMPARE_BETA` | Beta two-model comparison switch; off unless `true`. See [MODEL_COMPARISON_BETA.md](MODEL_COMPARISON_BETA.md) |
 | `server/.env` → `COMPARE_MODEL_A` / `COMPARE_MODEL_B` | `provider:model` pairs for the comparison beta (`anthropic:` or `openai:`); A defaults to `anthropic:claude-sonnet-5-5` |
+| `server/.env` → `COMPARE_MERGE_MODEL` | Optional model that combines and adjusts drafts in the comparison beta; defaults to model A |
 | `server/.env` → `OPENAI_API_KEY` | Needed only when a comparison model uses `openai:` |
 | `server/.env` → `COMPARE_PRICES` | Optional JSON price overrides (USD per million tokens) for the comparison cost estimate |
 | `client/.env` → `VITE_NEON_AUTH_URL` | Public Auth endpoint matching the backend's Auth base URL |

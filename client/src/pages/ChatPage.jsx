@@ -18,7 +18,7 @@ import CalendarPage from './CalendarPage.jsx'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 import ModelComparison from '../components/ModelComparison.jsx'
 import { workspaceApi, apiErrorMessage } from '../lib/api.js'
-import { getCompareConfig, runComparison, chooseComparison } from '../lib/modelCompare.js'
+import { getCompareConfig, runComparison, chooseComparison, combineComparison } from '../lib/modelCompare.js'
 
 const button = 'rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
 const resolved = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
@@ -132,6 +132,15 @@ export default function ChatPage() {
       .then((reveal) => updateComparison(key, item.id, { choosing: false, reveal }))
       .catch((err) => updateComparison(key, item.id, { choosing: false, choiceError: apiErrorMessage(err, 'Your choice could not be saved. Please try again.') }))
   }
+  const combine = (item, request, plan) => {
+    const key = inputKey
+    updateComparison(key, item.id, { combining: true, choiceError: '', ...(plan ? { plan } : {}) })
+    combineComparison(workspaceApi, item.data.comparison_id, request)
+      .then((result) => setComparisons((previous) => ({ ...previous, [key]: (previous[key] || []).map((row) => row.id === item.id
+        ? { ...row, combining: false, merges: [...(row.merges || []), result.merge], roundsLeft: result.rounds_left, reveal: result.reveal || row.reveal }
+        : row) })))
+      .catch((err) => updateComparison(key, item.id, { combining: false, choiceError: apiErrorMessage(err, 'Lucie could not combine the versions. Please try again.') }))
+  }
   const send = (text = input) => {
     if (!text.trim() || providerBlocked || !state.active) return
     if (compareEnabled && compareMode) { if (!comparing) compare(text.trim()); return }
@@ -229,7 +238,7 @@ export default function ChatPage() {
             {!local && state.before_cursor && <button className={button} onClick={() => controller.open(state.active.id, true)}>Load earlier messages</button>}
             {!messages.length && !chatComparisons.length && !state.loading && <div className="py-14 text-center"><p className="font-semibold">{local ? 'Select local history' : 'Start a conversation'}</p><p className="text-xs text-slate-500 mt-2">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
             {messages.map((message) => <PersistedMessage key={message.id} message={message} nmls={nmls} persona={persona?.id} onAction={action} disabled={blocked} providerDisabled={providerBlocked} readOnly={readOnly} legacy={local} />)}
-            {!local && chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} />)}
+            {!local && chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onCombine={combine} />)}
             {operations.map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
             <div ref={bottom} />
           </div>
@@ -248,7 +257,7 @@ export default function ChatPage() {
                 onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
               <button type="submit" disabled={providerBlocked || !input.trim() || (compareEnabled && compareMode && comparing)} className={`${button} bg-lucent-navy text-white px-5`}>{state.submitting ? 'Saving / generating…' : compareEnabled && compareMode ? (comparing ? 'Comparing…' : 'Compare') : 'Send'}</button>
             </form>
-            {compareEnabled && <label className="mt-2 flex items-center gap-2 text-xs text-violet-800"><input type="checkbox" checked={compareMode} onChange={(event) => setCompareMode(event.target.checked)} />Compare two models (beta). Each message is answered twice, so it costs about two AI calls and is not saved to this chat.</label>}
+            {compareEnabled && <label className="mt-2 flex items-center gap-2 text-xs text-violet-800"><input type="checkbox" checked={compareMode} onChange={(event) => setCompareMode(event.target.checked)} />Compare and combine (beta). Lucie writes two versions with two AI models, then helps you merge the best of both. Costs about two AI calls per message, plus one per combine or adjustment. Not saved to this chat.</label>}
             <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves are shared with this workspace.</p>
           </div>
         </footer>}

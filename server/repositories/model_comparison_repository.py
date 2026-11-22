@@ -61,6 +61,50 @@ def record_choice(workspace_id: str, comparison_id: str, member_id: str, choice:
     return _run("record_model_comparison_choice", workspace_id, work)
 
 
+def get_comparison(workspace_id: str, comparison_id: str) -> Optional[Dict[str, Any]]:
+    def work(cursor):
+        cursor.execute(
+            """
+            SELECT id, persona_id, prompt, candidates, feedback, merges, chosen_slot, estimated_cost_usd
+            FROM public.model_comparison
+            WHERE id = %s AND workspace_id = %s;
+            """,
+            (comparison_id, workspace_id),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    return _run("get_model_comparison", workspace_id, work)
+
+
+def append_merge(workspace_id: str, comparison_id: str, member_id: str, feedback: Dict[str, Any],
+                 merge: Dict[str, Any], expected_rounds: int) -> Optional[Dict[str, Any]]:
+    """Append one combine/refine round. Returns None if another round was saved meanwhile.
+
+    Combining counts as the user's preference, so an unvoted comparison is marked 'merged'.
+    """
+    cost = merge.get("estimated_cost_usd")
+
+    def work(cursor):
+        cursor.execute(
+            """
+            UPDATE public.model_comparison
+            SET merges = merges || jsonb_build_array(%s::jsonb),
+                feedback = %s,
+                estimated_cost_usd = CASE WHEN %s::numeric IS NULL THEN NULL
+                                          ELSE estimated_cost_usd + %s::numeric END,
+                chosen_slot = COALESCE(chosen_slot, 'merged'),
+                chosen_by_member_id = COALESCE(chosen_by_member_id, %s),
+                chosen_at = COALESCE(chosen_at, now())
+            WHERE id = %s AND workspace_id = %s AND jsonb_array_length(merges) = %s
+            RETURNING id, chosen_slot, candidates, merges, estimated_cost_usd;
+            """,
+            (Jsonb(merge), Jsonb(feedback), cost, cost, member_id, comparison_id, workspace_id, expected_rounds),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    return _run("append_model_comparison_merge", workspace_id, work)
+
+
 def comparison_summary(workspace_id: str) -> List[Dict[str, Any]]:
     """Per-model tallies: how often each model was shown, picked, and what it cost."""
     def work(cursor):
@@ -71,6 +115,7 @@ def comparison_summary(workspace_id: str) -> List[Dict[str, Any]]:
                    count(*) AS shown,
                    count(*) FILTER (WHERE m.chosen_slot = c.value->>'slot') AS wins,
                    count(*) FILTER (WHERE m.chosen_slot = 'tie') AS ties,
+                   count(*) FILTER (WHERE m.chosen_slot = 'merged') AS combined,
                    count(*) FILTER (WHERE m.chosen_slot = 'neither') AS neither,
                    count(*) FILTER (WHERE m.chosen_slot IS NULL) AS unvoted,
                    count(*) FILTER (WHERE c.value ? 'error') AS failures,
@@ -88,6 +133,25 @@ def comparison_summary(workspace_id: str) -> List[Dict[str, Any]]:
             row = dict(row)
             cost = row.get("estimated_cost_usd")
             row["estimated_cost_usd"] = float(cost) if cost is not None else None
+            row["liked_aspects"] = {}
             rows.append(row)
+        # Which parts of each model's drafts the broker kept when combining.
+        cursor.execute(
+            """
+            SELECT c.value->>'provider' AS provider, c.value->>'model' AS model, a.aspect, count(*) AS times
+            FROM public.model_comparison m
+            CROSS JOIN LATERAL jsonb_array_elements(m.candidates) AS c(value)
+            CROSS JOIN LATERAL jsonb_array_elements_text(
+                COALESCE(m.feedback -> (c.value->>'slot') -> 'aspects', '[]'::jsonb)) AS a(aspect)
+            WHERE m.workspace_id = %s
+            GROUP BY 1, 2, 3;
+            """,
+            (workspace_id,),
+        )
+        by_model = {(row["provider"], row["model"]): row for row in rows}
+        for liked in cursor.fetchall():
+            target = by_model.get((liked["provider"], liked["model"]))
+            if target is not None:
+                target["liked_aspects"][liked["aspect"]] = int(liked["times"])
         return rows
     return _run("model_comparison_summary", workspace_id, work)

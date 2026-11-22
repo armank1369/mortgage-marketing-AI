@@ -11,7 +11,12 @@ CREATE TABLE public.model_comparison (
     -- [{slot, provider, model, response | error, usage, latency_ms, provider_calls, estimated_cost_usd}]
     candidates jsonb NOT NULL CHECK (jsonb_typeof(candidates) = 'array'),
     estimated_cost_usd numeric(12,6) CHECK (estimated_cost_usd IS NULL OR estimated_cost_usd >= 0),
-    chosen_slot text CHECK (chosen_slot IS NULL OR chosen_slot IN ('A', 'B', 'tie', 'neither')),
+    -- 'merged' = the user combined both drafts instead of picking one.
+    chosen_slot text CHECK (chosen_slot IS NULL OR chosen_slot IN ('A', 'B', 'tie', 'neither', 'merged')),
+    -- {"A": {"aspects": [...], "note": "..."}, "B": {...}}: what the user liked in each draft.
+    feedback jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(feedback) = 'object'),
+    -- Combine/refine rounds: [{round, kind, provider, model, response | error, usage, estimated_cost_usd, change}]
+    merges jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(merges) = 'array'),
     chosen_by_member_id uuid REFERENCES public.workspace_member(id) ON DELETE RESTRICT,
     chosen_at timestamptz,
     note text CHECK (note IS NULL OR char_length(note) <= 1000),

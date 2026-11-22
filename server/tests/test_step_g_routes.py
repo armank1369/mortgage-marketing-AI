@@ -73,7 +73,8 @@ def test_route_inventory():
                  ("GET", "/api/chat/sessions/<session_id>/operations/<operation_key>"),
                  ("POST", "/api/chat/sessions/<session_id>/operations/<operation_key>/abandon")}
     expected |= {("GET", "/api/compare/config"), ("POST", "/api/compare"),
-                 ("POST", "/api/compare/<comparison_id>/choice"), ("GET", "/api/compare/summary")}
+                 ("POST", "/api/compare/<comparison_id>/choice"), ("GET", "/api/compare/summary"),
+                 ("POST", "/api/compare/<comparison_id>/combine")}
     assert actual == expected
 
 

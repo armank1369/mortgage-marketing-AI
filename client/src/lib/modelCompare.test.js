@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createServer } from 'vite'
-import { candidateMessage, candidateError, chooseComparison, choiceSummary, formatCost, runComparison } from './modelCompare.js'
+import { aspectsFor, candidateMessage, candidateError, chooseComparison, choiceSummary, combineComparison, formatCost, hasFeedback, planSummary, runComparison } from './modelCompare.js'
 
 const footer = 'Synthetic Licensee | NMLS #123456 | DRE #00123456 | Equal Housing Opportunity'
 const textCandidate = { slot: 'A', response: { type: 'text', response: `Plain answer.\n\n${footer}`, compliance_flags: [] } }
@@ -59,34 +59,82 @@ const { default: ModelComparison } = await vite.ssrLoadModule('/src/components/M
 const { CalendarProvider } = await vite.ssrLoadModule('/src/context/CalendarContext.jsx')
 const { WorkspaceDataContext } = await vite.ssrLoadModule('/src/context/WorkspaceData.js')
 const { BrowserScopeContext } = await vite.ssrLoadModule('/src/context/BrowserScope.js')
-const render = (item) => renderToStaticMarkup(React.createElement(BrowserScopeContext.Provider, { value: '["fake","workspace"]' },
+const renderItem = (item) => renderToStaticMarkup(React.createElement(BrowserScopeContext.Provider, { value: '["fake","workspace"]' },
   React.createElement(WorkspaceDataContext.Provider, { value: { brand: { licensed_person_name: 'Synthetic Licensee' } } },
-    React.createElement(CalendarProvider, null, React.createElement(ModelComparison, { item, nmls: '123456', onChoose() {} })))))
+    React.createElement(CalendarProvider, null, React.createElement(ModelComparison, { item, nmls: '123456', onChoose: noop, onCombine: noop })))))
 
-test('blind comparison asks which is better and hides model names', () => {
-  const html = render({ id: '1', prompt: 'Write a post', status: 'done',
-    data: { comparison_id: 'c1', saved: true, candidates: [textCandidate, postsCandidate] } })
-  assert.match(html, /Which one is better\?/)
-  assert.match(html, /Version A is better/)
+const both = { comparison_id: 'c1', saved: true, candidates: [textCandidate, postsCandidate] }
+const noop = () => {}
+
+test('blind comparison guides the user to tap what they like and hides model names', () => {
+  const html = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both })
+  assert.match(html, /Read both versions and tap what works/)
+  assert.match(html, /What do you like about Version A\?/)
+  assert.match(html, /Opening hook/)
+  assert.match(html, /Combine into one version/)
+  assert.match(html, /<button[^>]*disabled=""[^>]*>Combine into one version/)
+  assert.match(html, /Use Version B as is/)
   assert.match(html, /Docs checklist/)
-  assert.match(html, /Not saved to this chat/)
   assert.doesNotMatch(html, /claude|gpt/i)
 })
 
-test('after voting the models, tokens and cost are revealed', () => {
-  const html = render({ id: '1', prompt: 'Write a post', status: 'done',
-    data: { comparison_id: 'c1', saved: true, candidates: [textCandidate, postsCandidate] },
-    reveal: { choice: 'A', estimated_cost_usd: 0.0061, candidates: [
+test('combined version offers adjustments and shows the rounds cost', () => {
+  const merge = { round: 1, kind: 'combine', model: 'claude-sonnet-5-5', estimated_cost_usd: 0.003,
+    response: { type: 'text', response: `Combined answer.\n\n${footer}`, compliance_flags: [] } }
+  const html = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both, merges: [merge], roundsLeft: 7,
+    reveal: { choice: 'merged', estimated_cost_usd: 0.0091, candidates: [
       { slot: 'A', model: 'claude-sonnet-5-5', usage: { input_tokens: 1000, output_tokens: 200 }, estimated_cost_usd: 0.004, latency_ms: 2500 },
-      { slot: 'B', model: 'gpt-test', usage: { input_tokens: 900, output_tokens: 300 }, estimated_cost_usd: 0.0021, latency_ms: 3100 }] } })
-  assert.match(html, /You picked Version A \(claude-sonnet-5-5\)/)
-  assert.match(html, /\$0\.0061/)
-  assert.doesNotMatch(html, /Version A is better/)
+      { slot: 'B', model: 'gpt-6.1-sol', usage: { input_tokens: 900, output_tokens: 300 }, estimated_cost_usd: 0.0021, latency_ms: 3100 }] } })
+  assert.match(html, /Combined version · round 1/)
+  assert.match(html, /Combined answer/)
+  assert.match(html, /Make it shorter/)
+  assert.match(html, /You combined the best of both versions/)
+  assert.match(html, /Version B: gpt-6\.1-sol/)
+  assert.match(html, /Combine and adjust rounds: 1 · \$0\.0030/)
+  assert.doesNotMatch(html, /Combine into one version/)
 })
 
-test('one failed side shows a friendly error and cannot be picked', () => {
-  const html = render({ id: '1', prompt: 'Hi', status: 'done',
+test('after picking one as is, the models and cost are revealed', () => {
+  const html = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both,
+    reveal: { choice: 'A', estimated_cost_usd: 0.0061, candidates: [
+      { slot: 'A', model: 'claude-sonnet-5-5', usage: {}, estimated_cost_usd: 0.004 },
+      { slot: 'B', model: 'gpt-test', usage: {}, estimated_cost_usd: 0.0021 }] } })
+  assert.match(html, /You picked Version A \(claude-sonnet-5-5\)/)
+  assert.match(html, /\$0\.0061/)
+  assert.doesNotMatch(html, /What do you like about/)
+})
+
+test('one failed side shows a friendly error and cannot be used as is', () => {
+  const html = renderItem({ id: '1', prompt: 'Hi', status: 'done',
     data: { comparison_id: 'c1', saved: true, candidates: [textCandidate, { slot: 'B', error: 'provider_rate_limited' }] } })
   assert.match(html, /busy right now/)
-  assert.match(html, /<button[^>]*disabled=""[^>]*>Version B is better/)
+  assert.match(html, /Use Version A as is/)
+  assert.doesNotMatch(html, /Use Version B as is/)
+})
+
+test('Lucie reads back the combine plan', () => {
+  assert.equal(planSummary({ A: { aspects: ['Opening hook', 'Tone and voice'] }, B: { aspects: ['Call to action'] } }),
+    "I'll keep the opening hook and tone and voice from Version A, and the call to action from Version B.")
+  assert.equal(planSummary({ B: { aspects: [], note: 'the warmth' } }, 'shorter'),
+    "I'll keep what you noted from Version B, and make the change you asked for.")
+  assert.equal(planSummary({}, 'make it fun'), "I'll blend the best of both versions, and make the change you asked for.")
+  assert.equal(planSummary({}), '')
+  assert.equal(hasFeedback({ A: { aspects: [] } }), false)
+  assert.equal(hasFeedback({ A: { aspects: ['Hook'] } }), true)
+  assert.deepEqual(aspectsFor('clarification'), [])
+  assert.ok(aspectsFor('campaign').includes('Posting schedule'))
+})
+
+test('combine requests send feedback, change and refine', async () => {
+  const sent = []
+  const api = { send: async (config) => { sent.push(config); return { data: {} } } }
+  await combineComparison(api, 'c1', { feedback: { A: { aspects: ['Hook'] } }, change: 'shorter' })
+  await combineComparison(api, 'c1', { refine: true, change: 'warmer' })
+  assert.deepEqual(sent.map((row) => [row.url, row.data]), [
+    ['/api/compare/c1/combine', { feedback: { A: { aspects: ['Hook'] } }, change: 'shorter', refine: false }],
+    ['/api/compare/c1/combine', { change: 'warmer', refine: true }],
+  ])
+  const failed = { merge: { round: 2, error: 'provider_rate_limited' } }
+  const broken = { send: async () => { throw Object.assign(new Error('502'), { response: { data: { error: 'combine_failed', ...failed } } }) } }
+  assert.equal((await combineComparison(broken, 'c1', { refine: true, change: 'x' })).merge.error, 'provider_rate_limited')
 })

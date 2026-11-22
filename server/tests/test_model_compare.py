@@ -284,3 +284,154 @@ def test_summary_is_workspace_scoped(beta):
     assert response.status_code == 200
     assert response.get_json()["models"][0]["wins"] == 3
     assert beta.repo.comparison_summary.call_args.args[0] == beta.context["workspace_id"]
+
+
+# ---------------------------------------------------------------- combine / refine
+
+STORED = {
+    "id": CID, "persona_id": P, "prompt": "Write a Facebook post about pre-approval",
+    "feedback": {}, "merges": [], "chosen_slot": None, "estimated_cost_usd": 0.006,
+    "candidates": [
+        {"slot": "A", "provider": "anthropic", "model": "claude-sonnet-5-5", "usage": {}, "estimated_cost_usd": 0.004,
+         "response": {"type": "text", "response": "DRAFT-A hook about knowing your numbers.", "compliance_flags": []}},
+        {"slot": "B", "provider": "openai", "model": "gpt-test", "usage": {}, "estimated_cost_usd": 0.002,
+         "response": {"type": "text", "response": "DRAFT-B friendly call to action.", "compliance_flags": []}},
+    ],
+}
+FEEDBACK = {"A": {"aspects": ["Opening hook"], "note": "love the numbers angle"},
+            "B": {"aspects": ["Call to action", "Tone and voice"]}}
+
+
+@pytest.fixture
+def stored(beta):
+    import copy
+    beta.repo.get_comparison = Mock(return_value=copy.deepcopy(STORED))
+    beta.repo.append_merge = Mock(side_effect=lambda w, c, m, feedback, record, expected: {
+        "chosen_slot": "merged", "estimated_cost_usd": 0.01, "merges": [record]})
+    return beta
+
+
+def test_combine_uses_both_drafts_and_what_was_liked(stored):
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(),
+                           json={"feedback": FEEDBACK, "change": "Keep it under 80 words"})
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["merge"]["round"] == 1 and body["merge"]["kind"] == "combine"
+    assert body["merge"]["model"] == "claude-sonnet-5-5"  # merge model defaults to model A
+    assert "NMLS #123456" in body["merge"]["response"]["response"]
+    assert body["reveal"]["choice"] == "merged"
+    assert {c["model"] for c in body["reveal"]["candidates"]} == {"claude-sonnet-5-5", "gpt-test"}
+    assert body["rounds_left"] == model_compare.MAX_MERGE_ROUNDS - 1
+    # Exactly one paid call, with both drafts and the feedback in the prompt.
+    assert len(stored.compare_calls) == 1
+    sent = stored.compare_calls[0][2]["messages"][-1]["content"]
+    assert sent.startswith("Original request: Write a Facebook post")
+    for expected in ("DRAFT-A", "DRAFT-B", "Opening hook", "love the numbers angle",
+                     "Call to action, Tone and voice", "Keep it under 80 words"):
+        assert expected in sent
+    args = stored.repo.append_merge.call_args.args
+    assert args[3] == {"A": {"aspects": ["Opening hook"], "note": "love the numbers angle"},
+                       "B": {"aspects": ["Call to action", "Tone and voice"], "note": ""}}
+    assert args[5] == 0  # optimistic check on the round count
+
+
+def test_combine_never_asks_clarifying_questions(stored):
+    stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK})
+    labels = [call for call in stored.compare_calls]
+    assert len(labels) == 1  # no separate clarification check call
+    from services.generation_policy import AMBIGUOUS_SCOPE_PROMPT
+    system = "".join(block["text"] for block in labels[0][2]["system"])
+    assert AMBIGUOUS_SCOPE_PROMPT not in system
+
+
+def test_combine_keeps_campaign_format(stored):
+    stored.repo.get_comparison.return_value["candidates"][0]["response"] = {
+        "type": "campaign", "campaign": {"content_calendar": []}, "compliance_flags": []}
+    api.app.extensions["compare_clients"]["anthropic"] = lambda candidate, **kwargs: (
+        stored.compare_calls.append(("anthropic", candidate.model, kwargs))
+        or result(json.dumps({"content_calendar": [{"caption": "Combined"}], "platform_breakdown": []})))
+    body = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK}).get_json()
+    assert body["merge"]["response"]["type"] == "campaign"
+    assert stored.compare_calls[0][2]["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_refine_rewrites_latest_combination(stored):
+    stored.repo.get_comparison.return_value["feedback"] = {"A": {"aspects": ["Opening hook"], "note": ""}}
+    stored.repo.get_comparison.return_value["merges"] = [
+        {"round": 1, "response": {"type": "text", "response": "COMBINED-V1"}}]
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(),
+                           json={"refine": True, "change": "Make the call to action softer"})
+    assert response.status_code == 200
+    assert response.get_json()["merge"]["kind"] == "refine"
+    assert response.get_json()["merge"]["round"] == 2
+    sent = stored.compare_calls[0][2]["messages"][-1]["content"]
+    assert "COMBINED-V1" in sent and "Make the call to action softer" in sent and "Opening hook" in sent
+    assert "DRAFT-A" not in sent
+    assert stored.repo.append_merge.call_args.args[5] == 1
+
+
+@pytest.mark.parametrize("payload,message", [
+    ({}, "Pick at least one"),
+    ({"refine": True, "change": "softer"}, "Combine the drafts before refining"),
+    ({"feedback": {"C": {}}}, "feedback"),
+    ({"feedback": {"A": {"aspects": ["x" * 61]}}}, "aspects"),
+    ({"feedback": {"A": {"aspects": "hook"}}}, "aspects"),
+    ({"feedback": FEEDBACK, "change": 5}, "change"),
+    ({"feedback": FEEDBACK, "refine": "yes"}, "refine"),
+])
+def test_combine_validation_makes_no_call(stored, payload, message):
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json=payload)
+    assert response.status_code == 400
+    assert message in response.get_json()["message"]
+    assert stored.compare_calls == []
+
+
+def test_combine_round_limit(stored):
+    stored.repo.get_comparison.return_value["merges"] = [{"round": i} for i in range(model_compare.MAX_MERGE_ROUNDS)]
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK})
+    assert response.status_code == 400
+    assert stored.compare_calls == []
+
+
+def test_combine_unknown_comparison(stored):
+    stored.repo.get_comparison.return_value = None
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK})
+    assert response.status_code == 404
+
+
+def test_viewer_cannot_combine(stored):
+    stored.context["role"] = "viewer"
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK})
+    assert response.status_code == 403
+    assert stored.compare_calls == []
+
+
+def test_failed_combine_is_502_once_and_recorded(stored):
+    attempts = []
+
+    def broken(candidate, **kwargs):
+        attempts.append(1)
+        raise type("RateLimitError", (Exception,), {})()
+    api.app.extensions["compare_clients"]["anthropic"] = broken
+    response = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK})
+    assert response.status_code == 502
+    assert response.get_json()["merge"]["error"] == "provider_rate_limited"
+    assert attempts == [1]
+    stored.repo.append_merge.assert_called_once()
+
+
+def test_combine_output_survives_save_failure(stored):
+    stored.repo.append_merge.side_effect = RuntimeError("db down")
+    body = stored.post(f"/api/compare/{CID}/combine", headers=stored.headers(), json={"feedback": FEEDBACK}).get_json()
+    assert body["saved"] is False and "response" in body["merge"]
+
+
+def test_merge_model_can_be_configured(monkeypatch):
+    config = model_compare.load_config({**ENV, "COMPARE_MERGE_MODEL": "openai:gpt-test"})
+    assert config.merge_model == model_compare.Candidate("openai", "gpt-test")
+    assert model_compare.load_config(ENV).merge_model == model_compare.Candidate("anthropic", "claude-sonnet-5-5")
+
+
+def test_clean_feedback_dedupes_and_drops_empty():
+    cleaned = model_compare.clean_feedback({"A": {"aspects": [" Hook ", "Hook"], "note": " "}, "B": {"aspects": []}})
+    assert cleaned == {"A": {"aspects": ["Hook"], "note": ""}}
