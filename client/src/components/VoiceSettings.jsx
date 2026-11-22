@@ -15,7 +15,7 @@ export default function VoiceSettings({ defaults, overrides, personaName, disabl
   }
   const result = voiceOverrides(defaults, draft)
   return <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); onSave(result) }}>
-    <p className="text-xs text-slate-600">These settings apply to <strong>this conversation only</strong>. Other chats in the {personaName ? `${personaName} folder` : 'folder'} keep the shared defaults from Settings.</p>
+    <p className="text-xs text-slate-600">Starting from your <strong>brand-wide tone</strong>, these sliders adjust <strong>this conversation only</strong>. Other chats in the {personaName ? `${personaName} folder` : 'folder'} keep the brand tone, and any slider you leave alone keeps following it.</p>
     <div className="space-y-6 pb-3"><ToneScales value={draft.tone} disabled={disabled || saving} onChange={changeTone} /></div>
     <div className="flex flex-wrap items-center gap-2">
       <button type="submit" className={`${button} bg-lucent-navy text-white px-5`} disabled={disabled || saving}>{saving ? 'Saving…' : 'Save for this chat'}</button>

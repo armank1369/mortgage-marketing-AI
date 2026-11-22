@@ -10,7 +10,7 @@ contracts, use the [feature reference](STEP_J_FEATURE_AND_OPERATIONS_GUIDE.md).
 2. On first use or **New Persona**, choose a persona card. Cards show initials, name,
    description and active selection. Authorized editors also see edit controls and
    **New persona**, with a short name/description form.
-3. Review its numbered guidelines: **01 Brand Voice**, **02 Tone of Voice** and
+3. Review its numbered guidelines: **01 Brand Voice**, **02 Brand-wide Tone of Voice** and
    **03 Target Audience**. Confirm with **Set Brand Guidelines** before composing.
    Readers can review/use a persona; configuration changes require editor permission.
 4. Send your first request to create the saved conversation. Before this, the chat
