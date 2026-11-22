@@ -9,8 +9,8 @@ model is better at hooks, tone, calls to action and so on.
 
 ## How it works
 
-1. When the beta is on, the chat composer shows a **Compare two models (beta)** checkbox.
-2. With it ticked, **Send** becomes **Compare**. The server runs the normal chat
+1. When the beta is on, the left menu shows **Compare** (with a **Beta** tag) next to Chat and Calendar. It opens a dedicated page with its own request box and a **Compare** button; the chat composer is unchanged.
+2. The server runs the normal chat
    generation (same brand, persona, compliance rules and output formats) once per model,
    in parallel.
 3. The two answers appear as **Version A** and **Version B**. Which model is A is
