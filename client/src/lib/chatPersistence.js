@@ -315,6 +315,14 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     async archive() { const active = state.active; if (await patch({ archived: true })) {
       if (state.active?.id === active.id) { rememberSelected(null); newChat() }
     } },
+    // Archives any chat from the sidebar without opening it. History is kept and the chat can be restored from Archive.
+    async archiveChat(id) {
+      if (state.active?.id === id && !state.active.unsaved) return this.archive()
+      const current = await request(`${base}/${id}?version=2&limit=1`)
+      const saved = await request(`${base}/${id}`, 'PATCH', { archived: true }, { 'If-Match': current.etag })
+      await list()
+      return saved
+    },
     async resend(key) { const record = state.pending.find((r) => r.body.operation_key === key); if (record) return dispatch(record) },
     clearError() { emit({ error: state.storageError }) },
   }
