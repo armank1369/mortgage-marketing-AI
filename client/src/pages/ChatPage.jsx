@@ -338,7 +338,14 @@ export default function ChatPage() {
         </div></div>
         {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4"><div className="max-w-4xl mx-auto">
           <form onSubmit={(event) => { event.preventDefault(); if (compareInput.trim() && !providerBlocked && !comparing) compare(compareInput.trim()) }} className="flex gap-2 items-end">
-            <textarea aria-label="Compare request" rows={2} maxLength={16000} value={compareInput} onChange={(event) => setCompareInput(event.target.value)} placeholder="What should Lucie write? e.g. A post about first-time buyer programs" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
+            <textarea aria-label="Compare request" rows={2} maxLength={16000} value={compareInput}
+              onKeyDown={(event) => {
+                // Enter sends, Shift+Enter adds a line; never submit mid-composition (IME) or on key repeat.
+                if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
+                event.preventDefault()
+                if (!event.repeat && !providerBlocked && !comparing && compareInput.trim()) event.currentTarget.form.requestSubmit()
+              }}
+              onChange={(event) => setCompareInput(event.target.value)} placeholder="What should Lucie write? e.g. A post about first-time buyer programs" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
             <button type="submit" disabled={providerBlocked || !compareInput.trim() || comparing} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{comparing ? 'Comparing…' : 'Compare'}</button>
           </form>
         </div></footer>}
