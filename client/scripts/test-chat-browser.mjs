@@ -62,10 +62,17 @@ try {
     const expression = `[...document.querySelectorAll('button')].find(b => ${exact ? `(b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)})` : `b.textContent.includes(${JSON.stringify(label)})`} && !b.disabled)`
     await wait(expression, `button ${label}`); await evaluate(`${expression}.click()`)
   }
+  // Conversation rows live under their persona folder in the sidebar (or in the flat Archive list).
+  const openChat = async (title) => {
+    const expression = `[...document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded]), nav[aria-label="Conversation list"] button')].find(b => b.textContent.includes(${JSON.stringify(title)}))`
+    await wait(expression, `conversation ${title}`); await evaluate(`${expression}.click()`)
+  }
+  const folderToggle = `document.querySelector('button[aria-label="' + ${JSON.stringify(JSON.parse(fixture).persona_snapshot.name + ' folder')} + '"]')`
+  const expandFolder = async () => { await wait(folderToggle); if (await evaluate(`${folderToggle}.getAttribute('aria-expanded') === 'false'`)) await evaluate(`${folderToggle}.click()`); await wait(`${folderToggle}.getAttribute('aria-expanded') === 'true'`) }
   const input = async (selector, value) => evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value').set.call(e, ${JSON.stringify(value)}); e.dispatchEvent(new Event('input', { bubbles: true })); })()`)
   const enter = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter'}); await cdp('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter'}) }
   const text = () => evaluate('document.body.innerText')
-  const posts = () => evaluate(`window.__stepJ.db.calls.filter(c => c.method === 'POST').length`)
+  const posts = () => evaluate(`window.__stepJ.db.calls.filter(c => c.method === 'POST' && !c.url.endsWith('/title')).length`)
   await cdp('Runtime.enable'); await cdp('Page.enable')
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
   await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/__step_j__` })
@@ -75,7 +82,8 @@ try {
   await evaluate(`localStorage.setItem(${JSON.stringify(legacyKey)}, ${JSON.stringify(legacyBytes)}); localStorage.setItem('lucent_chats', 'unscoped legacy bytes')`)
   await reload()
   const choosePersona = async () => { await wait(`document.querySelector('button[aria-label^="Select persona:"]')`); await evaluate(`document.querySelector('button[aria-label^="Select persona:"]').click()`); await click('Set Brand Guidelines') }
-  const newChat = async () => { await click('New Chat'); await choosePersona() }
+  const newChat = async () => { await click('New Persona'); await choosePersona() }
+  const personaFolder = JSON.parse(fixture).persona_snapshot.name
   await evaluate(`window.__stepJ.openConfiguration()`)
   await wait(`document.querySelector('[role=radio][aria-label="Professional to Casual: 2"]')`)
   await evaluate(`document.querySelector('[role=radio][aria-label="Professional to Casual: 2"]').click()`)
@@ -177,7 +185,7 @@ try {
   assert.equal(await evaluate(`window.__stepJ.db.brand.tone.custom`), 'Preserve tone')
   assert.deepEqual(await evaluate(`window.__stepJ.db.brand.values`), ['Transparency','Accuracy'])
   // Match the old stacked primary navigation and highlight the current view.
-  const positions = await evaluate(`['Chat','Calendar','New Chat'].map(label=>{ const e=document.querySelector('nav[aria-label="Main navigation"] button[aria-label="'+label+'"]'),r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width} })`)
+  const positions = await evaluate(`['Chat','Calendar','New Persona'].map(label=>{ const e=document.querySelector('nav[aria-label="Main navigation"] button[aria-label="'+label+'"]'),r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width} })`)
   assert.ok(positions[0].y < positions[1].y && positions[1].y < positions[2].y)
   assert.equal(positions[0].x, positions[1].x); assert.equal(positions[1].w, positions[2].w)
   await click('Calendar'); assert.equal(await evaluate(`document.querySelector('button[aria-label="Calendar"]').getAttribute('aria-current')`), 'page')
@@ -202,7 +210,7 @@ try {
   const beforeReload = await posts(); await reload()
   await wait(`document.body.innerText.includes('Shortened synthetic text.')`); assert.equal(await posts(), beforeReload)
   await click('Clear / Archive'); await click('Archive and start new'); await choosePersona(); await click('Archive')
-  await click('Synthetic education audience', false); await click('Restore'); await click('Conversations')
+  await openChat('Synthetic education audience'); await click('Restore'); await click('Conversations')
   assert.match(await text(), /Shortened synthetic text/)
   await newChat(); await evaluate(`window.__stepJ.mode = 'posts'`)
   await input('textarea', 'Synthetic posts'); await click('Send'); await wait(`document.body.innerText.includes('Generate social image')`)
@@ -269,9 +277,9 @@ try {
     db.messages['page-34'] = Array.from({length:60},(_,i)=>({ id:'history-'+i, role:i%2?'assistant':'user', kind:'response', content:'History record '+i, created_at:new Date(Date.now()+i*1000).toISOString() }));
     window.__stepJ.save();
   })()`)
-  await click('Conversations'); await click('Load more conversations')
-  await wait(`document.querySelector('nav[aria-label="Conversation list"]').querySelectorAll('button').length > 30`)
-  await click('Paged conversation 34', false); await wait(`document.body.innerText.includes('History record 59')`)
+  await click('Conversations'); await expandFolder(); await click('Load more conversations')
+  await wait(`document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded])').length > 30`)
+  await openChat('Paged conversation 34'); await wait(`document.body.innerText.includes('History record 59')`)
   assert.doesNotMatch(await text(), /History record 0\b/)
   await click('Load earlier messages'); await wait(`document.body.innerText.includes('History record 0')`)
   await click('Export chat')
@@ -283,8 +291,10 @@ try {
   assert.equal(JSON.stringify(document).includes('claim_token'), false)
 
   await evaluate(`window.__stepJ.switchAccount('account-b')`)
+  // After a remount the sidebar shows the persona folders; expand the folder to see its chats.
+  await expandFolder()
   await wait(`document.body.innerText.includes('Paged conversation 34')`)
-  await click('Paged conversation 33', false)
+  await openChat('Paged conversation 33')
   await wait(`document.querySelector('textarea')`)
   await evaluate(`window.__stepJ.mode = 'text'`)
   await input('textarea', 'A shared followup from account B'); await click('Send')
@@ -302,13 +312,46 @@ try {
   assert.equal(await evaluate(`window.__stepJ.api.send({url:'/api/chat/sessions/page-33?version=2',method:'GET'}, {expectedScope:JSON.stringify(['account-b','workspace-b'])}).then(()=>false,e=>e.response.status===404)`), true)
   await evaluate(`window.__stepJ.switchAccount('account-a')`)
   await wait(`document.body.innerText.includes('Shared collaboration')`)
-  await click('Shared collaboration', false)
+  await expandFolder()
+  await openChat('Shared collaboration')
   await wait(`document.body.innerText.includes('A shared followup from account B')`)
   await click('Clear / Archive'); await click('Archive and start new'); await choosePersona(); await click('Archive')
-  await click('Shared collaboration', false); await click('Restore'); await click('Conversations')
+  await openChat('Shared collaboration'); await click('Restore'); await click('Conversations')
+  // Persona folders collapse and expand in the sidebar; the folder of the open chat stays visible.
+  await expandFolder()
+  const sidebar = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folder-expanded.png'), Buffer.from(sidebar.data, 'base64'))
+  await evaluate(`${folderToggle}.click()`); await wait(`${folderToggle}.getAttribute('aria-expanded') === 'false'`)
+  assert.equal(await evaluate(`[...document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded])')].some(b => b.textContent.includes('Paged conversation'))`), false)
+  const collapsed = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'persona-folder-collapsed.png'), Buffer.from(collapsed.data, 'base64'))
+  await expandFolder()
+  // New chat inside the folder skips the persona selector; the persona is bound to the folder.
+  await click('＋ New chat')
+  assert.equal(await evaluate(`!!document.querySelector('button[aria-label^="Select persona:"]')`), false)
+  await wait(`document.body.innerText.includes('Unsent conversation') && document.body.innerText.includes('Persona: ' + ${JSON.stringify(personaFolder)})`)
+  // Tone is adjusted per conversation and travels with the chat's first save.
+  await click('Voice settings for this chat'); await wait(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 5"]')`)
+  await evaluate(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 5"]').click()`)
+  const voiceDialog = await cdp('Page.captureScreenshot', { format: 'png' })
+  await writeFile(path.join(screenshotDir, 'chat-voice-settings.png'), Buffer.from(voiceDialog.data, 'base64'))
+  await click('Save for this chat'); await wait(`document.body.innerText.includes('Voice · 1 custom')`)
+  await evaluate(`window.__stepJ.mode = 'text'; window.__stepJ.autoTitle = true`)
+  await input('textarea', 'Voice check message'); await click('Send')
+  // The first reply names the chat from its content, and the sidebar lists it first with date and time.
+  const chatRows = `[...document.querySelectorAll('nav[aria-label="Persona folders"] button:not([aria-expanded])')].filter(b => /\\d:\\d{2}\\s?[AP]M/.test(b.textContent))`
+  await wait(`${chatRows}[0]?.textContent.startsWith('Auto: Voice check message')`)
+  await wait(`document.querySelector('h2')?.textContent === 'Auto: Voice check message'`)
+  await wait(`window.__stepJ.db.calls.some(c => c.method === 'PUT' && /\\/api\\/chat\\/sessions\\/[^/]+$/.test(c.url) && c.data?.voice_settings?.tone?.serious === 5)`)
+  await wait(`document.body.innerText.includes('Voice · 1 custom')`)
+  // Changing it again on the saved chat uses the dedicated voice endpoint and never touches other chats.
+  await click('Voice settings for this chat'); await evaluate(`document.querySelector('dialog[aria-label="Voice for this chat"] [role=radio][aria-label="Serious to Humorous: 2"]').click()`)
+  await click('Save for this chat')
+  await wait(`window.__stepJ.db.calls.some(c => c.method === 'PUT' && c.url.endsWith('/voice') && c.data.voice_settings.tone.serious === 2)`)
+  assert.equal(await evaluate(`Object.values(window.__stepJ.db.sessions).filter(s => s.voice_settings?.tone).length`), 1)
   await evaluate(`window.__stepJ.switchAccount('account-a', 'viewer')`)
   await wait(`document.body.innerText.includes('Your workspace role permits reading')`)
-  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('New Chat')).disabled`), true)
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('New Persona')).disabled`), true)
   await evaluate(`window.__stepJ.openConfiguration()`)
   await wait(`document.querySelector('input[aria-label="Keywords"]')`)
   assert.equal(await evaluate(`document.querySelector('input[aria-label="Keywords"]').disabled`), true)
@@ -321,7 +364,7 @@ try {
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png' })
   const screenshotPath = path.join(screenshotDir, 'step-j4-mobile.png'); await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   assert.deepEqual(errors, [])
-  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
+  console.log('Browser acceptance passed: send/reload, immutable shortening, archive/restore, image/video generation and revisions/reload, clarification/reload, lost reply, uncertainty/no redispatch, legacy bytes/read-only, collapsible persona folders, newest-first chats with time, automatic chat titles, per-chat tone, conversation/history pagination, cross-account collaboration/attribution/archive/restore, workspace isolation, focus refresh/draft preservation, viewer, 390px layout. No Flask, Neon or provider calls.')
   console.log(`Screenshot: ${screenshotPath}`)
 } finally {
   ws?.close()

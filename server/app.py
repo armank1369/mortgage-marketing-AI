@@ -36,14 +36,16 @@ CORS(app)
 from services.chat_http import blueprint as durable_chat_blueprint, list_v2, detail_v2, body as chat_body
 from services.schedule_http import blueprint as schedule_blueprint
 from services.insights_http import blueprint as insights_blueprint
+from services.compare_http import blueprint as compare_blueprint
 app.register_blueprint(schedule_blueprint)
 app.register_blueprint(insights_blueprint)
+app.register_blueprint(compare_blueprint)
 app.register_blueprint(durable_chat_blueprint)
 
 
 @app.after_request
 def private_chat_cache_control(response):
-    if request.path == '/api/chat/sessions' or request.path.startswith('/api/chat/sessions/'):
+    if request.path in ('/api/chat/sessions', '/api/chat/folders') or request.path.startswith('/api/chat/sessions/'):
         response.headers['Cache-Control'] = 'no-store'
     return response
 

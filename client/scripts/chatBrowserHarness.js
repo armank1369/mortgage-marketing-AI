@@ -54,16 +54,43 @@ window.__stepJ.api = { getWorkspace: () => window.__stepJ.workspace, async send(
     db.personas = [...(db.personas || []).filter(p => p.id !== row.id), row]; save(); return { data: row }
   }
   if (window.__stepJ.role === 'viewer' && method !== 'GET') return reject(403, 'permission_denied')
+  if (url.startsWith('/api/chat/folders')) {
+    const archived = new URLSearchParams(url.split('?')[1]).get('archived') === 'true', groups = new Map()
+    for (const s of Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === archived)) {
+      const row = groups.get(s.default_persona_id || null) || { persona_id: s.default_persona_id || null, chat_count: 0, last_updated_at: s.updated_at }
+      row.chat_count++; if (s.updated_at > row.last_updated_at) row.last_updated_at = s.updated_at
+      groups.set(row.persona_id, row)
+    }
+    return { data: { folders: [...groups.values()].map((row) => ({ ...row, available: !!(db.personas || []).find((p) => p.id === row.persona_id) })) } }
+  }
   if (!url.startsWith('/api/chat/sessions')) throw Error('Unexpected stateless/provider request')
   const [path] = url.split('?'), parts = path.split('/'), id = parts[4], key = parts[6]
   if (url.includes('?version=2&archived=')) {
     const query = new URLSearchParams(url.split('?')[1]), offset = Number(query.get('cursor') || 0)
-    const list = Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === (query.get('archived') === 'true')).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    const list = Object.values(db.sessions).filter((s) => s.workspace_id === workspace && !!s.archived_at === (query.get('archived') === 'true'))
+      .filter((s) => !query.get('persona') || (query.get('persona') === 'none' ? !s.default_persona_id : s.default_persona_id === query.get('persona'))).sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     return { data: { sessions: list.slice(offset, offset + 30).map(presentation), next_cursor: list.length > offset + 30 ? String(offset + 30) : null } }
+  }
+  if (method === 'POST' && parts[5] === 'title') {
+    // Synthetic stand-in for the server's title writer; only active when a test turns it on.
+    const row = db.sessions[id]
+    if (!row || row.workspace_id !== workspace) return reject(404, 'not_found')
+    if (!window.__stepJ.autoTitle || (!data.force && row.title !== snapshot.name)) return { data: { changed: false, session: row } }
+    const first = (db.messages[id] || []).find((m) => m.role === 'user')?.content || 'Chat'
+    const taken = Object.values(db.sessions).filter((o) => o.id !== id && o.default_persona_id === row.default_persona_id).map((o) => o.title)
+    let title = `Auto: ${first.slice(0, 30)}`, n = 2
+    while (taken.includes(title)) title = `Auto: ${first.slice(0, 30)} (${n++})`
+    Object.assign(row, { title, etag: JSON.stringify(crypto.randomUUID()) }); save()
+    return { data: { changed: true, session: row } }
+  }
+  if (method === 'PUT' && parts[5] === 'voice') {
+    const row = db.sessions[id]
+    if (!row || row.workspace_id !== workspace) return reject(404, 'not_found')
+    row.voice_settings = data.voice_settings || {}; save(); return { data: { voice_settings: row.voice_settings } }
   }
   if (method === 'PUT') {
     if (db.sessions[id] && db.sessions[id].workspace_id !== workspace) return reject(404, 'not_found')
-    db.sessions[id] ||= { id, owner: user, created_by_member_id: user, workspace_id: workspace, title: data.title, default_persona_id: data.persona_id, updated_at: nextTime(), etag: '"initial"' }
+    db.sessions[id] ||= { id, owner: user, created_by_member_id: user, workspace_id: workspace, title: data.title, default_persona_id: data.persona_id, voice_settings: data.voice_settings || {}, updated_at: nextTime(), etag: '"initial"' }
     db.messages[id] ||= []; save(); return { data: db.sessions[id] }
   }
   const session = db.sessions[id]

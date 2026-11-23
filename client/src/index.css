@@ -2,9 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shared design tokens for global styles. The Tailwind palette (lucent teal/navy/cream) lives in
+   tailwind.config.js; these variables cover what plain CSS needs, so a dark theme can redefine
+   them in one place. */
+:root {
+  --lucie-ink: #181e28;
+  --lucie-canvas: #f8fafc;
+  --lucie-accent: #17788c;
+  --lucie-selection: #d5eef2;
+}
+
+/* The Neon Auth stylesheet sets `body { color: var(--neon-foreground) }`, which turns near-white
+   when the OS is in dark mode, while Lucie's cards stay white. Setting body colors from Lucie's
+   own tokens (this file loads after the Neon CSS) keeps them consistent with the app's theme. */
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--lucie-ink);
+  background-color: var(--lucie-canvas);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headings use a bold geometric sans, the same pairing as the MVP tool. */
+h1,
+h2,
+h3 {
+  font-family: Montserrat, Inter, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* One brand-teal focus ring for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--lucie-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--lucie-selection);
+  color: var(--lucie-ink);
+}
+
+/* Dark sidebar. Rather than restyling every element inside it, utilities written for a light
+   surface are remapped here, so the conversation list (and anything added to the sidebar later,
+   such as folders) picks up the dark theme without per-element changes. */
+.app-sidebar {
+  color: #e2e8f0;
+}
+.app-sidebar :is(.text-slate-900, .text-slate-800, .text-slate-700) {
+  color: #ffffff;
+}
+.app-sidebar :is(.text-slate-600, .text-slate-500) {
+  color: #b6c0cc;
+}
+.app-sidebar .text-slate-400 {
+  color: #8a94a3;
+}
+.app-sidebar :is(.border-slate-100, .border-slate-200, .border-slate-300, .border-b, .border-t) {
+  border-color: rgb(255 255 255 / 0.1);
+}
+.app-sidebar :is(.bg-white, .bg-slate-50) {
+  background-color: rgb(255 255 255 / 0.06);
+}
+.app-sidebar .bg-slate-100 {
+  background-color: rgb(255 255 255 / 0.1);
+}
+.app-sidebar :is(.hover\:bg-slate-100:hover, .hover\:bg-blue-50:hover) {
+  background-color: rgb(255 255 255 / 0.08);
+}
+.app-sidebar .hover\:text-slate-900:hover {
+  color: #ffffff;
+}
+.app-sidebar input,
+.app-sidebar textarea,
+.app-sidebar select {
+  color: var(--lucie-ink);
+  background-color: #ffffff;
 }
 
 /* iOS Safari auto-zooms the page on focusing any form control smaller than 16px, which on a
@@ -17,4 +89,59 @@ body {
   textarea {
     font-size: 16px;
   }
+}
+
+/* Sign-in screens: theme Neon Auth's built-in form with the Hello Lucent palette. Scoped to
+   .lucie-auth so it doesn't change the account settings screens. */
+.lucie-auth {
+  --neon-primary: #181e28;
+  --neon-primary-foreground: #ffffff;
+  --neon-ring: #181e28;
+  --neon-background: #f3f2ec;
+  --neon-card: #ffffff;
+  /* Neon's utilities read --neon-*, but a few read the --color-* aliases, which resolve at :root. */
+  --color-primary: #181e28;
+  --color-primary-foreground: #ffffff;
+  --color-ring: #181e28;
+}
+
+/* Dark theme. Most screens get their dark colors from tailwind.darkTheme.js, which remaps the
+   light-theme utility classes while <html> has the `dark` class (set by Neon Auth's theme
+   provider from the browser/OS setting or the Appearance choice in Settings). These are the
+   pieces that live in plain CSS. */
+:root.dark {
+  --lucie-ink: #f4f7fa;
+  --lucie-canvas: #1f2837;
+  --lucie-accent: #4fb3c7;
+  --lucie-selection: #1e4f5a;
+}
+
+/* Sign-in screens in dark mode: same Hello Lucent layout on a deep navy page. The primary
+   button flips to a light fill so it still stands out. */
+.dark .lucie-auth {
+  --neon-primary: #e8edf3;
+  --neon-primary-foreground: #2b3649;
+  --neon-ring: #cbd5e1;
+  --neon-background: #1f2837;
+  --neon-card: #2b3649;
+  --neon-card-foreground: #f4f7fa;
+  --neon-foreground: #f4f7fa;
+  --neon-muted-foreground: #b0bbca;
+  --neon-border: #43506a;
+  --neon-input: #5a6985;
+  --color-primary: #e8edf3;
+  --color-primary-foreground: #2b3649;
+  --color-ring: #cbd5e1;
+}
+
+/* Light island inside the dark theme. The chat and calendar workspace and dialogs keep their
+   normal light look when <html> has `dark`: tailwind.darkTheme.js skips everything inside
+   .keep-light, and this restores the light text color, tokens and native controls. */
+.keep-light {
+  color: #181e28;
+  color-scheme: light;
+  --lucie-ink: #181e28;
+  --lucie-canvas: #f8fafc;
+  --lucie-accent: #17788c;
+  --lucie-selection: #d5eef2;
 }

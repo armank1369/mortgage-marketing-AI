@@ -4,9 +4,15 @@ import { useBrowserScope } from '../context/BrowserScope.js'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
 import { useWorkspaceAccess } from '../context/WorkspaceAccess.js'
 import { useChatPersistence } from '../lib/useChatPersistence.js'
-import { projectConversation } from '../lib/chatSerialization.js'
+import { projectConversation, visibleOperations } from '../lib/chatSerialization.js'
 import { loadChatsFromStorage } from '../utils/storage.js'
 import { PROMPT_CATEGORIES } from '../lib/chatPrompts.js'
+import { buildPersonaFolders, folderFor, newestFirst, formatChatTime } from '../lib/chatFolders.js'
+import { defaultVoice, customVoiceCount } from '../lib/voiceSettings.js'
+import VoiceSettings from '../components/VoiceSettings.jsx'
+import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
+import { isLongChat } from '../lib/longChat.js'
+import { isNearBottom, planScroll } from '../lib/chatScroll.js'
 import PreferenceSetup from './PreferenceSetup.jsx'
 import BrandSummary from '../components/BrandSummary.jsx'
 import Dialog from '../components/Dialog.jsx'
@@ -18,8 +24,11 @@ import CalendarPage from './CalendarPage.jsx'
 import InsightsPage from './InsightsPage.jsx'
 import { canSeeInsights } from '../lib/insights.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
+import ModelComparison from '../components/ModelComparison.jsx'
+import { workspaceApi, apiErrorMessage } from '../lib/api.js'
+import { getCompareConfig, runComparison, chooseComparison, combineComparison, saveRequest } from '../lib/modelCompare.js'
 
-const button = 'rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed'
+const button = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed'
 const resolved = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
 
 function OperationStatus({ operation, controller, canWrite, disabled, retryDisabled, onRetry }) {
@@ -46,6 +55,8 @@ function OperationStatus({ operation, controller, canWrite, disabled, retryDisab
   </div>
 }
 
+const COMPARE_KEY = 'compare-page'
+
 export default function ChatPage() {
   const scope = useBrowserScope()
   const { brand, personas, loading: configLoading, error: configError, reload } = useWorkspaceData()
@@ -59,16 +70,33 @@ export default function ChatPage() {
   const [localId, setLocalId] = useState(null)
   const [inputs, setInputs] = useState({})
   const [titleEdit, setTitleEdit] = useState(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
+  // A chat chosen with the sidebar trash icon, waiting for confirmation.
+  const [trashChat, setTrashChat] = useState(null)
   const [promptCategory, setPromptCategory] = useState(null)
   const [setup, setSetup] = useState(false)
+  const [startNewPersona, setStartNewPersona] = useState(false)
+  // Expanded persona folders in the sidebar (remembered per account and workspace in this browser).
+  const [openIds, setOpenIds] = useState(() => {
+    try { const saved = JSON.parse(globalThis.localStorage?.getItem(`lucie_open_folders:v1:${encodeURIComponent(scope)}`) || '[]'); return Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : [] } catch { return [] }
+  })
+  const [voiceOpen, setVoiceOpen] = useState(false)
+  const [personaOpen, setPersonaOpen] = useState(null)
   const [setupDismissed, setSetupDismissed] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [promptOffsets, setPromptOffsets] = useState({})
   const [localError, setLocalError] = useState('')
+  const [dismissedLongChat, setDismissedLongChat] = useState(() => new Set())
   const [offline, setOffline] = useState(() => globalThis.navigator?.onLine === false)
+  const [compareEnabled, setCompareEnabled] = useState(false)
+  const [compareInput, setCompareInput] = useState('')
+  const [comparisons, setComparisons] = useState({})
   const bottom = useRef(null)
+  const scroller = useRef(null)
+  const nearBottom = useRef(true)
+  const lastScroll = useRef(null)
   const local = view === 'local'
   const localChat = localChats.find((row) => row.id === localId)
   const active = local ? localChat : state.active
@@ -90,19 +118,94 @@ export default function ChatPage() {
   const nmls = brand?.nmls_id || 'Not configured'
   const error = localError || state.error
   const lastMessageId = state.messages.at(-1)?.id
+  // Persona folders: collapsible folders in the sidebar, one per persona, each holding that persona's chats.
+  const folders = buildPersonaFolders(personas, state.folders)
+  const openFolder = local ? null : folderFor(folders, state.active?.default_persona_id)
+  const sessionCount = state.sessions.length
+  // The persona belongs to the folder; tone is per conversation, layered over the shared brand tone.
+  const voiceDefaults = defaultVoice(brand)
+  const voiceCustom = customVoiceCount(state.active?.voice_settings)
+  const toggleFolder = (id) => setOpenIds((current) => current.includes(id) ? current.filter((row) => row !== id) : [...current, id])
+  const openFolderIds = (...ids) => setOpenIds((current) => [...current, ...ids.filter((id) => !current.includes(id))])
+  // Suggest a fresh chat once this one is long enough that Lucie's context starts dropping early turns.
+  const showLongChat = !readOnly && !!state.active && !state.loading && !dismissedLongChat.has(state.active.id)
+    && isLongChat(state.messages, { hasOlder: !!state.before_cursor })
 
   useEffect(() => {
     const online = () => setOffline(false), offline = () => setOffline(true)
     window.addEventListener('online', online); window.addEventListener('offline', offline)
     return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline) }
   }, [])
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [lastMessageId, state.submitting])
+  // After a new reply, show where it starts (not its end), unless the reader has scrolled elsewhere.
+  const lastRole = state.messages.at(-1)?.role
+  const chatKey = state.active?.id || localId || 'composer'
+  useEffect(() => {
+    const next = { chatId: chatKey, lastId: lastMessageId, lastRole, submitting: !!state.submitting }
+    const box = scroller.current
+    const el = lastMessageId && box?.querySelector(`[data-message-id="${globalThis.CSS?.escape ? CSS.escape(String(lastMessageId)) : lastMessageId}"]`)
+    const plan = planScroll({ prev: lastScroll.current, next, nearBottom: nearBottom.current, replyHeight: el?.offsetHeight || 0, viewportHeight: box?.clientHeight || 0 })
+    lastScroll.current = next
+    if (plan === 'reply-start' && el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    else if (plan !== 'none') bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [chatKey, lastMessageId, lastRole, state.submitting])
+  // Refresh folder counts whenever the chat list refreshes (new chat, archive, periodic reconcile).
+  useEffect(() => { if (!local) controller.loadFolders(false) }, [controller, local, state.sessions, sessionCount])
+  // Keep the chat lists of expanded folders loaded, and remember which are expanded.
+  useEffect(() => { controller.setOpenFolders(view === 'active' && !local ? openIds : []) }, [controller, openIds, view, local])
+  useEffect(() => { try { globalThis.localStorage?.setItem(`lucie_open_folders:v1:${encodeURIComponent(scope)}`, JSON.stringify(openIds)) } catch { /* remembering is optional */ } }, [scope, openIds])
+  // The folder of the chat you are in is always expanded so it stays visible in the sidebar.
+  const activePersonaId = state.active?.default_persona_id
+  useEffect(() => { if (activePersonaId) openFolderIds(activePersonaId) }, [activePersonaId])
+  useEffect(() => {
+    // Beta: the server decides whether two-model comparison is on for this deployment.
+    const abort = new AbortController()
+    getCompareConfig(workspaceApi, abort.signal).then((config) => setCompareEnabled(!!config?.enabled)).catch(() => setCompareEnabled(false))
+    return () => abort.abort()
+  }, [scope])
 
   const run = async (task) => {
     setLocalError('')
     try { return await task() } catch (err) { if (err.code !== 'ERR_CANCELED') setLocalError(err.message === state.storageError ? err.message : 'The action could not be completed. Refresh the conversation and try again.') }
   }
   const action = (fields) => run(() => controller.submit({ ...fields, ...(fields.action !== 'shorten' ? { persona_id: persona?.id } : {}) }))
+  const chatComparisons = comparisons[COMPARE_KEY] || []
+  const comparing = chatComparisons.some((item) => item.status === 'running')
+  const updateComparison = (key, id, changes) => setComparisons((previous) => ({ ...previous,
+    [key]: (previous[key] || []).map((item) => item.id === id ? { ...item, ...changes } : item) }))
+  const compare = (text) => {
+    const key = COMPARE_KEY, id = `${Date.now()}-${Math.random()}`
+    setComparisons((previous) => ({ ...previous, [key]: [...(previous[key] || []), { id, prompt: text, status: 'running' }] }))
+    setCompareInput('')
+    runComparison(workspaceApi, { message: text, personaId: persona?.id })
+      .then((data) => updateComparison(key, id, { status: 'done', data }))
+      .catch((err) => updateComparison(key, id, { status: 'failed', error: apiErrorMessage(err, 'The comparison could not be completed. Please try again.') }))
+  }
+  const choose = (item, choice, note) => {
+    const key = COMPARE_KEY
+    updateComparison(key, item.id, { choosing: true, choiceError: '' })
+    chooseComparison(workspaceApi, item.data.comparison_id, choice, note)
+      .then((reveal) => updateComparison(key, item.id, { choosing: false, reveal }))
+      .catch((err) => updateComparison(key, item.id, { choosing: false, choiceError: apiErrorMessage(err, 'Your choice could not be saved. Please try again.') }))
+  }
+  const combine = (item, request, plan) => {
+    const key = COMPARE_KEY
+    updateComparison(key, item.id, { combining: true, choiceError: '', ...(plan ? { plan } : {}) })
+    combineComparison(workspaceApi, item.data.comparison_id, request)
+      .then((result) => setComparisons((previous) => ({ ...previous, [key]: (previous[key] || []).map((row) => row.id === item.id
+        ? { ...row, combining: false, merges: [...(row.merges || []), result.merge], roundsLeft: result.rounds_left, reveal: result.reveal || row.reveal }
+        : row) })))
+      .catch((err) => updateComparison(key, item.id, { combining: false, choiceError: apiErrorMessage(err, 'Lucie could not combine the versions. Please try again.') }))
+  }
+  const saveComparison = (item, source) => {
+    const key = COMPARE_KEY
+    updateComparison(key, item.id, { saving: true, saveError: '' })
+    // An ordinary send whose result was already generated: it creates the chat if needed and is
+    // idempotent, saved durably like any other message. No AI call is made.
+    action(saveRequest(item, source)).then((result) => {
+      if (result?.request_message_id) { setComparisons((previous) => ({ ...previous, [key]: (previous[key] || []).filter((row) => row.id !== item.id) })); setNav('chat') }
+      else updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' })
+    }).catch(() => updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' }))
+  }
   const send = (text = input) => {
     if (!text.trim() || providerBlocked || !state.active) return
     action({ action: 'send', message: text.trim() }).then((result) => {
@@ -122,16 +225,25 @@ export default function ChatPage() {
     if (next === 'local') setLocalId(localChats[0]?.id || null)
     else controller.list(next === 'archive')
   }
+  // "New Persona" always starts at the persona configurator; saving the persona creates its folder.
+  const newPersona = () => { setStartNewPersona(true); newChat() }
   const newChat = () => {
     setSetupDismissed(false); setSetup(true); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null)
     controller.list(false)
+  }
+  // Inside a persona folder, a new chat skips the selector and stays in the folder.
+  const newChatInFolder = (folder = openFolder) => {
+    if (!folder?.available) return newChat()
+    setSetup(false); setView('active'); setNav('chat'); setMobileMenu(false); setTitleEdit(null); setLocalError('')
+    openFolderIds(folder.id); controller.newChat(folder.id); controller.patch({ title: folder.name })
   }
   const select = (chat) => {
     setSetup(false); setNav('chat'); setMobileMenu(false); setTitleEdit(null); setLocalError('')
     if (local) setLocalId(chat.id); else controller.open(chat.id)
   }
   const list = local ? localChats.filter((row) => row.messages?.length) : state.sessions
-  const startPersonaChat = (row) => { controller.newChat(row.id); controller.patch({ title: row.name }); setSetup(false); setSetupDismissed(false) }
+  // The persona selector opens that persona's folder with a fresh chat inside it.
+  const startPersonaChat = (row) => { openFolderIds(row.id); setView('active'); controller.newChat(row.id); controller.patch({ title: row.name }); setSetup(false); setSetupDismissed(false) }
   const exportChat = async () => {
     setExporting(true); setLocalError('')
     try {
@@ -141,54 +253,104 @@ export default function ChatPage() {
     finally { setExporting(false) }
   }
   const showingSetup = setup || (!setupDismissed && canWrite && view === 'active' && state.active?.unsaved && !state.active.default_persona_id && !state.loading)
-  if (nav === 'chat' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup onComplete={startPersonaChat} onCancel={() => { setSetup(false); setSetupDismissed(true) }} /></div>
+  if (nav !== 'calendar' && nav !== 'insights' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup startNew={startNewPersona} onComplete={(row) => { setStartNewPersona(false); startPersonaChat(row) }} onCancel={() => { setSetup(false); setSetupDismissed(true); setStartNewPersona(false) }} /></div>
   return <div className="flex h-dvh bg-slate-50 text-slate-800 overflow-hidden">
     {mobileMenu && <button className="fixed inset-0 z-30 bg-slate-900/50 md:hidden" aria-label="Close menu" onClick={() => setMobileMenu(false)} />}
-    <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-slate-50 border-r border-slate-200`}>
+    <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-lucent-navy shadow-xl md:shadow-none app-sidebar`}>
+      <div aria-hidden="true" className="h-1 shrink-0 bg-gradient-to-r from-lucent-accent via-blue-300 to-lucent-cream" />
       <div className="p-5 border-b border-slate-100">
-        <div className="flex items-center gap-2.5"><img src={lucieAvatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
-          <div className="leading-tight"><h1 className="text-xl font-extrabold text-slate-900">Lucie</h1><p className="text-[10px] font-medium text-slate-500">Lucent's AI Social Media Assistant</p></div></div>
-        <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
+        <div className="flex items-center gap-2.5"><img src={lucieAvatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-blue-300/60" />
+          <div className="leading-tight"><h1 className="text-xl font-extrabold text-slate-900">Lucie</h1><p className="whitespace-nowrap text-[9px] font-semibold uppercase tracking-wide text-blue-300">Lucent's AI Social Media Assistant</p></div></div>
+        <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
       </div>
       <nav aria-label="Main navigation" className="space-y-1 p-3">
-        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"], ...(canSeeInsights(role, environment) ? [["insights", "📊", "Insights"]] : [])].map(([id, icon, label]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}</button>)}
-        <button type="button" aria-label="New Chat" disabled={!canWrite} onClick={newChat} className="mt-3 flex w-full items-center gap-3 rounded-lg border-t border-slate-100 px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base">➕</span>New Chat</button>
+        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"], ...(canSeeInsights(role, environment) ? [["insights", "📊", "Insights"]] : []), ...(compareEnabled && !local ? [["compare", "⚖️", "Compare", true]] : [])].map(([id, icon, label, beta]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-slate-100 text-slate-900 shadow-[inset_3px_0_0_#3FA3B7]' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}{beta && <span className="ml-auto rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Beta</span>}</button>)}
+        <button type="button" aria-label="New Persona" disabled={!canWrite} onClick={newPersona} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-lucent-accent px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base leading-none">+</span>New Persona</button>
       </nav>
-      <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded px-2 py-1 ${view === id ? 'bg-blue-50 text-blue-800' : 'text-slate-500'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
-      <nav aria-label="Conversation list" className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded-md px-2 py-1 font-medium transition-colors ${view === id ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-900'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
+      {view === 'active' && !local ? <nav aria-label="Persona folders" className="flex-1 overflow-y-auto p-3 space-y-0.5">
+        <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Persona folders</p>
+        {state.foldersError && <p role="status" className="px-2 text-xs text-amber-800">{state.foldersError} <button className="underline" onClick={() => controller.loadFolders(false)}>Retry</button></p>}
+        {!folders.length && <p className="p-3 text-xs text-slate-400">{configLoading ? 'Loading personas…' : 'No personas yet. Choose New Persona to create your first folder.'}</p>}
+        {folders.map((folder) => {
+          const open = openIds.includes(folder.id), chats = state.folderChats[folder.id]
+          return <div key={folder.id}>
+            <button type="button" aria-expanded={open} aria-label={`${folder.name} folder`} onClick={() => toggleFolder(folder.id)} className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-100 ${openFolder?.id === folder.id ? 'text-blue-800' : ''}`}>
+              <span aria-hidden="true" className="w-3 text-[10px] text-slate-400">{open ? '▾' : '▸'}</span><span aria-hidden="true" className="text-base">{open ? '📂' : folder.available ? '📁' : '🗂️'}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{folder.name}</span><span className="text-[10px] text-slate-400">{folder.chat_count}</span>
+            </button>
+            {open && <div className="ml-5 space-y-0.5 border-l border-slate-200 pb-1 pl-2">
+              {folder.available && <div className="flex flex-wrap gap-1.5 py-1">
+                <button type="button" disabled={!canWrite} onClick={() => newChatInFolder(folder)} className={button}>＋ New chat</button>
+                <button type="button" onClick={() => setPersonaOpen(folder.id)} className={button}>Persona settings</button></div>}
+              {!folder.available && <p className="px-1 py-1 text-[11px] text-slate-500">This persona is unavailable, so its chats are read only.</p>}
+              {!chats && <p role="status" className="px-1 py-1 text-[11px] text-slate-400">Loading…</p>}
+              {chats && !chats.sessions.length && <p className="px-1 py-1 text-[11px] text-slate-400">No chats yet.</p>}
+              {chats && newestFirst(chats.sessions).map((chat) => <div key={chat.id} className="group relative">
+                <button type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg py-1.5 pl-2 text-left ${folder.available && canWrite ? 'pr-9' : 'pr-2'} ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
+                  <span className="block truncate text-[13px] font-medium">{chat.title || 'Conversation'}</span>
+                  <span className="block text-[10px] text-slate-400">{formatChatTime(chat.updated_at)}</span>
+                </button>
+                {folder.available && canWrite && <button type="button" aria-label={`Archive chat: ${chat.title || 'Conversation'}`} title="Archive chat" onClick={() => setTrashChat({ id: chat.id, title: chat.title || 'Conversation' })} className="chat-trash absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-500/15 hover:text-red-400 focus-visible:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                </button>}
+              </div>)}
+              {chats?.next_cursor && <button type="button" className={`${button} w-full`} onClick={() => controller.loadFolderChats(folder.id, true)}>Load more conversations</button>}
+            </div>}
+          </div>
+        })}
+        {state.pending.filter((record) => !list.some((chat) => chat.id === record.session_id)).map((record) => <button key={record.body.operation_key} className={`${button} w-full text-left`} onClick={() => controller.open(record.session_id)}>Recover pending request</button>)}
+      </nav> : <nav aria-label="Conversation list" className="flex-1 overflow-y-auto p-3 space-y-2">
         {local && <p className="text-xs text-slate-500 px-2">Read-only history from this account and browser. Nothing is uploaded.</p>}
-        {!list.length && <p className="p-3 text-xs text-slate-400">{local ? 'No local history in this account and workspace.' : 'No conversations in this view.'}</p>}
+        {!list.length && <p className="p-3 text-xs text-slate-400">{local ? 'No local history in this account and workspace.' : 'No archived conversations.'}</p>}
         {list.map((chat) => <button key={chat.id} onClick={() => select(chat)} className={`w-full rounded-xl p-3 text-left border ${active?.id === chat.id ? 'bg-slate-100 border-transparent' : 'border-transparent hover:bg-slate-100'}`}>
           <span className="block truncate text-sm font-medium">{chat.title || 'Conversation'}</span>
           <span className="block text-[10px] text-slate-400 mt-1">Last edited: {new Date(chat.updated_at || chat.updatedAt || chat.createdAt || Date.now()).toLocaleString()}</span>
-          <span className="flex flex-wrap gap-1 mt-2"><span className="max-w-full truncate rounded border border-slate-300 px-1.5 py-0.5 text-[9px] text-slate-600">{chat.persona_name || chat.persona?.name || 'Persona unavailable'}</span>{(chat.content_types || chat.contentTypes || []).slice(0, 2).map((type) => <span key={type} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] text-slate-600">{({ social_image: 'Image', campaign: 'Campaign', posts: 'Posts', video: 'Video', carousel: 'Multi Image Carousel', text: 'Text' })[type] || type}</span>)}{(chat.content_types || chat.contentTypes || []).length > 2 && <span className="text-[10px] text-slate-400">+{(chat.content_types || chat.contentTypes).length - 2}</span>}</span>
+          <span className="flex flex-wrap gap-1 mt-2"><span className="max-w-full truncate rounded border border-slate-300 px-1.5 py-0.5 text-[9px] text-slate-600">{chat.persona_name || chat.persona?.name || 'Persona unavailable'}</span></span>
           <span className="block truncate text-[10px] text-slate-500 mt-1.5">{chat.preview || chat.summary || ''}</span>
         </button>)}
         {!local && state.next_cursor && <button className={`${button} w-full`} onClick={() => controller.list(state.archived, true)}>Load more conversations</button>}
-        {!local && state.pending.filter((record) => !list.some((chat) => chat.id === record.session_id)).map((record) => <button key={record.body.operation_key} className={`${button} w-full text-left`} onClick={() => controller.open(record.session_id)}>Recover pending request</button>)}
-      </nav>
+      </nav>}
       <div className="px-4 py-3 border-t border-slate-100"><Link to="/settings" className="text-xs text-slate-500 hover:text-slate-900">Settings</Link></div>
       <p className="p-4 border-t border-slate-100 text-[11px] text-slate-400">{brand?.licensed_person_name || 'Identity not configured'} · NMLS #{nmls}</p>
     </aside>
-    <main className="flex min-w-0 flex-1 flex-col">
-      <div className="md:hidden bg-slate-900 text-white px-4 py-3"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}>☰ <span className="ml-3 font-semibold">Lucie</span></button></div>
-      {nav === 'calendar' ? <CalendarPage /> : nav === 'insights' && canSeeInsights(role, environment) ? <InsightsPage /> : <>
+    <main className="keep-light flex min-w-0 flex-1 flex-col bg-slate-50">
+      <div className="md:hidden bg-lucent-navy text-white px-4 py-3 border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
+      {nav === 'calendar' ? <CalendarPage /> : nav === 'insights' && canSeeInsights(role, environment) ? <InsightsPage /> : nav === 'compare' && compareEnabled && !local ? <>
+        <header className="bg-white border-b px-4 sm:px-6 py-3">
+          <div className="flex items-center gap-2"><h2 className="font-semibold text-sm">Compare and combine</h2><span className="rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Beta</span></div>
+          <p className="mt-1 text-xs text-slate-500">Lucie writes your request with two AI models, you tap what you like in each, and she combines the best of both. Costs about two AI calls per request, plus one per combine or adjustment.</p>
+        </header>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5"><div className="max-w-4xl mx-auto space-y-4">
+          {!persona && !personaPending && <div role="alert" className="rounded-xl border bg-white p-3 text-sm">Open or start a chat with a persona first, so Lucie knows whose voice to write in. <button type="button" className="underline" onClick={() => setNav('chat')}>Go to Chat</button></div>}
+          {persona && <p className="text-xs font-medium text-blue-900">Writing as: {persona.name}. Saving puts the result in your open chat, "{active?.title || 'New chat'}".</p>}
+          {!chatComparisons.length && <div className="py-12 text-center"><img src={lucieAvatar} alt="" className="mx-auto mb-4 h-16 w-16 rounded-full object-cover ring-4 ring-blue-100" /><p className="font-display text-lg font-bold text-slate-900">Compare two models</p><p className="text-sm text-slate-500 mt-2">Describe the post or campaign you need below.</p></div>}
+          {chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onCombine={combine} onSave={saveComparison} canSave={!providerBlocked && !readOnly} />)}
+          <div ref={bottom} />
+        </div></div>
+        {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4"><div className="max-w-4xl mx-auto">
+          <form onSubmit={(event) => { event.preventDefault(); if (compareInput.trim() && !providerBlocked && !comparing) compare(compareInput.trim()) }} className="flex gap-2 items-end">
+            <textarea aria-label="Compare request" rows={2} maxLength={16000} value={compareInput} onChange={(event) => setCompareInput(event.target.value)} placeholder="What should Lucie write? e.g. A post about first-time buyer programs" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
+            <button type="submit" disabled={providerBlocked || !compareInput.trim() || comparing} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{comparing ? 'Comparing…' : 'Compare'}</button>
+          </form>
+        </div></footer>}
+      </> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
-          <div className="flex gap-2">{active && !active.unsaved && <button className={button} disabled={exporting || state.loading} onClick={exportChat}>{exporting ? 'Preparing export…' : 'Export chat'}</button>}<button className={button} disabled={!active} onClick={() => setSummaryOpen(true)}>Brand Summary</button></div>
+          <div className="flex gap-2">{active && !active.unsaved && <button className={button} disabled={exporting || state.loading} onClick={exportChat}>{exporting ? 'Preparing export…' : 'Export chat'}</button>}{!local && state.active && <button className={button} aria-label="Voice settings for this chat" disabled={!persona || state.loading} onClick={() => setVoiceOpen(true)}>Voice{voiceCustom ? ` · ${voiceCustom} custom` : ''}</button>}<button className={button} disabled={!active} onClick={() => setSummaryOpen(true)}>Brand Summary</button></div>
           {!local && state.active && <div className="flex gap-2">
             <button className={button} disabled={readOnly || pending || state.loading || state.metadataSaving || state.active.unsaved} onClick={() => setTitleEdit(state.active.title)}>Rename</button>
             {state.active.archived_at ? <button className={button} disabled={!canWrite || state.loading} onClick={() => run(() => controller.patch({ archived: false }))}>Restore</button>
               : <button className={button} disabled={readOnly || pending || state.loading} onClick={() => state.active.unsaved ? newChat() : setConfirmArchive(true)}>Clear / Archive</button>}
           </div>}
         </header>
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
+        <div ref={scroller} onScroll={(event) => { nearBottom.current = isNearBottom(event.currentTarget) }} className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
           <div className="max-w-4xl mx-auto space-y-5">
             {error && <div role="alert" className="border border-red-200 bg-red-50 rounded-lg p-3 text-sm text-red-800">{error} <button className="underline ml-2" onClick={() => { setLocalError(''); controller.clearError(); controller.reconcile(); controller.list() }}>Refresh</button></div>}
             {offline && <p role="status" className="text-sm text-amber-800">Offline. You can compose a message; generation needs durable storage online.</p>}
             {!canWrite && <p className="text-xs text-slate-500">Your workspace role permits reading this workspace’s saved conversations.</p>}
             {!local && !personaPending && (personaConflict || !persona || configError) && <div className="rounded-xl border bg-white p-3 text-sm">
-              <div className="flex flex-wrap justify-between items-center gap-3"><span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-900">Persona: {persona?.name || state.active?.persona_name || 'Unavailable'}</span><button className={button} disabled={!canWrite} onClick={newChat}>Start another chat</button></div>
+              <div className="flex flex-wrap justify-between items-center gap-3"><span className="rounded-full bg-blue-50 px-3 py-1 font-semibold text-blue-900">Persona: {persona?.name || state.active?.persona_name || 'Unavailable'}</span><button className={button} disabled={!canWrite} onClick={() => newChatInFolder()}>Start another chat</button></div>
               <p className="text-xs text-slate-500 mt-2">This conversation stays with one persona. Multiple conversations can use the same persona.</p>
               {(personaConflict || !persona) && <p role="status" className="text-xs text-amber-800 mt-2">This conversation's persona is unavailable, mixed or unknown. History is preserved; start a new chat to generate content.</p>}
               {persona && (!Object.keys(persona.audience_profile || {}).length || !persona.prompt_guidance) && <p className="text-xs text-amber-800 mt-2">Audience details or content guidance are incomplete. Review configuration in Settings.</p>}
@@ -197,14 +359,18 @@ export default function ChatPage() {
             </div>}
             {state.loading && !local && <ConversationSkeleton />}
             {!local && state.before_cursor && <button className={button} onClick={() => controller.open(state.active.id, true)}>Load earlier messages</button>}
-            {!messages.length && !state.loading && <div className="py-14 text-center"><p className="font-semibold">{local ? 'Select local history' : 'Start a conversation'}</p><p className="text-xs text-slate-500 mt-2">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
+            {!messages.length && !state.loading && <div className="py-14 text-center"><img src={lucieAvatar} alt="" className="mx-auto mb-4 h-16 w-16 rounded-full object-cover ring-4 ring-blue-100" /><p className="font-display text-lg font-bold text-slate-900">{local ? 'Select local history' : 'Start a conversation'}</p><div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 rounded-full bg-lucent-accent" /><p className="text-sm text-slate-500 mt-3">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
             {messages.map((message) => <PersistedMessage key={message.id} message={message} nmls={nmls} persona={persona?.id} onAction={action} disabled={blocked} providerDisabled={providerBlocked} readOnly={readOnly} legacy={local} />)}
-            {operations.map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
+            {visibleOperations(operations, state.messages).map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
             <div ref={bottom} />
           </div>
         </div>
         {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4">
           <div className="max-w-4xl mx-auto">
+            {showLongChat && <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="min-w-0 flex-1"><span className="font-semibold">This chat is getting long.</span> Lucie only remembers the most recent part of a conversation, so answers may drift or repeat. For best results, start a new chat{openFolder?.available ? ` in the ${openFolder.name} folder` : ''}.</p>
+              <div className="flex gap-2"><button type="button" className={`${button} border-amber-300 bg-white`} disabled={pending} onClick={() => newChatInFolder()}>Start new chat</button><button type="button" className={button} onClick={() => setDismissedLongChat((previous) => new Set(previous).add(state.active.id))}>Keep going</button></div>
+            </div>}
             <div className="flex flex-wrap gap-2 mb-3">{PROMPT_CATEGORIES.map((category) => <button key={category.category} className={button} onClick={() => setPromptCategory(promptCategory === category.category ? null : category.category)}>{category.emoji} {category.category}</button>)}</div>
             {promptCategory && <div className="flex flex-wrap gap-2 mb-3">{promptSuggestions(PROMPT_CATEGORIES.find((row) => row.category === promptCategory).prompts, promptOffsets[promptCategory] || 0).map((prompt) => <button key={prompt} disabled={providerBlocked} className={button} onClick={() => send(prompt)}>{prompt}</button>)}<button type="button" className={button} onClick={() => setPromptOffsets({ ...promptOffsets, [promptCategory]: (promptOffsets[promptCategory] || 0) + 3 })}>↻ More</button></div>}
             <form onSubmit={(event) => { event.preventDefault(); send() }} className="flex gap-2 items-end">
@@ -215,18 +381,24 @@ export default function ChatPage() {
                   if (!event.repeat && !providerBlocked && input.trim()) event.currentTarget.form.requestSubmit()
                 }}
                 onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
-              <button type="submit" disabled={providerBlocked || !input.trim()} className={`${button} bg-lucent-navy text-white px-5`}>{state.submitting ? 'Saving / generating…' : 'Send'}</button>
+              <button type="submit" disabled={providerBlocked || !input.trim()} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{state.submitting ? 'Saving / generating…' : 'Send'}</button>
             </form>
             <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves are shared with this workspace.</p>
           </div>
         </footer>}
       </>}
     </main>
+    {voiceOpen && state.active && <Dialog title="Voice for this chat" onClose={() => setVoiceOpen(false)}><VoiceSettings defaults={voiceDefaults} overrides={state.active.voice_settings} personaName={persona?.name} disabled={readOnly || state.loading} saving={state.metadataSaving}
+      onCancel={() => setVoiceOpen(false)} onSave={(voice) => run(() => controller.setVoice(voice)).then((saved) => { if (saved) setVoiceOpen(false) })} /></Dialog>}
+    {personaOpen && personas.find((row) => row.id === personaOpen) && <Dialog wide title={`${personas.find((row) => row.id === personaOpen).name} persona settings`} onClose={() => setPersonaOpen(null)}><PersonaGuidelines key={personaOpen} persona={personas.find((row) => row.id === personaOpen)} onBack={() => setPersonaOpen(null)} onDone={() => setPersonaOpen(null)} /></Dialog>}
     {summaryOpen && <Dialog title="Brand Summary" onClose={() => setSummaryOpen(false)}><BrandSummary persona={local ? localChat?.persona : persona} brand={brand} /></Dialog>}
     {titleEdit !== null && <Dialog title="Rename conversation" onClose={() => setTitleEdit(null)}><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); run(() => controller.patch({ title: titleEdit.trim() })).then((saved) => { if (saved) setTitleEdit(null) }) }}>
       <label className="text-sm font-semibold">Conversation title<input autoFocus maxLength={200} value={titleEdit} onChange={(event) => setTitleEdit(event.target.value)} className="block w-full border rounded p-2 mt-2" /></label>
-      <div className="flex gap-2"><button type="button" className={button} onClick={() => setTitleEdit(null)}>Cancel</button><button type="submit" className={button} disabled={!titleEdit.trim()}>Save title</button></div>
+      <div className="flex flex-wrap gap-2"><button type="button" className={button} onClick={() => setTitleEdit(null)}>Cancel</button><button type="submit" className={button} disabled={!titleEdit.trim() || suggesting}>Save title</button>
+        <button type="button" className={button} disabled={suggesting || state.metadataSaving || !state.active?.id || state.active.unsaved} onClick={() => { setSuggesting(true); run(() => controller.nameChat(state.active.id, { force: true })).then((data) => { if (data?.session?.title) setTitleEdit(data.session.title) }).finally(() => setSuggesting(false)) }}>{suggesting ? 'Suggesting…' : 'Suggest a title'}</button></div>
+      <p className="text-[11px] text-slate-500">Suggest a title writes a specific, unique name from this conversation using one short AI call, and replaces the current title right away.</p>
     </form></Dialog>}
+    {trashChat && <Dialog title="Archive this chat?" onClose={() => setTrashChat(null)}><div className="space-y-4"><p className="text-sm">&ldquo;{trashChat.title}&rdquo; will be archived for everyone in this workspace. Its messages are kept in Archive and can be restored at any time.</p><div className="flex gap-2"><button type="button" autoFocus className={button} onClick={() => setTrashChat(null)}>Cancel</button><button type="button" className={`${button} border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 hover:text-red-800`} disabled={state.metadataSaving} onClick={() => run(() => controller.archiveChat(trashChat.id)).then(() => setTrashChat(null))}>Archive chat</button></div></div></Dialog>}
     {confirmArchive && <Dialog title="Archive this conversation?" onClose={() => setConfirmArchive(false)}><div className="space-y-4"><p className="text-sm">This archives the conversation for everyone in this workspace. Its messages remain available in Archive and can be restored. A new unsent conversation will open.</p><div className="flex gap-2"><button className={button} onClick={() => setConfirmArchive(false)}>Cancel</button><button className={button} onClick={() => run(() => controller.archive()).then(() => setConfirmArchive(false))}>Archive and start new</button></div></div></Dialog>}
   </div>
 }

@@ -13,10 +13,10 @@ const proposals = [
   { name: 'First-Time Homebuyer', description: 'People new to the mortgage process who want understandable guidance.', audience_profile: { needs: ['Mortgage process education', 'Clear next steps'] }, prompt_guidance: 'Explain terms step by step without assuming age, income, family status or eligibility. No guarantees.' },
 ]
 
-export default function PersonaManager({ onSelect, legacyPersona, selectedId }) {
+export default function PersonaManager({ onSelect, legacyPersona, selectedId, startNew = false }) {
   const scope = useBrowserScope()
   const { personas, setPersonas, canWrite, loading, error: loadError, reload } = useWorkspaceData()
-  const [draft, setDraft] = useState(null)
+  const [draft, setDraft] = useState(() => startNew && canWrite ? { name: '', description: '' } : null)
   const [guidelinesId, setGuidelinesId] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -66,9 +66,9 @@ export default function PersonaManager({ onSelect, legacyPersona, selectedId }) 
       <div className="grid gap-3 sm:grid-cols-2">{personas.map((row) => {
         if (draft?.id === row.id) return <div key={row.id}>{compactForm}</div>
         const active = row.id === activeId
-        return <div key={row.id} className={`relative rounded-xl border-2 transition-colors ${active ? 'border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:shadow-sm'}`}>
+        return <div key={row.id} className={`relative rounded-xl border-2 transition-colors ${active ? 'border-lucent-accent bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:shadow-sm'}`}>
           <button type="button" aria-label={`Select persona: ${row.name}`} aria-pressed={active} onClick={() => choose(row)} className="h-full w-full rounded-xl p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700">
-            <span aria-hidden="true" className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold ${active ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-700'}`}>{personaInitials(row.name)}</span>
+            <span aria-hidden="true" className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold ${active ? 'bg-lucent-accent text-white' : 'bg-slate-100 text-slate-700'}`}>{personaInitials(row.name)}</span>
             <span className="mb-1 block pr-5 text-sm font-semibold">{row.name}</span><span className={`block text-xs leading-relaxed ${active ? 'text-slate-300' : 'text-slate-500'}`}>{row.description}</span>
             {active && <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-900"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Active</span>}
           </button>

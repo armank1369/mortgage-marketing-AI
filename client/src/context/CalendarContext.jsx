@@ -92,13 +92,13 @@ export function CalendarProvider({ children }) {
     setImported(true)
     try { localStorage.setItem(key + ':imported', 'yes') } catch { /* Stable IDs protect retries. */ }
   }
-  return <CalendarContext.Provider value={{ entries, error, revision: data?.revision, refresh, legacy, importLegacy, canWrite: canWrite && !busy,
+  return <CalendarContext.Provider value={{ entries, error, revision: data?.revision, campaigns: data?.campaigns || [], refresh, legacy, importLegacy, canWrite: canWrite && !busy,
     addEntry: entry => mutate('manual', () => ({ entries: [wireEntry(entry)] })),
     moveEntry: (id, entry, revision) => mutate('move', () => ({ id, entry: wireEntry(entry) }), revision),
     removeEntry: id => remove([id]), clearEntries: match => remove(entries.filter(match).map(e => e.id)),
     isBatchSaved: batch => entries.some(e => e.batchId === batch),
     upsertEntries: (batch, rows, revision) => mutate('save', () => ({ batch, entries: rows.map(wireEntry) }), revision) }}>
-    {error && <p role="alert" className="bg-amber-50 p-2 text-sm">{error}</p>}
+    {error && <p role="alert" className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2 text-sm flex items-center justify-between gap-3"><span>{error}</span><button type="button" onClick={() => setError('')} className="text-xs font-medium underline">Dismiss</button></p>}
     {children}
   </CalendarContext.Provider>
 }
