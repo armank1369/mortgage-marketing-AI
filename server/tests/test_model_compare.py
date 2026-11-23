@@ -113,9 +113,33 @@ def test_openai_result_maps_length_to_max_tokens():
     (type("AuthenticationError", (Exception,), {})(), "provider_unavailable"),
     (type("APIConnectionError", (Exception,), {})(), "provider_outcome_unknown"),
     (RuntimeError(), "generation_failed"),
+    (type("RateLimitError", (Exception,), {"status_code": 429, "body": {"error": {"code": "insufficient_quota"}}})(),
+     "provider_quota"),
+    (type("NotFoundError", (Exception,), {"status_code": 404, "body": {}})(), "provider_model_unavailable"),
+    (type("InternalServerError", (Exception,), {"status_code": 529})(), "provider_busy"),
 ])
 def test_error_codes(error, code):
     assert model_compare.error_code(error) == code
+
+
+def test_comparison_never_asks_clarifying_questions(monkeypatch):
+    seen = []
+
+    def fake_generate(message, context, invoke, **options):
+        seen.append(options)
+        return {"type": "text", "response": "Draft"}
+
+    monkeypatch.setattr(model_compare, "generate_chat", fake_generate)
+    config = model_compare.load_config(ENV)
+    model_compare.run_comparison("give me a post about first time homebuyers", None, config,
+                                 clients={"anthropic": None, "openai": None}, prices={})
+    assert len(seen) == 2 and all(o["allow_clarification"] is False for o in seen)
+
+
+def test_blind_view_names_failed_model_only():
+    ok = model_compare.blind_view({"slot": "A", "response": {"type": "text"}, "model": "m1"})
+    bad = model_compare.blind_view({"slot": "B", "error": "provider_quota", "model": "m2"})
+    assert "failed_model" not in ok and bad["failed_model"] == "m2"
 
 
 # ---------------------------------------------------------------- routes

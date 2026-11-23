@@ -81,11 +81,17 @@ export function candidateMessage(candidate, comparisonId = 'pending') {
 
 const ERRORS = {
   provider_rate_limited: 'This model is busy right now.',
+  provider_busy: 'This model is overloaded right now.',
+  provider_quota: "This model's account is out of credit. Add credit with its provider.",
+  provider_model_unavailable: 'This model name was not found. Check the model setting.',
   provider_unavailable: 'This model is not available. Check its API key.',
   provider_outcome_unknown: 'This model did not answer in time.',
   invalid_provider_output: 'This model returned a response Lucie could not use.',
 }
-export const candidateError = (code) => ERRORS[code] || 'This model could not produce a response.'
+export const candidateError = (code, model) => {
+  const text = ERRORS[code] || 'This model could not produce a response.'
+  return model ? `${text} (${model})` : text
+}
 
 export function formatCost(usd) {
   if (typeof usd !== 'number' || !Number.isFinite(usd)) return 'not priced'
