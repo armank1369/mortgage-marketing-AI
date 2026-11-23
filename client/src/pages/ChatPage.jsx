@@ -26,7 +26,7 @@ import { canSeeInsights } from '../lib/insights.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 import ModelComparison from '../components/ModelComparison.jsx'
 import { workspaceApi, apiErrorMessage } from '../lib/api.js'
-import { getCompareConfig, runComparison, chooseComparison, combineComparison, saveRequest } from '../lib/modelCompare.js'
+import { getCompareConfig, runComparison, askCompareQuestions, withAnswers, chooseComparison, combineComparison, saveRequest } from '../lib/modelCompare.js'
 
 const button = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed'
 const resolved = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
@@ -169,17 +169,25 @@ export default function ChatPage() {
   }
   const action = (fields) => run(() => controller.submit({ ...fields, ...(fields.action !== 'shorten' ? { persona_id: persona?.id } : {}) }))
   const chatComparisons = comparisons[COMPARE_KEY] || []
-  const comparing = chatComparisons.some((item) => item.status === 'running')
+  const comparing = chatComparisons.some((item) => item.status === 'running' || item.status === 'checking')
   const updateComparison = (key, id, changes) => setComparisons((previous) => ({ ...previous,
     [key]: (previous[key] || []).map((item) => item.id === id ? { ...item, ...changes } : item) }))
-  const compare = (text) => {
-    const key = COMPARE_KEY, id = `${Date.now()}-${Math.random()}`
-    setComparisons((previous) => ({ ...previous, [key]: [...(previous[key] || []), { id, prompt: text, status: 'running' }] }))
-    setCompareInput('')
-    runComparison(workspaceApi, { message: text, personaId: persona?.id })
+  const startComparison = (key, id, prompt, message) => {
+    updateComparison(key, id, { status: 'running', clarification: null })
+    runComparison(workspaceApi, { message, personaId: persona?.id })
       .then((data) => updateComparison(key, id, { status: 'done', data }))
       .catch((err) => updateComparison(key, id, { status: 'failed', error: apiErrorMessage(err, 'The comparison could not be completed. Please try again.') }))
   }
+  // Questions come first, in a card, so both drafts are written with the answers already known.
+  const compare = (text) => {
+    const key = COMPARE_KEY, id = `${Date.now()}-${Math.random()}`
+    setComparisons((previous) => ({ ...previous, [key]: [...(previous[key] || []), { id, prompt: text, status: 'checking' }] }))
+    setCompareInput('')
+    askCompareQuestions(workspaceApi, { message: text, personaId: persona?.id })
+      .then((clarification) => clarification ? updateComparison(key, id, { status: 'asking', clarification }) : startComparison(key, id, text, text))
+      .catch(() => startComparison(key, id, text, text))
+  }
+  const answerQuestions = (item, answerLines) => startComparison(COMPARE_KEY, item.id, item.prompt, withAnswers(item.prompt, answerLines))
   const choose = (item, choice, note) => {
     const key = COMPARE_KEY
     updateComparison(key, item.id, { choosing: true, choiceError: '' })
@@ -325,7 +333,7 @@ export default function ChatPage() {
           {!persona && !personaPending && <div role="alert" className="rounded-xl border bg-white p-3 text-sm">Open or start a chat with a persona first, so Lucie knows whose voice to write in. <button type="button" className="underline" onClick={() => setNav('chat')}>Go to Chat</button></div>}
           {persona && <p className="text-xs font-medium text-blue-900">Writing as: {persona.name}. Saving puts the result in your open chat, "{active?.title || 'New chat'}".</p>}
           {!chatComparisons.length && <div className="py-12 text-center"><img src={lucieAvatar} alt="" className="mx-auto mb-4 h-16 w-16 rounded-full object-cover ring-4 ring-blue-100" /><p className="font-display text-lg font-bold text-slate-900">Compare two models</p><p className="text-sm text-slate-500 mt-2">Describe the post or campaign you need below.</p></div>}
-          {chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onCombine={combine} onSave={saveComparison} canSave={!providerBlocked && !readOnly} />)}
+          {chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onAnswer={answerQuestions} onCombine={combine} onSave={saveComparison} canSave={!providerBlocked && !readOnly} />)}
           <div ref={bottom} />
         </div></div>
         {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4"><div className="max-w-4xl mx-auto">

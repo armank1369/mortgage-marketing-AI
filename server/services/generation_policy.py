@@ -400,6 +400,21 @@ NO_CLARIFICATION_PROMPT = (
     'defaults for any other missing facts.'
 )
 
+# Used by the Compare beta to ask its questions once, before any drafts are written. One short call that
+# either asks (same JSON shape the chat question card renders) or says nothing more is needed.
+QUESTIONS_ONLY_PROMPT = (
+    'CHECK BEFORE WRITING. Do not write any post. Decide only whether you need to ask the user anything first. '
+    'A single post needs three things: (a) a topic or angle, (b) the platform, and (c) a content format '
+    '(text-only, single image, multi image carousel, or short video/Reel). If any of the three is unspecified '
+    'or unclear, and the message does not already contain an "Answers:" section, ask. If all three are clear, '
+    'respond with exactly {"questions": []}. When asking, respond with ONLY a single valid JSON object, no prose '
+    'or markdown fences: {"questions": [{"question": "<question text>", "type": "<single|multiple>", "options": '
+    '["<short option>", "<short option>"], "allow_custom": <true|false>}]}. Ask at most 4 questions, each with '
+    '2-6 concrete options. Use "single" for platform and format questions and "multiple" otherwise. Include a '
+    'format question (options: "Text-only post", "Single image", "Multi Image Carousel", "Short video / Reel") '
+    'whenever format is not clear. Never ask for a specific rate, discount or promotion to feature.'
+)
+
 AMBIGUOUS_SCOPE_PROMPT = (
     'AMBIGUOUS SCOPE: this request uses broad or time-bound phrasing (e.g. "this week", "today", "this month", '
     '"strategy") rather than naming one specific deliverable — it could reasonably resolve to a single post or to '

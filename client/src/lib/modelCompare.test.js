@@ -185,3 +185,17 @@ test('candidateError explains quota and names the failed model', () => {
   assert.match(candidateError('provider_quota', 'gpt-x'), /out of credit.*gpt-x/)
   assert.match(candidateError('provider_busy'), /overloaded/)
 })
+
+test('withAnswers uses the chat answers layout and leaves the prompt alone when skipped', async () => {
+  const { withAnswers } = await import('./modelCompare.js')
+  assert.equal(withAnswers('a post', ''), 'a post')
+  assert.equal(withAnswers('a post', '- Platform: Instagram\n'), 'Original request: a post\n\nAnswers:\n- Platform: Instagram')
+})
+
+test('askCompareQuestions returns the card, or null when the check fails', async () => {
+  const { askCompareQuestions } = await import('./modelCompare.js')
+  const card = { questions: [{ question: 'Which platform?', type: 'single', options: ['Instagram'] }] }
+  assert.deepEqual(await askCompareQuestions({ send: async () => ({ data: { clarification: card } }) }, { message: 'x' }), card)
+  assert.equal(await askCompareQuestions({ send: async () => ({ data: { clarification: null } }) }, { message: 'x' }), null)
+  assert.equal(await askCompareQuestions({ send: async () => { throw new Error('boom') } }, { message: 'x' }), null)
+})

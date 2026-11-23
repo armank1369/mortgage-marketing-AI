@@ -156,6 +156,23 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
     return {"type": "text", "response": response, "compliance_flags": flags}
 
 
+def check_questions(message, context, invoke, *, model, device_zone=None):
+    """Ask-only pass for the Compare beta: the clarification dict to show as a question card, or None.
+
+    One short call, no draft. Messages that already carry answers ("Original request: ... Answers: ...") skip it.
+    """
+    if message.strip().lower().startswith("original request:"):
+        return None
+    clock = _clock_context(device_zone)
+    is_campaign = bool(policy.CAMPAIGN_INTENT_PATTERN.search(message))
+    shared = build_prompt(context, policy.BASE_PROMPT, policy.COMPLIANCE_PROMPT,
+                          policy.PLATFORM_PROMPT, policy.NO_MARKDOWN_PROMPT)
+    extra = render_policy(policy.CAMPAIGN_CLARIFICATION_PROMPT, context) if is_campaign else policy.QUESTIONS_ONLY_PROMPT
+    check = invoke("compare_questions_check", model=model, system=policy.build_system(shared + "\n\n" + extra, "", clock),
+                   messages=[{"role": "user", "content": message}], max_tokens=1500, thinking={"type": "disabled"})
+    return policy._parse_clarification(_raw(check), force_multiple=False)
+
+
 def generate_video(data, context, invoke, *, model):
     prompt = build_prompt(context, policy.BASE_PROMPT, policy.COMPLIANCE_PROMPT, policy.PLATFORM_PROMPT,
                           policy.NO_MARKDOWN_PROMPT, policy.VIDEO_BRIEF_FORMAT_PROMPT)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import PersistedMessage from './PersistedMessage.jsx'
 import TypingIndicator from './TypingIndicator.jsx'
+import ClarificationResponse from './ClarificationResponse.jsx'
 import {
   REFINE_SUGGESTIONS, aspectsFor, candidateError, candidateMessage, choiceSummary, formatCost, hasFeedback, modelName, planSummary,
 } from '../lib/modelCompare.js'
@@ -24,7 +25,7 @@ function LucieSays({ children }) {
 
 // One beta comparison, as a guided flow: read both drafts, say what works in each, let Lucie
 // combine them, then keep adjusting the combined version until it is ready to copy.
-export default function ModelComparison({ item, nmls, onChoose, onCombine, onSave, canSave = true }) {
+export default function ModelComparison({ item, nmls, onChoose, onAnswer = () => {}, onCombine, onSave, canSave = true }) {
   const [feedback, setFeedback] = useState({ A: { aspects: [], note: '' }, B: { aspects: [], note: '' } })
   const [change, setChange] = useState('')
   const [adjust, setAdjust] = useState('')
@@ -48,6 +49,12 @@ export default function ModelComparison({ item, nmls, onChoose, onCombine, onSav
     <div className="flex justify-end"><p className="max-w-[85%] rounded-2xl bg-imessage-blue text-white px-5 py-3 whitespace-pre-wrap text-sm">{item.prompt}</p></div>
     <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-5">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Compare and combine · Beta</p>
+      {item.status === 'checking' && <><LucieSays>Let me check whether I need anything from you before I write…</LucieSays><TypingIndicator /></>}
+      {item.status === 'asking' && <>
+        <LucieSays>A few quick questions first, so both versions come out right.</LucieSays>
+        <ClarificationResponse data={item.clarification} onSubmit={(text) => onAnswer(item, text)} />
+        <button type="button" className={button} onClick={() => onAnswer(item, '')}>Skip the questions and use your best guess</button>
+      </>}
       {item.status === 'running' && <><LucieSays>I'm writing two versions with two different AI models so you can take the best of each…</LucieSays><TypingIndicator /></>}
       {item.status === 'failed' && <p role="alert" className="text-sm text-red-800">{item.error}</p>}
 

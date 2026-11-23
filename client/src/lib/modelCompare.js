@@ -20,6 +20,16 @@ export const runComparison = (api, { message, personaId }, signal) =>
       throw error
     })
 
+// Before any drafts: Lucie's question card (same shape as in Chat), or null when nothing is needed.
+// A failed check never blocks the comparison; it just compares without questions.
+export const askCompareQuestions = (api, { message, personaId }, signal) =>
+  api.send({ method: 'POST', url: '/api/compare/questions', data: { message, persona_id: personaId }, signal })
+    .then((response) => response.data?.clarification || null)
+    .catch((error) => { if (error?.code === 'ERR_CANCELED') throw error; return null })
+
+// The message both models receive once the broker has answered: same layout chat uses for answers.
+export const withAnswers = (prompt, answerLines) => answerLines?.trim() ? `Original request: ${prompt}\n\nAnswers:\n${answerLines.trim()}` : prompt
+
 export const chooseComparison = (api, comparisonId, choice, note) =>
   api.send({ method: 'POST', url: `/api/compare/${comparisonId}/choice`, data: { choice, ...(note ? { note } : {}) } })
     .then((response) => response.data)
