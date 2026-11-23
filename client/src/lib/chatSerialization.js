@@ -73,3 +73,11 @@ export function operationRecords(messages, active = [], pending = []) {
   for (const row of active) records.set(row.operation_key, { ...records.get(row.operation_key), ...row })
   return [...records.values()]
 }
+
+// A failed attempt is only worth a card while it is still the latest thing in the chat. Once anything was
+// saved after its request (a retry, a new message, a successful reply), the card is stale history: the
+// cards render below every message, so keeping them made old failures look current and stack up forever.
+export function visibleOperations(records, messages = []) {
+  const lastId = messages.at(-1)?.id
+  return records.filter((op) => op.state !== 'failed' || !op.request_message_id || op.request_message_id === lastId)
+}

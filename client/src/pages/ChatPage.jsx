@@ -4,7 +4,7 @@ import { useBrowserScope } from '../context/BrowserScope.js'
 import { useWorkspaceData } from '../context/WorkspaceData.js'
 import { useWorkspaceAccess } from '../context/WorkspaceAccess.js'
 import { useChatPersistence } from '../lib/useChatPersistence.js'
-import { projectConversation } from '../lib/chatSerialization.js'
+import { projectConversation, visibleOperations } from '../lib/chatSerialization.js'
 import { loadChatsFromStorage } from '../utils/storage.js'
 import { PROMPT_CATEGORIES } from '../lib/chatPrompts.js'
 import { buildPersonaFolders, folderFor, newestFirst, formatChatTime } from '../lib/chatFolders.js'
@@ -267,7 +267,7 @@ export default function ChatPage() {
             {!local && state.before_cursor && <button className={button} onClick={() => controller.open(state.active.id, true)}>Load earlier messages</button>}
             {!messages.length && !state.loading && <div className="py-14 text-center"><img src={lucieAvatar} alt="" className="mx-auto mb-4 h-16 w-16 rounded-full object-cover ring-4 ring-blue-100" /><p className="font-display text-lg font-bold text-slate-900">{local ? 'Select local history' : 'Start a conversation'}</p><div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 rounded-full bg-lucent-accent" /><p className="text-sm text-slate-500 mt-3">{local ? 'Existing browser history remains preserved.' : 'Ask for a caption, post idea, or content strategy.'}</p></div>}
             {messages.map((message) => <PersistedMessage key={message.id} message={message} nmls={nmls} persona={persona?.id} onAction={action} disabled={blocked} providerDisabled={providerBlocked} readOnly={readOnly} legacy={local} />)}
-            {operations.map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
+            {visibleOperations(operations, state.messages).map((operation) => <OperationStatus key={operation.operation_key} operation={operation} controller={controller} canWrite={!readOnly} disabled={state.submitting || offline} retryDisabled={(!persona || personaConflict) && operation.action !== 'shorten'} onRetry={retry} />)}
             <div ref={bottom} />
           </div>
         </div>
