@@ -11,6 +11,8 @@ export function chatUUID() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 export const pendingStorageKey = (scope) => `lucie_chat_pending:v1:${encodeURIComponent(scope)}`
+// The conversation the person last opened, so a browser refresh reopens it instead of the newest chat.
+export const selectedStorageKey = (scope) => `lucie_chat_selected:v1:${encodeURIComponent(scope)}`
 const terminal = (state) => ['succeeded', 'failed', 'abandoned'].includes(state)
 const apiError = (err) => {
   const code = err?.response?.data?.error
@@ -49,6 +51,13 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   let state = { sessions: [], next_cursor: null, archived: false, folders: [], foldersError: '', folderChats: {}, active: null, messages: [], before_cursor: null,
     operations: [], pending: initialPending, loading: false, submitting: false, metadataSaving: false, error: initialError, storageError: initialError }
   const emit = (patch) => { if (!alive) return; state = { ...state, ...patch }; for (const listener of listeners) listener() }
+  // Remembering the open chat is a convenience: storage failures never block the chat.
+  function rememberSelected(id) {
+    try { if (id) storage.setItem(selectedStorageKey(scope), id); else storage.removeItem?.(selectedStorageKey(scope)) } catch { /* optional */ }
+  }
+  function savedSelection() {
+    try { const id = storage.getItem(selectedStorageKey(scope)); return typeof id === 'string' && id ? id : null } catch { return null }
+  }
   function persist(pending) {
     try { storage.setItem(pendingStorageKey(scope), JSON.stringify(pending)) }
     catch { const error = 'Pending-request storage cannot be saved. Enable browser storage before generating.'; emit({ storageError: error, error }); throw Error(error) }
@@ -104,11 +113,12 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       if (seq === folderCountSequence) emit({ folders: data.folders || [], foldersError: '' })
     } catch (err) { if (err.code !== 'ERR_CANCELED' && seq === folderCountSequence) emit({ foldersError: 'Persona folders could not be loaded.' }) }
   }
-  async function open(id, older = false, refresh = false) {
+  async function open(id, older = false, refresh = false, { quiet = false } = {}) {
     const seq = refresh || older ? selection : ++selection
     const detail = ++detailSequence
     const metadataAtStart = metadataVersions.get(id) || 0
     if (!refresh && !older) {
+      rememberSelected(id)
       loadedHistoryIds = new Set()
       emit({ active: { id }, messages: [], operations: [], before_cursor: null, loading: true, error: state.storageError })
     }
@@ -124,7 +134,11 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       emit({ active: metadataAtStart === (metadataVersions.get(id) || 0) ? data : state.active,
         messages: merge ? mergeMessages(state.messages, data.messages) : data.messages,
         before_cursor: contiguousRefresh ? state.before_cursor : data.before_cursor, operations: data.operations || [], loading: false })
-    } catch (err) { if (seq === selection) { emit({ loading: false }); report(err) } }
+      return true
+    } catch (err) {
+      if (seq === selection) { emit({ loading: false }); if (!quiet) report(err) }
+      return false
+    }
   }
   function newChat(personaId = '') {
     ++selection
@@ -212,7 +226,7 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
       persist([...state.pending.filter((item) => item.body.operation_key !== record.body.operation_key), record])
       if (record.needs_create !== false) {
         const session = await request(`${base}/${record.session_id}`, 'PUT', record.create)
-        if (state.active?.id === session.id) emit({ active: { ...state.active, ...session, unsaved: false } })
+        if (state.active?.id === session.id) { emit({ active: { ...state.active, ...session, unsaved: false } }); rememberSelected(session.id) }
         record = { ...record, needs_create: false }
         persist(state.pending.map((item) => item.body.operation_key === record.body.operation_key ? record : item))
       }
@@ -281,14 +295,25 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
   }
   return { getSnapshot: () => state, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
     async start() { alive = true; const startEpoch = epoch; await list(); if (!alive || startEpoch !== epoch) return
-      if (!state.active) { if (state.pending.length) await open(state.pending[0].session_id); else if (state.sessions.length) await open(state.sessions[0].id); else newChat() }
+      if (!state.active) {
+        // Pending recovery comes first. Otherwise reopen the chat the person had selected before the
+        // refresh, if it still exists; only fall back to the newest chat when it does not.
+        const saved = savedSelection()
+        if (state.pending.length) await open(state.pending[0].session_id)
+        else if (saved && await open(saved, false, false, { quiet: true })) { /* restored */ }
+        else {
+          if (!alive || startEpoch !== epoch) return
+          if (saved) { rememberSelected(null); emit({ error: state.storageError }) }
+          if (state.sessions.length) await open(state.sessions[0].id); else newChat()
+        }
+      }
       await reconcile()
     },
     stop() { alive = false; ++epoch; ++selection; for (const controller of controllers) controller.abort(); controllers.clear() },
     list, open, newChat, patch, nameChat, setVoice, submit, reconcile, operations, abandon, loadFolders, loadFolderChats, setOpenFolders,
     exportConversation(id) { return collectConversationExport((sessionId, cursor) => request(`${base}/${sessionId}?version=2&limit=100${cursor ? `&before=${encodeURIComponent(cursor)}` : ''}`), id) },
     async archive() { const active = state.active; if (await patch({ archived: true })) {
-      if (state.active?.id === active.id) newChat()
+      if (state.active?.id === active.id) { rememberSelected(null); newChat() }
     } },
     async resend(key) { const record = state.pending.find((r) => r.body.operation_key === key); if (record) return dispatch(record) },
     clearError() { emit({ error: state.storageError }) },

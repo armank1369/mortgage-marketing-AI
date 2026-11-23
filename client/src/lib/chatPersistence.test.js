@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createChatPersistence, pendingStorageKey, chatUUID } from './chatPersistence.js'
+import { createChatPersistence, pendingStorageKey, selectedStorageKey, chatUUID } from './chatPersistence.js'
 const scope = JSON.stringify(['account-a', 'workspace-a'])
 const otherScope = JSON.stringify(['account-b', 'workspace-a'])
 const persona = '11111111-1111-4111-8111-111111111111'
@@ -67,7 +67,8 @@ test('first send stores stable identifiers before writes; success is server-auth
   assert.equal(c.getSnapshot().active.unsaved, undefined)
   assert.deepEqual(JSON.parse(f.initial.get(pendingStorageKey(scope))), [])
   for (const [key, value] of legacy) assert.equal(f.initial.get(key), value)
-  assert.ok(f.writes.every((key) => key === pendingStorageKey(scope)))
+  assert.ok(f.writes.every((key) => key === pendingStorageKey(scope) || key === selectedStorageKey(scope)))
+  assert.equal(f.initial.get(selectedStorageKey(scope)), c.getSnapshot().active.id)
   c.stop()
 })
 
@@ -434,5 +435,49 @@ test('a failing title request is silent for automatic naming and reported for Su
   assert.equal(c.getSnapshot().error, '')
   await assert.rejects(c.nameChat(c.getSnapshot().active.id, { force: true }))
   assert.ok(c.getSnapshot().error)
+  c.stop()
+})
+
+test('a refresh reopens the chat that was selected, not the newest one', async () => {
+  const f = fixture()
+  f.sessions.set('newest', { id: 'newest', title: 'Top of folder', default_persona_id: persona, etag: '"v1"' })
+  f.sessions.set('older', { id: 'older', title: 'Being reviewed', default_persona_id: persona, etag: '"v1"' })
+  const first = f.make(); await first.start()
+  assert.equal(first.getSnapshot().active.id, 'newest')
+  await first.open('older')
+  first.stop()
+  // Simulated browser refresh: a fresh controller over the same browser storage.
+  const reloaded = f.make(); await reloaded.start()
+  assert.equal(reloaded.getSnapshot().active.id, 'older')
+  assert.equal(reloaded.getSnapshot().active.title, 'Being reviewed')
+  assert.equal(reloaded.getSnapshot().error, '')
+  reloaded.stop()
+})
+
+test('a remembered chat that no longer exists falls back to the newest chat without an error', async () => {
+  const f = fixture({ initial: new Map([[selectedStorageKey(scope), 'deleted-chat']]) })
+  f.sessions.set('newest', { id: 'newest', title: 'Newest', etag: '"v1"' })
+  const c = f.make(); await c.start()
+  assert.equal(c.getSnapshot().active.id, 'newest')
+  assert.equal(c.getSnapshot().error, '')
+  assert.equal(f.initial.get(selectedStorageKey(scope)), 'newest')
+  c.stop()
+})
+
+test('the remembered chat is kept per account and workspace', async () => {
+  const f = fixture({ initial: new Map([[selectedStorageKey(otherScope), 'older']]) })
+  f.sessions.set('newest', { id: 'newest', title: 'Newest', etag: '"v1"' })
+  f.sessions.set('older', { id: 'older', title: 'Other account', etag: '"v1"' })
+  const c = f.make(); await c.start()
+  assert.equal(c.getSnapshot().active.id, 'newest')
+  c.stop()
+})
+
+test('unreadable browser storage still opens the newest chat', async () => {
+  const f = fixture()
+  f.sessions.set('newest', { id: 'newest', title: 'Newest', etag: '"v1"' })
+  const c = f.make({ storage: { getItem: (key) => { if (key === selectedStorageKey(scope)) throw Error('blocked'); return null }, setItem: () => { throw Error('blocked') } } })
+  await c.start()
+  assert.equal(c.getSnapshot().active.id, 'newest')
   c.stop()
 })
