@@ -12,12 +12,18 @@
 // (for example blue -> Lucent teal) carry over to dark mode automatically.
 //
 // For one-off cases, the regular `dark:` variant also works (darkMode: 'class').
+//
+// Light islands: anything inside an element with the `keep-light` class (the chat/calendar
+// workspace and dialogs) keeps its normal light styling even in dark mode. Every rule below is
+// scoped with KEEP_LIGHT_EXEMPT, so the island needs no per-element changes.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DARK = '.dark'
+// Appended to the last compound of each dark rule. :where() keeps specificity unchanged.
+const EXEMPT = ':not(:where(.keep-light, .keep-light *))'
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
 
 // Every whitespace/quote separated token in the client source, like Tailwind's own scan.
@@ -133,6 +139,26 @@ function selectorFor(variant, name) {
   return `${DARK} ${cls(prefix + name)}${VARIANTS[variant]}`
 }
 
+// Adds EXEMPT to the element each selector targets (before any pseudo-element), splitting the
+// selector list only at top-level commas.
+function exemptLightIslands(selectorList) {
+  const parts = []
+  let depth = 0, bracket = 0, start = 0
+  for (let i = 0; i < selectorList.length; i++) {
+    const ch = selectorList[i]
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    else if (ch === '[') bracket++
+    else if (ch === ']') bracket--
+    else if (ch === ',' && depth === 0 && bracket === 0) { parts.push(selectorList.slice(start, i).trim()); start = i + 1 }
+  }
+  parts.push(selectorList.slice(start).trim())
+  return parts.map((selector) => {
+    const pseudo = selector.search(/::[a-z-]+$/)
+    return pseudo === -1 ? selector + EXEMPT : selector.slice(0, pseudo) + EXEMPT + selector.slice(pseudo)
+  }).join(', ')
+}
+
 function hexToRgb(hex) {
   const h = hex.replace('#', '')
   const full = h.length === 3 ? [...h].map((c) => c + c).join('') : h
@@ -243,9 +269,9 @@ export default function darkThemePlugin({ addBase, theme }) {
   addBase({
     // Borders with no color class (border, border-b ...) default to a light gray; darken them.
     // :where() keeps this at zero specificity so any border color class still wins.
-    [`:where(${DARK}) *, :where(${DARK}) ::before, :where(${DARK}) ::after`]: { borderColor: t.line },
+    [`:where(${DARK}) *${EXEMPT}, :where(${DARK}) *${EXEMPT}::before, :where(${DARK}) *${EXEMPT}::after`]: { borderColor: t.line },
     // Form fields without a background class otherwise get the browser's gray dark-field fill.
-    [`:where(${DARK}) :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']), textarea, select)`]: {
+    [`:where(${DARK}) :where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']), textarea, select)${EXEMPT}`]: {
       backgroundColor: t.field,
       color: t.ink,
     },
@@ -256,5 +282,5 @@ export default function darkThemePlugin({ addBase, theme }) {
   })
   // Added as base styles (not components) so Tailwind doesn't try to build hover:/focus: copies
   // of these selectors; they still win over the utilities through higher specificity.
-  addBase(rules)
+  addBase(Object.fromEntries(Object.entries(rules).map(([selector, declarations]) => [exemptLightIslands(selector), declarations])))
 }
