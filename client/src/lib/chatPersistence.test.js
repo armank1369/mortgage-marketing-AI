@@ -366,6 +366,17 @@ test('expanded persona folders load their own chats and keep counts', async () =
   c.stop()
 })
 
+test('a folder never lists chats from another persona, even if the server ignores the persona filter', async () => {
+  const other = '22222222-2222-4222-8222-222222222222'
+  const rows = [{ id: 'a', title: 'A', default_persona_id: persona }, { id: 'b', title: 'B', default_persona_id: other }, { id: 'c', title: 'C', default_persona_id: null }]
+  const f = fixture({ override: (config) => config.url.includes('persona=') ? Promise.resolve({ data: { sessions: rows, next_cursor: null } }) : null })
+  const c = f.make(); await c.start()
+  await c.setOpenFolders([persona, other, 'none'])
+  const chats = Object.fromEntries(Object.entries(c.getSnapshot().folderChats).map(([id, row]) => [id, row.sessions.map((s) => s.id)]))
+  assert.deepEqual(chats, { [persona]: ['a'], [other]: ['b'], none: ['c'] })
+  c.stop()
+})
+
 test('a slow response for a folder collapsed in the meantime is ignored', async () => {
   const gate = deferred()
   const f = fixture({ override: (config) => config.url.includes('persona=slow') ? gate.promise.then(() => ({ data: { sessions: [{ id: 'stale' }], next_cursor: null } })) : null })

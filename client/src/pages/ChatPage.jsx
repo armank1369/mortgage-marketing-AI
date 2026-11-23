@@ -201,7 +201,7 @@ export default function ChatPage() {
           return <div key={folder.id}>
             <button type="button" aria-expanded={open} aria-label={`${folder.name} folder`} onClick={() => toggleFolder(folder.id)} className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-100 ${openFolder?.id === folder.id ? 'text-blue-800' : ''}`}>
               <span aria-hidden="true" className="w-3 text-[10px] text-slate-400">{open ? '▾' : '▸'}</span><span aria-hidden="true" className="text-base">{open ? '📂' : folder.available ? '📁' : '🗂️'}</span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{folder.name}</span><span className="text-[10px] text-slate-400">{folder.chat_count}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{folder.name}</span>{!state.foldersError && <span className="text-[10px] text-slate-400">{folder.chat_count}</span>}
             </button>
             {open && <div className="ml-5 space-y-0.5 border-l border-slate-200 pb-1 pl-2">
               {folder.available && <div className="flex flex-wrap gap-1.5 py-1">

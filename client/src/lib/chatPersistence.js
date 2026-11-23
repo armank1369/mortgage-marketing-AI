@@ -85,7 +85,11 @@ export function createChatPersistence({ api, scope, storage, uuid = chatUUID }) 
     try {
       const data = await request(`${base}?version=2&archived=false&limit=30&persona=${encodeURIComponent(id)}${more && current?.next_cursor ? `&cursor=${encodeURIComponent(current.next_cursor)}` : ''}`)
       if (seq !== folderSequence.get(id) || !openFolders.has(id)) return
-      const sessions = more && current ? [...new Map([...current.sessions, ...data.sessions].map((row) => [row.id, row])).values()] : data.sessions
+      // A folder only ever shows chats locked to its persona, even if the server ignored the persona filter
+      // (for example while an older backend is still deployed).
+      const belongs = (row) => id === 'none' ? !row.default_persona_id : row.default_persona_id === id
+      const rows = (data.sessions || []).filter(belongs)
+      const sessions = more && current ? [...new Map([...current.sessions, ...rows].map((row) => [row.id, row])).values()] : rows
       emit({ folderChats: { ...state.folderChats, [id]: { sessions, next_cursor: data.next_cursor } } })
     } catch (err) { report(err) }
   }
