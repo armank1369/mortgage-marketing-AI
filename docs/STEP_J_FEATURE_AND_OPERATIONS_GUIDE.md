@@ -242,6 +242,15 @@ Rich projection allowlists content fields, including captions/slides/hashtags an
 disclosures where they fit. Stored publication output is never truncated for context.
 These are byte limits, not exact token counts or long-term memory.
 
+Long-chat warning (client only): because older exchanges fall out of this window, the chat
+composer shows a dismissible banner once a conversation reaches `LONG_CHAT_REQUEST_THRESHOLD`
+user requests (default 10, in `client/src/lib/longChat.js`), or whenever an older message page
+has not been loaded. Only `send` requests count; rewrites, shortens, clarification answers and
+media follow-ups do not. "Start new chat" opens a fresh unsent conversation inside the
+same persona folder (`newChatInFolder`), falling back to the persona selector if that
+persona is unavailable; "Keep going" hides the banner for that conversation
+until the page reloads. Nothing is stored or sent to the server.
+
 Request generation_input.conversation_context records projection_version 1, bounded
 messages, exchange/provenance IDs, message_ids, truncated and utf8_bytes. Both
 campaign stages use this captured snapshot. Historical content enters provider

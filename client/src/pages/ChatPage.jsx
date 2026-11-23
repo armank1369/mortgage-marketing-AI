@@ -11,6 +11,7 @@ import { buildPersonaFolders, folderFor, newestFirst, formatChatTime } from '../
 import { defaultVoice, customVoiceCount } from '../lib/voiceSettings.js'
 import VoiceSettings from '../components/VoiceSettings.jsx'
 import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
+import { isLongChat } from '../lib/longChat.js'
 import PreferenceSetup from './PreferenceSetup.jsx'
 import BrandSummary from '../components/BrandSummary.jsx'
 import Dialog from '../components/Dialog.jsx'
@@ -77,6 +78,7 @@ export default function ChatPage() {
   const [exporting, setExporting] = useState(false)
   const [promptOffsets, setPromptOffsets] = useState({})
   const [localError, setLocalError] = useState('')
+  const [dismissedLongChat, setDismissedLongChat] = useState(() => new Set())
   const [offline, setOffline] = useState(() => globalThis.navigator?.onLine === false)
   const bottom = useRef(null)
   const local = view === 'local'
@@ -109,6 +111,9 @@ export default function ChatPage() {
   const voiceCustom = customVoiceCount(state.active?.voice_settings)
   const toggleFolder = (id) => setOpenIds((current) => current.includes(id) ? current.filter((row) => row !== id) : [...current, id])
   const openFolderIds = (...ids) => setOpenIds((current) => [...current, ...ids.filter((id) => !current.includes(id))])
+  // Suggest a fresh chat once this one is long enough that Lucie's context starts dropping early turns.
+  const showLongChat = !readOnly && !!state.active && !state.loading && !dismissedLongChat.has(state.active.id)
+    && isLongChat(state.messages, { hasOlder: !!state.before_cursor })
 
   useEffect(() => {
     const online = () => setOffline(false), offline = () => setOffline(true)
@@ -268,6 +273,10 @@ export default function ChatPage() {
         </div>
         {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4">
           <div className="max-w-4xl mx-auto">
+            {showLongChat && <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="min-w-0 flex-1"><span className="font-semibold">This chat is getting long.</span> Lucie only remembers the most recent part of a conversation, so answers may drift or repeat. For best results, start a new chat{openFolder?.available ? ` in the ${openFolder.name} folder` : ''}.</p>
+              <div className="flex gap-2"><button type="button" className={`${button} border-amber-300 bg-white`} disabled={pending} onClick={() => newChatInFolder()}>Start new chat</button><button type="button" className={button} onClick={() => setDismissedLongChat((previous) => new Set(previous).add(state.active.id))}>Keep going</button></div>
+            </div>}
             <div className="flex flex-wrap gap-2 mb-3">{PROMPT_CATEGORIES.map((category) => <button key={category.category} className={button} onClick={() => setPromptCategory(promptCategory === category.category ? null : category.category)}>{category.emoji} {category.category}</button>)}</div>
             {promptCategory && <div className="flex flex-wrap gap-2 mb-3">{promptSuggestions(PROMPT_CATEGORIES.find((row) => row.category === promptCategory).prompts, promptOffsets[promptCategory] || 0).map((prompt) => <button key={prompt} disabled={providerBlocked} className={button} onClick={() => send(prompt)}>{prompt}</button>)}<button type="button" className={button} onClick={() => setPromptOffsets({ ...promptOffsets, [promptCategory]: (promptOffsets[promptCategory] || 0) + 3 })}>↻ More</button></div>}
             <form onSubmit={(event) => { event.preventDefault(); send() }} className="flex gap-2 items-end">
