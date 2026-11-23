@@ -62,7 +62,7 @@ export default function ModelComparison({ item, nmls, onChoose, onCombine, onSav
                 <p className="text-xs font-semibold text-slate-600">Version {candidate.slot}{reveal && <span className="font-normal text-slate-500"> · {modelName(reveal.candidates.find((row) => row.slot === candidate.slot))}</span>}</p>
                 {candidate.response
                   ? <PersistedMessage message={candidateMessage(candidate, data.comparison_id || 'unsaved')} nmls={nmls} readOnly statusLabel="Draft" />
-                  : <p className="text-sm text-amber-800">{candidateError(candidate.error)}</p>}
+                  : <p className="text-sm text-amber-800">{candidateError(candidate.error, candidate.failed_model)}</p>}
                 {candidate.response && canAct && !merges.length && !picked && options.length > 0 && <fieldset className="space-y-2 border-t border-slate-100 pt-3">
                   <legend className="text-xs font-medium text-slate-700">What do you like about Version {candidate.slot}?</legend>
                   <div className="flex flex-wrap gap-1.5">{options.map((aspect) => <button key={aspect} type="button" aria-pressed={mine.aspects.includes(aspect)} className={chip(mine.aspects.includes(aspect))} onClick={() => toggle(candidate.slot, aspect)}>{aspect}</button>)}</div>

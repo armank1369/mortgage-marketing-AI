@@ -180,3 +180,8 @@ test('comparison detail is fetched from its own route', async () => {
   assert.deepEqual(await getComparisonDetail(api, 'c1'), { id: 'c1' })
   assert.deepEqual([sent[0].method, sent[0].url], ['GET', '/api/compare/c1'])
 })
+
+test('candidateError explains quota and names the failed model', () => {
+  assert.match(candidateError('provider_quota', 'gpt-x'), /out of credit.*gpt-x/)
+  assert.match(candidateError('provider_busy'), /overloaded/)
+})

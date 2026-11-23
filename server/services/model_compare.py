@@ -213,15 +213,36 @@ def default_clients():
     return {"anthropic": anthropic_create, "openai": openai_create}
 
 
+def _provider_detail(error):
+    """Non-secret facts about a provider failure (status, error type/code) for server logs."""
+    body = getattr(error, "body", None)
+    inner = body.get("error") if isinstance(body, dict) and isinstance(body.get("error"), dict) else (body if isinstance(body, dict) else {})
+    parts = {"status": getattr(error, "status_code", None),
+             "type": inner.get("type") if isinstance(inner.get("type"), str) else None,
+             "code": inner.get("code") if isinstance(inner.get("code"), str) else None}
+    return " ".join(f"{k}={v}" for k, v in parts.items() if v is not None)
+
+
 def error_code(error):
-    """Safe error code for either SDK, by exception class name (both SDKs share names)."""
+    """Safe error code for either SDK, by exception class name (both SDKs share names).
+
+    Distinguishes "out of credit" and "wrong model name" from a plain rate limit so the
+    broker is not told a permanently broken model is merely busy.
+    """
     if isinstance(error, InvalidGenerationOutputError):
         return "invalid_provider_output"
     names = {cls.__name__ for cls in type(error).__mro__}
+    detail = _provider_detail(error)
     if "AuthenticationError" in names or "PermissionDeniedError" in names:
         return "provider_unavailable"
+    if "insufficient_quota" in detail or "billing" in detail or "credit_balance" in str(getattr(error, "message", "")).lower():
+        return "provider_quota"
+    if "NotFoundError" in names or "model_not_found" in detail:
+        return "provider_model_unavailable"
     if "RateLimitError" in names:
         return "provider_rate_limited"
+    if "InternalServerError" in names or getattr(error, "status_code", None) in {500, 502, 503, 504, 529}:
+        return "provider_busy"
     if "APIConnectionError" in names or "APITimeoutError" in names:
         return "provider_outcome_unknown"
     if "APIStatusError" in names:
@@ -246,8 +267,9 @@ def _run_one(candidate, create, message, context, device_zone, prices, **generat
         outcome["response"] = generate_chat(message, context, invoke, model=candidate.model,
                                             device_zone=device_zone, **generate_options)
     except Exception as error:  # Never retry: a retry is another paid call.
-        logger.warning("Model comparison candidate failed: %s", type(error).__name__)
         outcome["error"] = error_code(error)
+        logger.warning("Model comparison candidate failed: model=%s error=%s class=%s %s", candidate.label,
+                       outcome["error"], type(error).__name__, _provider_detail(error))
     outcome["latency_ms"] = max(0, int((perf_counter() - started) * 1000))
     outcome["provider_calls"] = len(calls)
     outcome["usage"] = usage
@@ -262,7 +284,8 @@ def run_comparison(message, context, config, *, clients=None, device_zone=None, 
     candidates = list(config.candidates)
     (rng or random).shuffle(candidates)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(_run_one, c, clients[c.provider], message, context, device_zone, prices)
+        futures = [pool.submit(_run_one, c, clients[c.provider], message, context, device_zone, prices,
+                                allow_clarification=False)
                    for c in candidates]
         outcomes = [future.result() for future in futures]
     for slot, outcome in zip("AB", outcomes):
@@ -284,6 +307,8 @@ def blind_view(outcome):
         view["response"] = outcome["response"]
     else:
         view["error"] = outcome["error"]
+        # A failed side has nothing to vote on, so naming it does not unblind the vote.
+        view["failed_model"] = outcome.get("model")
     return view
 
 
