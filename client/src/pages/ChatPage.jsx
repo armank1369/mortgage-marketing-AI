@@ -65,6 +65,8 @@ export default function ChatPage() {
   const [titleEdit, setTitleEdit] = useState(null)
   const [suggesting, setSuggesting] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
+  // A chat chosen with the sidebar trash icon, waiting for confirmation.
+  const [trashChat, setTrashChat] = useState(null)
   const [promptCategory, setPromptCategory] = useState(null)
   const [setup, setSetup] = useState(false)
   const [startNewPersona, setStartNewPersona] = useState(false)
@@ -230,10 +232,15 @@ export default function ChatPage() {
               {!folder.available && <p className="px-1 py-1 text-[11px] text-slate-500">This persona is unavailable, so its chats are read only.</p>}
               {!chats && <p role="status" className="px-1 py-1 text-[11px] text-slate-400">Loading…</p>}
               {chats && !chats.sessions.length && <p className="px-1 py-1 text-[11px] text-slate-400">No chats yet.</p>}
-              {chats && newestFirst(chats.sessions).map((chat) => <button key={chat.id} type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg px-2 py-1.5 text-left ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
-                <span className="block truncate text-[13px] font-medium">{chat.title || 'Conversation'}</span>
-                <span className="block text-[10px] text-slate-400">{formatChatTime(chat.updated_at)}</span>
-              </button>)}
+              {chats && newestFirst(chats.sessions).map((chat) => <div key={chat.id} className="group relative">
+                <button type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg py-1.5 pl-2 text-left ${folder.available && canWrite ? 'pr-9' : 'pr-2'} ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
+                  <span className="block truncate text-[13px] font-medium">{chat.title || 'Conversation'}</span>
+                  <span className="block text-[10px] text-slate-400">{formatChatTime(chat.updated_at)}</span>
+                </button>
+                {folder.available && canWrite && <button type="button" aria-label={`Archive chat: ${chat.title || 'Conversation'}`} title="Archive chat" onClick={() => setTrashChat({ id: chat.id, title: chat.title || 'Conversation' })} className="chat-trash absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-500/15 hover:text-red-400 focus-visible:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                </button>}
+              </div>)}
               {chats?.next_cursor && <button type="button" className={`${button} w-full`} onClick={() => controller.loadFolderChats(folder.id, true)}>Load more conversations</button>}
             </div>}
           </div>
@@ -319,6 +326,7 @@ export default function ChatPage() {
         <button type="button" className={button} disabled={suggesting || state.metadataSaving || !state.active?.id || state.active.unsaved} onClick={() => { setSuggesting(true); run(() => controller.nameChat(state.active.id, { force: true })).then((data) => { if (data?.session?.title) setTitleEdit(data.session.title) }).finally(() => setSuggesting(false)) }}>{suggesting ? 'Suggesting…' : 'Suggest a title'}</button></div>
       <p className="text-[11px] text-slate-500">Suggest a title writes a specific, unique name from this conversation using one short AI call, and replaces the current title right away.</p>
     </form></Dialog>}
+    {trashChat && <Dialog title="Archive this chat?" onClose={() => setTrashChat(null)}><div className="space-y-4"><p className="text-sm">&ldquo;{trashChat.title}&rdquo; will be archived for everyone in this workspace. Its messages are kept in Archive and can be restored at any time.</p><div className="flex gap-2"><button type="button" autoFocus className={button} onClick={() => setTrashChat(null)}>Cancel</button><button type="button" className={`${button} border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 hover:text-red-800`} disabled={state.metadataSaving} onClick={() => run(() => controller.archiveChat(trashChat.id)).then(() => setTrashChat(null))}>Archive chat</button></div></div></Dialog>}
     {confirmArchive && <Dialog title="Archive this conversation?" onClose={() => setConfirmArchive(false)}><div className="space-y-4"><p className="text-sm">This archives the conversation for everyone in this workspace. Its messages remain available in Archive and can be restored. A new unsent conversation will open.</p><div className="flex gap-2"><button className={button} onClick={() => setConfirmArchive(false)}>Cancel</button><button className={button} onClick={() => run(() => controller.archive()).then(() => setConfirmArchive(false))}>Archive and start new</button></div></div></Dialog>}
   </div>
 }

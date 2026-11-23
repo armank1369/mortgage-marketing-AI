@@ -187,6 +187,22 @@ test('metadata changes use ETags; archive retains history and opens only an unsa
   c.stop()
 })
 
+test('archiveChat archives a chat that is not open, keeps history, and leaves the open chat alone', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.submit({ action: 'send', message: 'first', persona_id: persona })
+  const first = c.getSnapshot().active.id
+  c.newChat(persona); await c.submit({ action: 'send', message: 'second', persona_id: persona })
+  const second = c.getSnapshot().active.id
+  assert.notEqual(first, second)
+  await c.archiveChat(first)
+  assert.equal(f.sessions.get(first).archived_at, 'now'); assert.equal(f.messages.get(first).length, 2)
+  assert.equal(c.getSnapshot().active.id, second); assert.ok(!f.sessions.get(second).archived_at)
+  assert.ok(!c.getSnapshot().sessions.some((row) => row.id === first))
+  await c.archiveChat(second)
+  assert.equal(f.sessions.get(second).archived_at, 'now'); assert.equal(c.getSnapshot().active.unsaved, true)
+  c.stop()
+})
+
 test('HTTP validation failure clears the unclaimed pending request and exposes a non-assistant error', async () => {
   const f = fixture({ override: (config) => config.method === 'POST' ? Promise.reject(http(400, 'validation_error')) : null }), c = f.make()
   await c.start(); await c.submit({ action: 'send', message: 'bad', persona_id: persona })
