@@ -113,6 +113,16 @@ template. Configured literal substitutions escape quotes/newlines. Empty optiona
 voice uses clear, professional educational language; immutable forbidden phrases
 remain active alongside configured brand banned words.
 
+Tone scales and the persona age range are also turned into explicit directives by
+`services/voice_directives.py`. Each in-range 1-5 value of `professional`,
+`authoritative`, `serious` and `matterOfFact` maps to a fixed, graded instruction
+(for example contractions, emoji, questions to the reader, humor, exclamation marks),
+and a valid `audience_profile.ageRange` maps to generation bands and life-stage
+concerns. These appear in a `VOICE SETTINGS` block right after `<business_context>`.
+Only validated integers select from version-controlled text; stored strings are never
+copied into the block. Unset or invalid values add nothing, and the block states that
+compliance, disclosure, accuracy and output-format rules still win.
+
 `build_system` keeps the existing one-hour ephemeral cache breakpoint and uncached
 variable blocks. Scoped brand/persona/identity are included in the cached prefix,
 so changes produce different prefixes; request content stays in user messages.
