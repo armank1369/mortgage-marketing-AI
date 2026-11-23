@@ -21,6 +21,8 @@ import PersistedMessage from '../components/PersistedMessage.jsx'
 import TypingIndicator from '../components/TypingIndicator.jsx'
 import ConversationSkeleton from '../components/ConversationSkeleton.jsx'
 import CalendarPage from './CalendarPage.jsx'
+import InsightsPage from './InsightsPage.jsx'
+import { canSeeInsights } from '../lib/insights.js'
 import lucieAvatar from '../assets/lucie-avatar.jpg'
 import ModelComparison from '../components/ModelComparison.jsx'
 import { workspaceApi, apiErrorMessage } from '../lib/api.js'
@@ -58,7 +60,7 @@ const COMPARE_KEY = 'compare-page'
 export default function ChatPage() {
   const scope = useBrowserScope()
   const { brand, personas, loading: configLoading, error: configError, reload } = useWorkspaceData()
-  const { role } = useWorkspaceAccess()
+  const { role, environment } = useWorkspaceAccess()
   const canWrite = ['owner', 'admin', 'developer', 'member'].includes(role)
   const [state, controller] = useChatPersistence()
   const [view, setView] = useState('active')
@@ -251,7 +253,7 @@ export default function ChatPage() {
     finally { setExporting(false) }
   }
   const showingSetup = setup || (!setupDismissed && canWrite && view === 'active' && state.active?.unsaved && !state.active.default_persona_id && !state.loading)
-  if (nav !== 'calendar' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup startNew={startNewPersona} onComplete={(row) => { setStartNewPersona(false); startPersonaChat(row) }} onCancel={() => { setSetup(false); setSetupDismissed(true); setStartNewPersona(false) }} /></div>
+  if (nav !== 'calendar' && nav !== 'insights' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup startNew={startNewPersona} onComplete={(row) => { setStartNewPersona(false); startPersonaChat(row) }} onCancel={() => { setSetup(false); setSetupDismissed(true); setStartNewPersona(false) }} /></div>
   return <div className="flex h-dvh bg-slate-50 text-slate-800 overflow-hidden">
     {mobileMenu && <button className="fixed inset-0 z-30 bg-slate-900/50 md:hidden" aria-label="Close menu" onClick={() => setMobileMenu(false)} />}
     <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-lucent-navy shadow-xl md:shadow-none app-sidebar`}>
@@ -262,7 +264,7 @@ export default function ChatPage() {
         <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300" /><span className="truncate">{local ? localChat?.persona?.name || 'Local history' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Choose a persona')}</span></div>
       </div>
       <nav aria-label="Main navigation" className="space-y-1 p-3">
-        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"], ...(compareEnabled && !local ? [["compare", "⚖️", "Compare", true]] : [])].map(([id, icon, label, beta]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-slate-100 text-slate-900 shadow-[inset_3px_0_0_#3FA3B7]' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}{beta && <span className="ml-auto rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Beta</span>}</button>)}
+        {[["chat", "💬", "Chat"], ["calendar", "🗓️", "Calendar"], ...(canSeeInsights(role, environment) ? [["insights", "📊", "Insights"]] : []), ...(compareEnabled && !local ? [["compare", "⚖️", "Compare", true]] : [])].map(([id, icon, label, beta]) => <button key={id} type="button" aria-label={label} aria-current={nav === id ? 'page' : undefined} onClick={() => { setNav(id); setMobileMenu(false) }} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${nav === id ? 'bg-slate-100 text-slate-900 shadow-[inset_3px_0_0_#3FA3B7]' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}><span aria-hidden="true" className="text-base">{icon}</span>{label}{beta && <span className="ml-auto rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Beta</span>}</button>)}
         <button type="button" aria-label="New Persona" disabled={!canWrite} onClick={newPersona} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-lucent-accent px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"><span aria-hidden="true" className="text-base leading-none">+</span>New Persona</button>
       </nav>
       <div className="px-4 flex gap-1 border-b pb-3">{[['active', 'Conversations'], ['archive', 'Archive'], ['local', 'Local history']].map(([id, label]) => <button key={id} aria-pressed={view === id} className={`text-[11px] rounded-md px-2 py-1 font-medium transition-colors ${view === id ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-900'}`} onClick={() => chooseView(id)}>{label}</button>)}</div>
@@ -314,7 +316,7 @@ export default function ChatPage() {
     </aside>
     <main className="keep-light flex min-w-0 flex-1 flex-col bg-slate-50">
       <div className="md:hidden bg-lucent-navy text-white px-4 py-3 border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
-      {nav === 'calendar' ? <CalendarPage /> : nav === 'compare' && compareEnabled && !local ? <>
+      {nav === 'calendar' ? <CalendarPage /> : nav === 'insights' && canSeeInsights(role, environment) ? <InsightsPage /> : nav === 'compare' && compareEnabled && !local ? <>
         <header className="bg-white border-b px-4 sm:px-6 py-3">
           <div className="flex items-center gap-2"><h2 className="font-semibold text-sm">Compare and combine</h2><span className="rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Beta</span></div>
           <p className="mt-1 text-xs text-slate-500">Lucie writes your request with two AI models, you tap what you like in each, and she combines the best of both. Costs about two AI calls per request, plus one per combine or adjustment.</p>
