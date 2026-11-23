@@ -117,6 +117,11 @@ light-surface utilities inside it, so new sidebar content needs no per-element c
 **New Chat** is the one teal accent button. Body text is Inter and headings Montserrat;
 the generated social images keep their own fonts. The user chat bubble stays iMessage blue.
 
+In a dark-mode browser the sidebar and the sign-in and settings screens go dark
+(`client/tailwind.darkTheme.js`), but the chat/calendar workspace and dialogs stay light.
+Anything inside an element with the `keep-light` class is skipped by the dark theme; to put
+another area back into the dark theme, remove that class from it.
+
 ## Sidebar, output and shared chats
 
 The left side restores stacked **Chat**, **Calendar** and **New Persona** navigation,

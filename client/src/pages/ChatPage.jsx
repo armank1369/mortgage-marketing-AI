@@ -238,7 +238,7 @@ export default function ChatPage() {
       <div className="px-4 py-3 border-t border-slate-100"><Link to="/settings" className="text-xs text-slate-500 hover:text-slate-900">Settings</Link></div>
       <p className="p-4 border-t border-slate-100 text-[11px] text-slate-400">{brand?.licensed_person_name || 'Identity not configured'} · NMLS #{nmls}</p>
     </aside>
-    <main className="flex min-w-0 flex-1 flex-col">
+    <main className="keep-light flex min-w-0 flex-1 flex-col bg-slate-50">
       <div className="md:hidden bg-lucent-navy text-white px-4 py-3 border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
       {nav === 'calendar' ? <CalendarPage /> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
