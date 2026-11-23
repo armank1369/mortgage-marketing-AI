@@ -484,3 +484,57 @@ def test_detail_returns_the_whole_record_for_saved_history(stored, monkeypatch):
 def test_detail_unknown_comparison_is_404(stored):
     stored.repo.get_comparison.return_value = None
     assert stored.get(f"/api/compare/{CID}", headers=stored.headers()).status_code == 404
+
+
+# ---------------------------------------------------------------- questions envelope safeguard
+
+QUESTIONS_JSON = ('{"questions":[{"question":"Which platform is this first-time homebuyer post for?","type":"single",'
+                  '"options":["LinkedIn","Instagram","Facebook","TikTok"],"allow_custom":false},'
+                  '{"question":"Which content format would you like?","type":"single",'
+                  '"options":["Text-only post","Single image","Multi Image Carousel","Short video / Reel"],'
+                  '"allow_custom":false}]}')
+POSTS_JSON = ('{"intro":"","posts":[{"title":"First home","platform":"Instagram","format":"single-image",'
+              '"script":{"hook":"Ready to buy?","body":["Know your numbers."],"cta":"Message me."},"hashtags":[]}]}')
+
+
+def _generation_context():
+    from services.generation_context import BrandContext, GenerationContext, LicenseIdentity, PersonaContext
+    brand = BrandContext("Lucie Lending", "", (), (), (), (), "", "", "")
+    persona = PersonaContext("p", "w", "first-time", "First-Time Buyer", "", "", "", True)
+    return GenerationContext("w", LicenseIdentity("Jane Doe", "123", "456"), brand, persona)
+
+
+def _generate(replies):
+    from services.generation import generate_chat
+    calls = []
+
+    def invoke(label, **kwargs):
+        calls.append((label, kwargs))
+        return result(replies[len(calls) - 1])
+
+    try:
+        return generate_chat("give me a post about first time homebuyers", _generation_context(), invoke,
+                             model="m", allow_clarification=False), calls
+    except InvalidGenerationOutputError:
+        return None, calls
+
+
+def test_no_clarification_prompt_is_sent_to_the_model():
+    response, calls = _generate([POSTS_JSON])
+    assert response["type"] == "posts" and len(calls) == 1
+    assert "DO NOT ASK QUESTIONS" in model_compare._text_of(calls[0][1]["system"])
+
+
+def test_questions_envelope_triggers_one_retry_that_produces_a_draft():
+    response, calls = _generate([QUESTIONS_JSON, POSTS_JSON])
+    assert response["type"] == "posts"
+    assert [c[0] for c in calls] == ["chat_non_campaign", "chat_no_questions_retry"]
+
+
+def test_questions_twice_fails_cleanly_instead_of_showing_raw_json():
+    response, calls = _generate([QUESTIONS_JSON, QUESTIONS_JSON])
+    assert response is None and len(calls) == 2
+    outcome = model_compare._run_one(
+        model_compare.Candidate("anthropic", "m"), lambda c, **k: result(QUESTIONS_JSON), "give me a post",
+        _generation_context(), None, {}, allow_clarification=False)
+    assert outcome["error"] == "invalid_provider_output" and "response" not in outcome

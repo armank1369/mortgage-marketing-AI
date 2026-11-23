@@ -94,6 +94,8 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
         system += "\n\n" + render_policy(policy.NON_CAMPAIGN_FORMAT_PROMPT, context)
         if ambiguous:
             system += "\n\n" + policy.AMBIGUOUS_SCOPE_PROMPT
+        if not allow_clarification:
+            system += "\n\n" + policy.NO_CLARIFICATION_PROMPT
     kwargs = {"model": model, "system": policy.build_system(system, schedule_block, clock),
               "messages": messages,
               "thinking": {"type": "disabled"}, "max_tokens": 10000 if is_campaign else 4096}
@@ -101,6 +103,17 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
         kwargs["output_config"] = {"format": {"type": "json_schema", "schema": policy.CAMPAIGN_JSON_SCHEMA}}
     result = invoke("chat_campaign" if is_campaign else "chat_non_campaign", **kwargs)
     raw = _raw(result)
+    if not allow_clarification and not is_campaign and policy._parse_clarification(raw):
+        # The caller cannot show a question form and the model asked anyway. Retry once, explicitly,
+        # instead of showing the raw questions JSON; a second miss fails cleanly below.
+        retry = invoke("chat_no_questions_retry", **{**kwargs, "messages": [
+            *messages, {"role": "assistant", "content": raw},
+            {"role": "user", "content": "Do not ask questions. Pick sensible defaults for anything unspecified "
+                                        "(for example Instagram, single image) and write the finished post now "
+                                        "in the posts JSON format."}]})
+        raw = _raw(retry)
+        if policy._parse_clarification(raw) or '"questions"' in raw:
+            raise InvalidGenerationOutputError()
     if is_campaign:
         try:
             campaign = policy.strip_markdown_deep(json.loads(raw))

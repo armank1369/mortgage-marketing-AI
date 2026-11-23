@@ -390,6 +390,16 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
 # overrides that prompt's default single-select rule for platform/format, since a broad or
 # time-bound request like "What should I post this week?" hasn't committed to one deliverable
 # the way "give me a caption" has.
+# Used when the caller cannot show a question form (the Compare beta shows two drafts side by side).
+# Overrides shape (1) of NON_CAMPAIGN_FORMAT_PROMPT.
+NO_CLARIFICATION_PROMPT = (
+    'OVERRIDE — DO NOT ASK QUESTIONS. This request cannot show a question form. Never use response shape (1), '
+    'never output a "questions" JSON object, and never ask the user anything. Where the topic, platform or '
+    'format is not specified, choose the most likely option yourself (for example Instagram and a single image '
+    'for a general post) and write the finished post now using response shape (2). Use placeholders or sensible '
+    'defaults for any other missing facts.'
+)
+
 AMBIGUOUS_SCOPE_PROMPT = (
     'AMBIGUOUS SCOPE: this request uses broad or time-bound phrasing (e.g. "this week", "today", "this month", '
     '"strategy") rather than naming one specific deliverable — it could reasonably resolve to a single post or to '

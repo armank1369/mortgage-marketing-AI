@@ -1,8 +1,8 @@
 """Beta: send one chat prompt to two models and let the broker pick the better reply.
 
 Off unless LUCIE_COMPARE_BETA is truthy and both candidate models are configured.
-Each comparison makes two paid generation passes (one per model), never retries
-either, and records token usage plus an estimated cost for each side. The broker can
+Each comparison makes two paid generation passes (one per model); a side retries at most
+once, and only when it answered with questions instead of a draft, and records token usage plus an estimated cost for each side. The broker can
 then say what they like in each draft and have one model combine them (and refine the
 result) instead of copying drafts between tools by hand.
 """
