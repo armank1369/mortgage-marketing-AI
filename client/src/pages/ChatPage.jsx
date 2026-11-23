@@ -12,6 +12,7 @@ import { defaultVoice, customVoiceCount } from '../lib/voiceSettings.js'
 import VoiceSettings from '../components/VoiceSettings.jsx'
 import PersonaGuidelines from '../components/PersonaGuidelines.jsx'
 import { isLongChat } from '../lib/longChat.js'
+import { isNearBottom, planScroll } from '../lib/chatScroll.js'
 import PreferenceSetup from './PreferenceSetup.jsx'
 import BrandSummary from '../components/BrandSummary.jsx'
 import Dialog from '../components/Dialog.jsx'
@@ -81,6 +82,9 @@ export default function ChatPage() {
   const [dismissedLongChat, setDismissedLongChat] = useState(() => new Set())
   const [offline, setOffline] = useState(() => globalThis.navigator?.onLine === false)
   const bottom = useRef(null)
+  const scroller = useRef(null)
+  const nearBottom = useRef(true)
+  const lastScroll = useRef(null)
   const local = view === 'local'
   const localChat = localChats.find((row) => row.id === localId)
   const active = local ? localChat : state.active
@@ -120,7 +124,18 @@ export default function ChatPage() {
     window.addEventListener('online', online); window.addEventListener('offline', offline)
     return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline) }
   }, [])
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [lastMessageId, state.submitting])
+  // After a new reply, show where it starts (not its end), unless the reader has scrolled elsewhere.
+  const lastRole = state.messages.at(-1)?.role
+  const chatKey = state.active?.id || localId || 'composer'
+  useEffect(() => {
+    const next = { chatId: chatKey, lastId: lastMessageId, lastRole, submitting: !!state.submitting }
+    const box = scroller.current
+    const el = lastMessageId && box?.querySelector(`[data-message-id="${globalThis.CSS?.escape ? CSS.escape(String(lastMessageId)) : lastMessageId}"]`)
+    const plan = planScroll({ prev: lastScroll.current, next, nearBottom: nearBottom.current, replyHeight: el?.offsetHeight || 0, viewportHeight: box?.clientHeight || 0 })
+    lastScroll.current = next
+    if (plan === 'reply-start' && el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    else if (plan !== 'none') bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [chatKey, lastMessageId, lastRole, state.submitting])
   // Refresh folder counts whenever the chat list refreshes (new chat, archive, periodic reconcile).
   useEffect(() => { if (!local) controller.loadFolders(false) }, [controller, local, state.sessions, sessionCount])
   // Keep the chat lists of expanded folders loaded, and remember which are expanded.
@@ -250,7 +265,7 @@ export default function ChatPage() {
               : <button className={button} disabled={readOnly || pending || state.loading} onClick={() => state.active.unsaved ? newChat() : setConfirmArchive(true)}>Clear / Archive</button>}
           </div>}
         </header>
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
+        <div ref={scroller} onScroll={(event) => { nearBottom.current = isNearBottom(event.currentTarget) }} className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
           <div className="max-w-4xl mx-auto space-y-5">
             {error && <div role="alert" className="border border-red-200 bg-red-50 rounded-lg p-3 text-sm text-red-800">{error} <button className="underline ml-2" onClick={() => { setLocalError(''); controller.clearError(); controller.reconcile(); controller.list() }}>Refresh</button></div>}
             {offline && <p role="status" className="text-sm text-amber-800">Offline. You can compose a message; generation needs durable storage online.</p>}
