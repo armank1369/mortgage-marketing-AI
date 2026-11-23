@@ -90,12 +90,14 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
     system = shared
     if is_campaign:
         system += "\n\n" + render_policy(policy.CAMPAIGN_FORMAT_PROMPT, context)
+        if not allow_clarification:
+            system += "\n\n" + policy.VOICE_FIDELITY_PROMPT
     else:
         system += "\n\n" + render_policy(policy.NON_CAMPAIGN_FORMAT_PROMPT, context)
         if ambiguous:
             system += "\n\n" + policy.AMBIGUOUS_SCOPE_PROMPT
         if not allow_clarification:
-            system += "\n\n" + policy.NO_CLARIFICATION_PROMPT
+            system += "\n\n" + policy.NO_CLARIFICATION_PROMPT + "\n\n" + policy.VOICE_FIDELITY_PROMPT
     kwargs = {"model": model, "system": policy.build_system(system, schedule_block, clock),
               "messages": messages,
               "thinking": {"type": "disabled"}, "max_tokens": 10000 if is_campaign else 4096}

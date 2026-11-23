@@ -400,6 +400,21 @@ NO_CLARIFICATION_PROMPT = (
     'defaults for any other missing facts.'
 )
 
+# Compare beta only: appended identically for every candidate model (and the combine step). It carries no
+# model-specific wording; it exists because some models, left alone, fall back to a generic "how-to explainer"
+# template (Step 1 ... Step 5 listicles, stock analogies) instead of the configured voice.
+VOICE_FIDELITY_PROMPT = (
+    'VOICE FIDELITY. Write this as the licensed broker named above, speaking to the persona\'s audience, not as a '
+    'generic marketing assistant. Before drafting, use the brand profile, the persona and any VOICE SETTINGS '
+    'above to decide how this broker would actually say it, then keep that voice from the first word to the last. '
+    'Anchor the piece in one specific angle for this audience (a concrete moment, worry or question they have) '
+    'instead of a general overview of the topic. Do not default to a numbered "Step 1, Step 2, Step 3" walk-through '
+    'or a stock analogy unless the request asks for steps; when a list is the right shape, put each item on its own '
+    'line. Avoid generic filler openers and closers ("Buying a home can feel overwhelming", "Here is what you need '
+    'to know", "Let\'s dive in", "Every journey is different"). Prefer plain, concrete wording a real broker would '
+    'say out loud. All compliance, disclosure and output-format rules above still win.'
+)
+
 # Used by the Compare beta to ask its questions once, before any drafts are written. One short call that
 # either asks (same JSON shape the chat question card renders) or says nothing more is needed.
 QUESTIONS_ONLY_PROMPT = (
