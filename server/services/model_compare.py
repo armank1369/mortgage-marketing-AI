@@ -1,8 +1,8 @@
 """Beta: send one chat prompt to two models and let the broker pick the better reply.
 
 Off unless LUCIE_COMPARE_BETA is truthy and both candidate models are configured.
-Each comparison makes two paid generation passes (one per model), never retries
-either, and records token usage plus an estimated cost for each side. The broker can
+Each comparison makes two paid generation passes (one per model); a side retries at most
+once, and only when it answered with questions instead of a draft, and records token usage plus an estimated cost for each side. The broker can
 then say what they like in each draft and have one model combine them (and refine the
 result) instead of copying drafts between tools by hand.
 """
@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import anthropic
 
-from services.generation import generate_chat, InvalidGenerationOutputError
+from services.generation import generate_chat, check_questions, InvalidGenerationOutputError
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +291,29 @@ def run_comparison(message, context, config, *, clients=None, device_zone=None, 
     for slot, outcome in zip("AB", outcomes):
         outcome["slot"] = slot
     return outcomes
+
+
+def run_questions(message, context, config, *, clients=None, device_zone=None, prices=None):
+    """One cheap pass before comparing: the question card Lucie needs answered first, or None.
+
+    Never blocks the comparison: if the check fails, the caller just compares without questions.
+    """
+    clients = clients or default_clients()
+    prices = prices if prices is not None else price_table()
+    asker = config.merge_model or config.candidates[0]
+    usage = {}
+
+    def invoke(label, **kwargs):
+        result = clients[asker.provider](asker, **kwargs)
+        _add_usage(usage, getattr(result, "usage", None))
+        return result
+
+    try:
+        clarification = check_questions(message, context, invoke, model=asker.model, device_zone=device_zone)
+    except Exception as error:
+        logger.warning("Compare question check failed: model=%s error=%s", asker.label, error_code(error))
+        return None, None
+    return clarification, estimate_cost(asker.model, usage, prices)
 
 
 def total_cost(outcomes):

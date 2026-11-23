@@ -39,6 +39,24 @@ def compare_config():
                     "calls_per_comparison": 2 if config.enabled else 0})
 
 
+@blueprint.route("/api/compare/questions", methods=["POST"])
+@require_workspace
+@require_capability("ai:generate")
+def compare_questions():
+    """Ask-before-drafting step: returns {"clarification": {...}} when Lucie needs answers, else null."""
+    config = _config()
+    data = json_object()
+    message = required_text(data, "message")
+    if len(message) > MAX_PROMPT_CHARS:
+        raise ValidationError("message is too long.")
+    context = resolve_generation_context(g.workspace_id, persona_id=data.get("persona_id"))
+    clarification, cost = model_compare.run_questions(
+        message, context, config, clients=current_app.extensions.get("compare_clients"),
+        device_zone=request.headers.get("X-Device-Timezone"))
+    logger.info("[compare_usage] questions asked=%s est_cost_usd=%s", bool(clarification), cost)
+    return jsonify({"clarification": clarification})
+
+
 @blueprint.route("/api/compare", methods=["POST"])
 @require_workspace
 @require_capability("ai:generate")
