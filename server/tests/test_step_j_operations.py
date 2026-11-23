@@ -329,6 +329,12 @@ def test_timeout_is_unknown_never_auto_retried_and_can_be_explicitly_replaced(wo
     assert replacement["state"] == "succeeded" and next_create.call_count == 1
 
 
+def test_empty_posts_envelope_with_intro_text_is_saved_as_plain_answer(world):
+    answer = {"intro": "Here is how I would streamline that copy and paste step.", "posts": []}
+    saved, create = run(world, provider=Mock(return_value=result(answer)))
+    assert saved["state"] == "succeeded" and create.call_count == 1
+
+
 @pytest.mark.parametrize("value,stop", [("", "end_turn"), ("Partial response", "max_tokens"), ({"posts": []}, "end_turn")])
 def test_invalid_or_truncated_output_never_saves_false_success(world, value, stop):
     # Empty posts envelope is stripped; no meaningful publication content remains.
