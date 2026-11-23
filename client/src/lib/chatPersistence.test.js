@@ -1,11 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createChatPersistence, pendingStorageKey, chatUUID } from './chatPersistence.js'
+import { createChatPersistence, pendingStorageKey, selectedStorageKey, chatUUID } from './chatPersistence.js'
 const scope = JSON.stringify(['account-a', 'workspace-a'])
 const otherScope = JSON.stringify(['account-b', 'workspace-a'])
 const persona = '11111111-1111-4111-8111-111111111111'
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r }); return { promise, resolve } }
+// Automatic chat naming is a separate, optional POST; operation tests count only provider operations.
+const isOperationPost = (r) => r.method === 'POST' && !r.url.endsWith('/title')
 const http = (status, error) => Object.assign(Error('synthetic'), { response: { status, data: { error } } })
 function fixture({ initial = new Map(), override } = {}) {
   const calls = [], writes = [], sessions = new Map(), messages = new Map(), results = new Map()
@@ -17,10 +19,22 @@ function fixture({ initial = new Map(), override } = {}) {
     if (replacement) return await replacement
     const { url, method, data } = config
     const [path] = url.split('?'); const parts = path.split('/'); const id = parts[4], key = parts[6]
-    if (url.includes('?version=2&archived=')) return { data: { sessions: [...sessions.values()].filter((s) => !!s.archived_at === url.includes('archived=true')), next_cursor: null } }
+    if (url.includes('?version=2&archived=')) {
+      const folder = new URLSearchParams(url.split('?')[1]).get('persona')
+      return { data: { sessions: [...sessions.values()].filter((s) => !!s.archived_at === url.includes('archived=true'))
+        .filter((s) => !folder || (folder === 'none' ? !s.default_persona_id : s.default_persona_id === folder)), next_cursor: null } }
+    }
+    if (url.startsWith('/api/chat/folders')) {
+      const counts = new Map()
+      for (const s of sessions.values()) if (!!s.archived_at === url.includes('archived=true')) counts.set(s.default_persona_id || null, (counts.get(s.default_persona_id || null) || 0) + 1)
+      return { data: { folders: [...counts].map(([persona_id, chat_count]) => ({ persona_id, chat_count, available: !!persona_id })) } }
+    }
+    if (method === 'PUT' && path.endsWith('/voice')) {
+      const sid = parts[4]; sessions.set(sid, { ...sessions.get(sid), voice_settings: data.voice_settings }); return { data: { voice_settings: data.voice_settings } }
+    }
     if (method === 'PUT') {
       assert.ok(initial.get(pendingStorageKey(scope)), 'pending identifier must precede first network write')
-      if (!sessions.has(id)) sessions.set(id, { id, title: data.title, default_persona_id: data.persona_id, etag: '"v1"' })
+      if (!sessions.has(id)) sessions.set(id, { id, title: data.title, default_persona_id: data.persona_id, voice_settings: data.voice_settings, etag: '"v1"' })
       return { data: sessions.get(id) }
     }
     if (method === 'PATCH') {
@@ -53,7 +67,8 @@ test('first send stores stable identifiers before writes; success is server-auth
   assert.equal(c.getSnapshot().active.unsaved, undefined)
   assert.deepEqual(JSON.parse(f.initial.get(pendingStorageKey(scope))), [])
   for (const [key, value] of legacy) assert.equal(f.initial.get(key), value)
-  assert.ok(f.writes.every((key) => key === pendingStorageKey(scope)))
+  assert.ok(f.writes.every((key) => key === pendingStorageKey(scope) || key === selectedStorageKey(scope)))
+  assert.equal(f.initial.get(selectedStorageKey(scope)), c.getSnapshot().active.id)
   c.stop()
 })
 
@@ -75,9 +90,9 @@ test('lost reply after commit reloads using GET only and never repeats provider 
   }
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona }); c.stop()
   assert.equal(c.getSnapshot().messages.length, 0)
-  const before = f.calls.filter((r) => r.method === 'POST').length
+  const before = f.calls.filter(isOperationPost).length
   const reloaded = f.make(); await reloaded.start()
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, before)
+  assert.equal(f.calls.filter(isOperationPost).length, before)
   assert.equal(reloaded.getSnapshot().messages.at(-1).content, 'saved text')
   assert.equal(reloaded.getSnapshot().pending.length, 0)
   reloaded.stop()
@@ -98,11 +113,11 @@ test('uncertain status remains unresolved; only explicit acknowledged retry crea
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
   const key = c.operations()[0].operation_key
   for (let i = 0; i < 2; i++) await c.reconcile()
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 1)
+  assert.equal(f.calls.filter(isOperationPost).length, 1)
   assert.equal(c.operations()[0].state, 'unknown')
   await assert.rejects(c.submit({ action: 'send', message: 'new', persona_id: persona }))
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona }, { retryOf: key, acknowledge: true })
-  const retry = f.calls.filter((r) => r.method === 'POST').at(-1).data
+  const retry = f.calls.filter(isOperationPost).at(-1).data
   assert.notEqual(retry.operation_key, key)
   assert.equal(retry.retry_of, key); assert.equal(retry.acknowledge_uncertain_outcome, true)
   c.stop()
@@ -112,13 +127,13 @@ test('404 status never auto-posts; deliberate resubmission preserves exact input
   let disconnect = true
   const f = fixture({ override: (config) => config.method === 'POST' && disconnect ? Promise.reject(Error('disconnected before dispatch')) : null })
   const c = f.make(); await c.start(); await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
-  const body = f.calls.find((r) => r.method === 'POST').data
+  const body = f.calls.find(isOperationPost).data
   await c.reconcile()
   assert.equal(c.operations()[0].state, 'unconfirmed')
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 1)
+  assert.equal(f.calls.filter(isOperationPost).length, 1)
   disconnect = false
   await c.resend(body.operation_key)
-  assert.deepEqual(f.calls.filter((r) => r.method === 'POST').at(-1).data, body)
+  assert.deepEqual(f.calls.filter(isOperationPost).at(-1).data, body)
   c.stop()
 })
 
@@ -130,7 +145,7 @@ test('scope change and disposal suppress late replies and subsequent requests', 
   f.switchScope(); c.stop(); const stopped = c.getSnapshot()
   barrier.resolve({ data: { id: before.id, title: 'foreign late title' } }); await send
   assert.equal(c.getSnapshot(), stopped)
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 0)
+  assert.equal(f.calls.filter(isOperationPost).length, 0)
   assert.ok(f.calls.find((r) => r.method === 'PUT').signal.aborted)
   assert.notEqual(pendingStorageKey(scope), pendingStorageKey(otherScope))
 })
@@ -151,10 +166,10 @@ test('rapid duplicate clicks dispatch once and terminal provider errors stay ope
   const c = f.make(); await c.start()
   const one = c.submit({ action: 'send', message: 'prompt', persona_id: persona }); await tick()
   await c.submit({ action: 'send', message: 'prompt', persona_id: persona })
-  const key = f.calls.find((r) => r.method === 'POST').data.operation_key
+  const key = f.calls.find(isOperationPost).data.operation_key
   const result = { operation_key: key, state: 'failed', safe_error_code: 'generation_failed' }
   barrier.resolve({ data: result }); await one
-  assert.equal(f.calls.filter((r) => r.method === 'POST').length, 1)
+  assert.equal(f.calls.filter(isOperationPost).length, 1)
   assert.deepEqual(c.getSnapshot().messages, [])
   c.stop()
 })
@@ -169,6 +184,22 @@ test('metadata changes use ETags; archive retains history and opens only an unsa
   assert.equal(f.sessions.get(id).archived_at, 'now'); assert.equal(f.messages.get(id).length, 2)
   assert.equal(f.calls.filter((r) => r.method === 'PUT').length, writes)
   await c.open(id); await c.patch({ archived: false }); assert.equal(f.sessions.get(id).archived_at, null)
+  c.stop()
+})
+
+test('archiveChat archives a chat that is not open, keeps history, and leaves the open chat alone', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.submit({ action: 'send', message: 'first', persona_id: persona })
+  const first = c.getSnapshot().active.id
+  c.newChat(persona); await c.submit({ action: 'send', message: 'second', persona_id: persona })
+  const second = c.getSnapshot().active.id
+  assert.notEqual(first, second)
+  await c.archiveChat(first)
+  assert.equal(f.sessions.get(first).archived_at, 'now'); assert.equal(f.messages.get(first).length, 2)
+  assert.equal(c.getSnapshot().active.id, second); assert.ok(!f.sessions.get(second).archived_at)
+  assert.ok(!c.getSnapshot().sessions.some((row) => row.id === first))
+  await c.archiveChat(second)
+  assert.equal(f.sessions.get(second).archived_at, 'now'); assert.equal(c.getSnapshot().active.unsaved, true)
   c.stop()
 })
 
@@ -228,8 +259,8 @@ test('shortening an existing conversation does not require a new creation or a c
   const before = f.calls.filter((r) => r.method === 'PUT').length
   await c.submit({ action: 'shorten', source_message_id: 'response' })
   assert.equal(f.calls.filter((r) => r.method === 'PUT').length, before)
-  assert.deepEqual(f.calls.filter((r) => r.method === 'POST').at(-1).data, {
-    action: 'shorten', source_message_id: 'response', operation_key: f.calls.filter((r) => r.method === 'POST').at(-1).data.operation_key,
+  assert.deepEqual(f.calls.filter(isOperationPost).at(-1).data, {
+    action: 'shorten', source_message_id: 'response', operation_key: f.calls.filter(isOperationPost).at(-1).data.operation_key,
   })
   c.stop()
 })
@@ -325,5 +356,144 @@ test('idle reconciliation refreshes shared sidebar and active history without re
   assert.equal(c.getSnapshot().active.title, 'Renamed by teammate')
   assert.equal(c.getSnapshot().messages.length, 2)
   assert.equal(f.calls.filter(call => call.method !== 'GET').length, 0)
+  c.stop()
+})
+
+test('expanded persona folders load their own chats and keep counts', async () => {
+  const other = '22222222-2222-4222-8222-222222222222'
+  const f = fixture(), c = f.make(); await c.start()
+  f.sessions.set('a', { id: 'a', title: 'A', default_persona_id: persona })
+  f.sessions.set('b', { id: 'b', title: 'B', default_persona_id: other })
+  f.sessions.set('c', { id: 'c', title: 'Imported', default_persona_id: null })
+  await c.setOpenFolders([persona, 'none'])
+  const chats = () => Object.fromEntries(Object.entries(c.getSnapshot().folderChats).map(([id, row]) => [id, row.sessions.map((s) => s.id)]))
+  assert.deepEqual(chats(), { [persona]: ['a'], none: ['c'] })
+  assert.ok(f.calls.some((r) => r.url.includes(`&persona=${persona}`)))
+  await c.list() // refreshes keep every expanded folder current
+  assert.deepEqual(chats(), { [persona]: ['a'], none: ['c'] })
+  f.sessions.set('d', { id: 'd', title: 'D', default_persona_id: persona })
+  await c.list()
+  assert.deepEqual(chats()[persona].sort(), ['a', 'd'])
+  await c.setOpenFolders([other])
+  assert.deepEqual(chats(), { [other]: ['b'] }, 'collapsed folders are dropped')
+  assert.equal(c.getSnapshot().sessions.length, 4, 'the unfiltered list is unchanged')
+  await c.loadFolders()
+  const counts = Object.fromEntries(c.getSnapshot().folders.map((row) => [row.persona_id, row.chat_count]))
+  assert.deepEqual(counts, { [persona]: 2, [other]: 1, null: 1 })
+  c.stop()
+})
+
+test('a slow response for a folder collapsed in the meantime is ignored', async () => {
+  const gate = deferred()
+  const f = fixture({ override: (config) => config.url.includes('persona=slow') ? gate.promise.then(() => ({ data: { sessions: [{ id: 'stale' }], next_cursor: null } })) : null })
+  const c = f.make(); await c.start()
+  const slow = c.setOpenFolders(['slow'])
+  await c.setOpenFolders([])
+  gate.resolve(); await slow
+  assert.deepEqual(c.getSnapshot().folderChats, {})
+  c.stop()
+})
+
+test('voice settings are chosen per conversation: sent with first creation, then saved on their own', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  assert.deepEqual(await c.setVoice({ tone: { serious: 5 } }), { tone: { serious: 5 } })
+  assert.equal(f.calls.filter((r) => r.method !== 'GET').length, 0, 'unsent chats keep voice local')
+  await c.submit({ action: 'send', message: 'First prompt', persona_id: persona })
+  const created = f.calls.find((r) => r.method === 'PUT')
+  assert.deepEqual(created.data.voice_settings, { tone: { serious: 5 } })
+  const id = c.getSnapshot().active.id
+  await c.setVoice({ tone: { serious: 1, professional: 4 } })
+  const put = f.calls.filter((r) => r.method === 'PUT').at(-1)
+  assert.ok(put.url.endsWith(`/${id}/voice`)); assert.deepEqual(put.data, { voice_settings: { tone: { serious: 1, professional: 4 } } })
+  assert.deepEqual(c.getSnapshot().active.voice_settings, { tone: { serious: 1, professional: 4 } })
+  await c.setVoice({})
+  assert.deepEqual(c.getSnapshot().active.voice_settings, {})
+  c.stop()
+})
+
+test('a chat without custom voice sends no voice_settings on creation', async () => {
+  const f = fixture(), c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  await c.submit({ action: 'send', message: 'Plain prompt', persona_id: persona })
+  assert.equal('voice_settings' in f.calls.find((r) => r.method === 'PUT').data, false)
+  c.stop()
+})
+
+test('a new chat is named once after its first reply; the title never blocks or errors the chat', async () => {
+  const f = fixture({ override: (config, ctx) => {
+    if (config.url.endsWith('/title')) {
+      const id = config.url.split('/')[4]
+      ctx.sessions.set(id, { ...ctx.sessions.get(id), title: 'Refinance Rate Drop Email', etag: '"v3"' })
+      return { data: { changed: true, session: ctx.sessions.get(id) } }
+    }
+  } })
+  const c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  await c.submit({ action: 'send', message: 'Write an email about refinancing', persona_id: persona })
+  await tick(); await tick()
+  const calls = f.calls.filter((r) => r.url.endsWith('/title'))
+  assert.equal(calls.length, 1); assert.equal(calls[0].method, 'POST')
+  assert.equal(c.getSnapshot().active.title, 'Refinance Rate Drop Email')
+  assert.equal(c.getSnapshot().active.etag, '"v3"')
+  await c.submit({ action: 'send', message: 'Now a shorter one', persona_id: persona })
+  await tick(); await tick()
+  assert.equal(f.calls.filter((r) => r.url.endsWith('/title')).length, 1, 'only the first reply names the chat')
+  c.stop()
+})
+
+test('a failing title request is silent for automatic naming and reported for Suggest a title', async () => {
+  const f = fixture({ override: (config) => config.url.endsWith('/title') ? Promise.reject(http(502, 'provider_unavailable')) : null })
+  const c = f.make(); await c.start()
+  await c.patch({ default_persona_id: persona })
+  await c.submit({ action: 'send', message: 'Hello there', persona_id: persona })
+  await tick(); await tick()
+  assert.equal(c.getSnapshot().error, '')
+  await assert.rejects(c.nameChat(c.getSnapshot().active.id, { force: true }))
+  assert.ok(c.getSnapshot().error)
+  c.stop()
+})
+
+test('a refresh reopens the chat that was selected, not the newest one', async () => {
+  const f = fixture()
+  f.sessions.set('newest', { id: 'newest', title: 'Top of folder', default_persona_id: persona, etag: '"v1"' })
+  f.sessions.set('older', { id: 'older', title: 'Being reviewed', default_persona_id: persona, etag: '"v1"' })
+  const first = f.make(); await first.start()
+  assert.equal(first.getSnapshot().active.id, 'newest')
+  await first.open('older')
+  first.stop()
+  // Simulated browser refresh: a fresh controller over the same browser storage.
+  const reloaded = f.make(); await reloaded.start()
+  assert.equal(reloaded.getSnapshot().active.id, 'older')
+  assert.equal(reloaded.getSnapshot().active.title, 'Being reviewed')
+  assert.equal(reloaded.getSnapshot().error, '')
+  reloaded.stop()
+})
+
+test('a remembered chat that no longer exists falls back to the newest chat without an error', async () => {
+  const f = fixture({ initial: new Map([[selectedStorageKey(scope), 'deleted-chat']]) })
+  f.sessions.set('newest', { id: 'newest', title: 'Newest', etag: '"v1"' })
+  const c = f.make(); await c.start()
+  assert.equal(c.getSnapshot().active.id, 'newest')
+  assert.equal(c.getSnapshot().error, '')
+  assert.equal(f.initial.get(selectedStorageKey(scope)), 'newest')
+  c.stop()
+})
+
+test('the remembered chat is kept per account and workspace', async () => {
+  const f = fixture({ initial: new Map([[selectedStorageKey(otherScope), 'older']]) })
+  f.sessions.set('newest', { id: 'newest', title: 'Newest', etag: '"v1"' })
+  f.sessions.set('older', { id: 'older', title: 'Other account', etag: '"v1"' })
+  const c = f.make(); await c.start()
+  assert.equal(c.getSnapshot().active.id, 'newest')
+  c.stop()
+})
+
+test('unreadable browser storage still opens the newest chat', async () => {
+  const f = fixture()
+  f.sessions.set('newest', { id: 'newest', title: 'Newest', etag: '"v1"' })
+  const c = f.make({ storage: { getItem: (key) => { if (key === selectedStorageKey(scope)) throw Error('blocked'); return null }, setItem: () => { throw Error('blocked') } } })
+  await c.start()
+  assert.equal(c.getSnapshot().active.id, 'newest')
   c.stop()
 })

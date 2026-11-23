@@ -19,7 +19,7 @@ ORIGIN = "https://auth.example"
 ROUTES = [
     ("GET", "/api/calendar"), ("POST", "/api/calendar"),
     ("PUT", "/api/brand-profile"),
-    ("GET", "/api/brand-profile"), ("GET", "/api/chat/sessions"),
+    ("GET", "/api/brand-profile"), ("GET", "/api/chat/sessions"), ("GET", "/api/chat/folders"),
     ("POST", "/api/chat/sessions"), ("GET", "/api/chat/sessions/" + S),
     ("GET", "/api/preferences"), ("POST", "/api/preferences"),
     ("GET", "/api/history"), ("POST", "/api/chat"),
@@ -68,7 +68,7 @@ def test_route_inventory():
     expected = set(ROUTES) - {("GET", "/api/chat/sessions/" + S), ("PUT", "/api/personas/" + S)}
     expected |= {("GET", "/api/chat/sessions/<session_id>"), ("GET", "/api/hello"),
                  ("GET", "/api/auth/me"), ("GET", "/api/workspaces"), ("PUT", "/api/personas/<persona_id>")}
-    expected |= {("PUT", "/api/chat/sessions/<session_id>"), ("PATCH", "/api/chat/sessions/<session_id>"),
+    expected |= {("PUT", "/api/chat/sessions/<session_id>"), ("PUT", "/api/chat/sessions/<session_id>/voice"), ("POST", "/api/chat/sessions/<session_id>/title"), ("PATCH", "/api/chat/sessions/<session_id>"),
                  ("POST", "/api/chat/sessions/<session_id>/operations"),
                  ("GET", "/api/chat/sessions/<session_id>/operations/<operation_key>"),
                  ("POST", "/api/chat/sessions/<session_id>/operations/<operation_key>/abandon")}

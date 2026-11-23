@@ -23,13 +23,13 @@ these changes. These instructions describe local development, not deployment.
 
 ## What is implemented
 
-- First use and New Chat open persona cards, followed by review and confirmation.
+- First use and New Persona open persona cards, followed by review and confirmation.
   A saved chat keeps one persona; start a new chat for another audience.
 - Brand setup restores numbered 1–5 tone choices, optional age-range slider and
   income/education fields, audience guidance and a persistent Brand Summary.
   Keywords, catchphrases, banned words and values use removable tags. Writing
   examples use sample cards; routine brand editing requires no JSON syntax.
-- The sidebar has stacked Chat, Calendar and New Chat controls, persona labels,
+- The sidebar has stacked Chat, Calendar and New Persona controls, persona labels,
   previews and content-type badges. Suggestions rotate with More.
 - Database chats are shared within their workspace. Writers can continue, rename,
   revise and archive/restore them; viewers can read/export. Original authorship and

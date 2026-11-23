@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { decodeMessage, mergeMessages, projectConversation, operationRecords } from './chatSerialization.js'
+import { decodeMessage, mergeMessages, projectConversation, operationRecords, visibleOperations } from './chatSerialization.js'
 
 const fixtures = JSON.parse(readFileSync(new URL('../../../docs/fixtures/step_j_v1.json', import.meta.url)))
 const rows = fixtures.cases.map((item, index) => ({ id: `m${index}`, role: 'assistant', kind: 'response', created_at: `2026-10-19T00:00:0${index}Z`,
@@ -70,4 +70,16 @@ test('independent older media attempts stay accessible as previous versions', ()
   const video = projected[0].artifacts['content_calendar:0'].video
   assert.equal(video.id, second.id)
   assert.deepEqual(video.previous.map((row) => row.id), [first.id])
+})
+
+test('failed attempt cards hide once the chat has moved past them', () => {
+  const ops = [
+    { operation_key: 'a', state: 'failed', request_message_id: 'm1' },
+    { operation_key: 'b', state: 'failed', request_message_id: 'm2' },
+    { operation_key: 'c', state: 'unknown', request_message_id: 'm2' },
+    { operation_key: 'd', state: 'running' },
+  ]
+  const shown = visibleOperations(ops, [{ id: 'm1' }, { id: 'm2' }]).map((op) => op.operation_key)
+  assert.deepEqual(shown, ['b', 'c', 'd'])
+  assert.deepEqual(visibleOperations(ops, [{ id: 'm1' }, { id: 'm2' }, { id: 'reply' }]).map((op) => op.operation_key), ['c', 'd'])
 })

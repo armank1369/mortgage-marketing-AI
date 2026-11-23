@@ -133,3 +133,15 @@ h3 {
   --color-primary-foreground: #2b3649;
   --color-ring: #cbd5e1;
 }
+
+/* Light island inside the dark theme. The chat and calendar workspace and dialogs keep their
+   normal light look when <html> has `dark`: tailwind.darkTheme.js skips everything inside
+   .keep-light, and this restores the light text color, tokens and native controls. */
+.keep-light {
+  color: #181e28;
+  color-scheme: light;
+  --lucie-ink: #181e28;
+  --lucie-canvas: #f8fafc;
+  --lucie-accent: #17788c;
+  --lucie-selection: #d5eef2;
+}

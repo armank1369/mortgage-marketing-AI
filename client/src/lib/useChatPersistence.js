@@ -6,7 +6,8 @@ import { createChatPersistence } from './chatPersistence.js'
 export function useChatPersistence() {
   const scope = useBrowserScope()
   const controller = useMemo(() => createChatPersistence({ api: workspaceApi, scope,
-    storage: { getItem: (key) => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) } }), [scope])
+    storage: { getItem: (key) => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value),
+      removeItem: (key) => globalThis.localStorage.removeItem(key) } }), [scope])
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
   useEffect(() => {
     controller.start()

@@ -69,6 +69,20 @@ class MemorySQL:
         elif q.startswith("select") and "from public.persona" in q:
             row = self.personas.get(params[0])
             self.rows = [row] if row and row["workspace_id"] == params[1] and not row.get("deleted_at") else []
+        elif q.startswith("select s.default_persona_id as persona_id"):
+            rows = [r for r in self.sessions.values() if r["workspace_id"] == params[0]
+                    and bool(r["archived_at"]) == ("s.archived_at is not null" in q)]
+            groups = {}
+            for r in rows:
+                groups.setdefault(r["default_persona_id"], []).append(r)
+            for pid, members in groups.items():
+                persona = self.personas.get(pid)
+                if persona and (persona.get("deleted_at") or persona["workspace_id"] != params[0]):
+                    persona = None
+                self.rows.append(dict(persona_id=pid, persona_name=persona["name"] if persona else None,
+                                      available=persona is not None, chat_count=len(members),
+                                      last_updated_at=max(m["updated_at"] for m in members)))
+            self.rows.sort(key=lambda r: r["last_updated_at"], reverse=True)
         elif q.startswith("select") and "from public.chat_session" in q:
             if "where id=%s" in q:
                 row = self.sessions.get(params[0])
@@ -80,8 +94,14 @@ class MemorySQL:
             else:
                 rows = [r for r in self.sessions.values() if r["workspace_id"] == params[0]]
                 rows = [r for r in rows if bool(r["archived_at"]) == ("archived_at is not null" in q)]
+                rest = list(params[1:])
+                if "default_persona_id is null" in q:
+                    rows = [r for r in rows if not r["default_persona_id"]]
+                elif "default_persona_id=%s" in q:
+                    wanted = rest.pop(0)
+                    rows = [r for r in rows if r["default_persona_id"] == wanted]
                 if "(updated_at,id)<" in q:
-                    rows = [r for r in rows if (r["updated_at"], r["id"]) < tuple(params[1:3])]
+                    rows = [r for r in rows if (r["updated_at"], r["id"]) < tuple(rest[0:2])]
                 self.rows = sorted(rows, key=lambda r: (r["updated_at"], r["id"]), reverse=True)[:params[-1]]
         elif q.startswith("insert into public.chat_session"):
             sid, wid, mid, title, persona = params
@@ -540,3 +560,33 @@ def test_departed_creator_does_not_hide_history_but_cannot_finish_provider_work(
     with pytest.raises(WorkspaceAccessDeniedError):
         finish(claim)
     assert len(store.messages) == 1
+
+
+def test_persona_folders_filter_and_summarize_chats(store):
+    store.personas[OTHER] = dict(store.personas[P], id=OTHER, name="Second")
+    second = str(uuid4())
+    repo.create_session(W, second, M, title="Second persona chat", persona_id=OTHER)
+    unsorted = str(uuid4())
+    repo.create_session(W, unsorted, M, title="Imported", persona_id=P)
+    store.sessions[unsorted]["default_persona_id"] = None
+    assert [s["id"] for s in repo.list_sessions(W, M, persona=P)["sessions"]] == [S]
+    assert [s["id"] for s in repo.list_sessions(W, M, persona=OTHER)["sessions"]] == [second]
+    assert [s["id"] for s in repo.list_sessions(W, M, persona="none")["sessions"]] == [unsorted]
+    assert len(repo.list_sessions(W, M)["sessions"]) == 3
+    with pytest.raises(ValidationError):
+        repo.list_sessions(W, M, persona="not-a-uuid")
+    folders = {f["persona_id"]: f for f in repo.list_folders(W, M)["folders"]}
+    assert folders[P]["chat_count"] == 1 and folders[P]["persona_name"] == "Synthetic" and folders[P]["available"]
+    assert folders[OTHER]["chat_count"] == 1
+    assert folders[None]["chat_count"] == 1 and not folders[None]["available"]
+    repo.patch_session(W, second, M, {"archived": True}, metadata_etag(store.sessions[second]))
+    assert OTHER not in {f["persona_id"] for f in repo.list_folders(W, M)["folders"]}
+    assert [f["persona_id"] for f in repo.list_folders(W, M, archived=True)["folders"]] == [OTHER]
+    store.personas[OTHER]["deleted_at"] = "2026-01-01"
+    archived = repo.list_folders(W, M, archived=True)["folders"][0]
+    assert archived["persona_id"] == OTHER and archived["persona_name"] is None and not archived["available"]
+
+
+def test_persona_folders_require_membership(store):
+    with pytest.raises(WorkspaceAccessDeniedError):
+        repo.list_folders(W, OTHER)

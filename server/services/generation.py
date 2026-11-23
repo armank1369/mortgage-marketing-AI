@@ -128,7 +128,12 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
     try:
         empty = json.loads(raw)
         if isinstance(empty, dict) and "posts" in empty and empty["posts"] == []:
-            raise InvalidGenerationOutputError()
+            # The model sometimes answers a plain question inside the posts envelope, with the whole answer in
+            # "intro" and no posts. That text is a real answer, so keep it instead of failing the attempt.
+            intro = empty.get("intro")
+            if not isinstance(intro, str) or not intro.strip():
+                raise InvalidGenerationOutputError()
+            raw = intro
     except json.JSONDecodeError:
         pass
     raw = policy._strip_stray_empty_posts_envelope(raw)

@@ -37,7 +37,7 @@ def only(data, allowed):
 
 
 def create_fields(data):
-    only(data, {"title", "persona_id"})
+    only(data, {"title", "persona_id", "voice_settings"})
     return {"title": text(data.get("title"), "title", 200),
             "persona_id": uuid_string(data.get("persona_id"), "persona_id")}
 
