@@ -94,6 +94,7 @@ export default function ChatPage() {
   const [offline, setOffline] = useState(() => globalThis.navigator?.onLine === false)
   const [compareEnabled, setCompareEnabled] = useState(false)
   const [compareInput, setCompareInput] = useState('')
+  const [comparePersonaId, setComparePersonaId] = useState('')
   const [comparisons, setComparisons] = useState({})
   const bottom = useRef(null)
   const scroller = useRef(null)
@@ -115,6 +116,10 @@ export default function ChatPage() {
   // blocked by `blocked`/`providerBlocked` either way.
   const personaPending = !local && (state.loading || configLoading)
   const providerBlocked = blocked || personaConflict || !persona || configLoading || !!configError
+  // Compare asks which persona to write for; it starts on the open chat's persona and can be changed per request.
+  const writablePersonas = personas.filter((row) => row.available !== false)
+  const comparePersona = writablePersonas.find((row) => row.id === comparePersonaId) || writablePersonas.find((row) => row.id === persona?.id) || writablePersonas[0]
+  const compareBlocked = blocked || configLoading || !!configError || !comparePersona
   const inputKey = local ? `local:${localId}` : state.active?.id || 'composer'
   const input = inputs[inputKey] || ''
   const nmls = brand?.nmls_id || 'Not configured'
@@ -169,27 +174,27 @@ export default function ChatPage() {
     setLocalError('')
     try { return await task() } catch (err) { if (err.code !== 'ERR_CANCELED') setLocalError(err.message === state.storageError ? err.message : 'The action could not be completed. Refresh the conversation and try again.') }
   }
-  const action = (fields) => run(() => controller.submit({ ...fields, ...(fields.action !== 'shorten' ? { persona_id: persona?.id } : {}) }))
+  const action = (fields) => run(() => controller.submit({ ...fields, ...(fields.action !== 'shorten' ? { persona_id: fields.persona_id ?? persona?.id } : {}) }))
   const chatComparisons = comparisons[COMPARE_KEY] || []
   const comparing = chatComparisons.some((item) => item.status === 'running' || item.status === 'checking')
   const updateComparison = (key, id, changes) => setComparisons((previous) => ({ ...previous,
     [key]: (previous[key] || []).map((item) => item.id === id ? { ...item, ...changes } : item) }))
-  const startComparison = (key, id, prompt, message) => {
+  const startComparison = (key, id, prompt, message, personaId) => {
     updateComparison(key, id, { status: 'running', clarification: null })
-    runComparison(workspaceApi, { message, personaId: persona?.id })
+    runComparison(workspaceApi, { message, personaId })
       .then((data) => updateComparison(key, id, { status: 'done', data }))
       .catch((err) => updateComparison(key, id, { status: 'failed', error: apiErrorMessage(err, 'The comparison could not be completed. Please try again.') }))
   }
   // Questions come first, in a card, so both drafts are written with the answers already known.
   const compare = (text) => {
     const key = COMPARE_KEY, id = `${Date.now()}-${Math.random()}`
-    setComparisons((previous) => ({ ...previous, [key]: [...(previous[key] || []), { id, prompt: text, status: 'checking' }] }))
+    setComparisons((previous) => ({ ...previous, [key]: [...(previous[key] || []), { id, prompt: text, status: 'checking', personaId: comparePersona.id, personaName: comparePersona.name }] }))
     setCompareInput('')
-    askCompareQuestions(workspaceApi, { message: text, personaId: persona?.id })
-      .then((clarification) => clarification ? updateComparison(key, id, { status: 'asking', clarification }) : startComparison(key, id, text, text))
-      .catch(() => startComparison(key, id, text, text))
+    askCompareQuestions(workspaceApi, { message: text, personaId: comparePersona.id })
+      .then((clarification) => clarification ? updateComparison(key, id, { status: 'asking', clarification }) : startComparison(key, id, text, text, comparePersona.id))
+      .catch(() => startComparison(key, id, text, text, comparePersona.id))
   }
-  const answerQuestions = (item, answerLines) => startComparison(COMPARE_KEY, item.id, item.prompt, withAnswers(item.prompt, answerLines))
+  const answerQuestions = (item, answerLines) => startComparison(COMPARE_KEY, item.id, item.prompt, withAnswers(item.prompt, answerLines), item.personaId)
   const choose = (item, choice, note) => {
     const key = COMPARE_KEY
     updateComparison(key, item.id, { choosing: true, choiceError: '' })
@@ -211,7 +216,10 @@ export default function ChatPage() {
     updateComparison(key, item.id, { saving: true, saveError: '' })
     // An ordinary send whose result was already generated: it creates the chat if needed and is
     // idempotent, saved durably like any other message. No AI call is made.
-    action(saveRequest(item, source)).then((result) => {
+    // A result written for a different persona than the open chat goes into a new chat in that persona's folder.
+    const other = item.personaId && item.personaId !== persona?.id
+    if (other) { controller.newChat(item.personaId); controller.patch({ title: item.personaName }); openFolderIds(item.personaId) }
+    action({ ...saveRequest(item, source), ...(other ? { persona_id: item.personaId } : {}) }).then((result) => {
       if (result?.request_message_id) { setComparisons((previous) => ({ ...previous, [key]: (previous[key] || []).filter((row) => row.id !== item.id) })); setNav('chat') }
       else updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' })
     }).catch(() => updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' }))
@@ -332,23 +340,26 @@ export default function ChatPage() {
           <p className="mt-1 text-xs text-slate-500">Lucie writes your request with two AI models, you tap what you like in each, and she combines the best of both. Costs about two AI calls per request, plus one per combine or adjustment.</p>
         </header>
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5"><div className="max-w-4xl mx-auto space-y-4">
-          {!persona && !personaPending && <div role="alert" className="rounded-xl border bg-white p-3 text-sm">Open or start a chat with a persona first, so Lucie knows whose voice to write in. <button type="button" className="underline" onClick={() => setNav('chat')}>Go to Chat</button></div>}
-          {persona && <p className="text-xs font-medium text-blue-900">Writing as: {persona.name}. Saving puts the result in your open chat, "{active?.title || 'New chat'}".</p>}
+          {!comparePersona && !personaPending && <div role="alert" className="rounded-xl border bg-white p-3 text-sm">Create a persona first, so Lucie knows whose voice to write in. <button type="button" className="underline" onClick={() => { setNav('chat'); newPersona() }}>New Persona</button></div>}
           {!chatComparisons.length && <div className="py-12 text-center"><img src={lucieAvatar} alt="" className="mx-auto mb-4 h-16 w-16 rounded-full object-cover ring-4 ring-blue-100" /><p className="font-display text-lg font-bold text-slate-900">Compare two models</p><p className="text-sm text-slate-500 mt-2">Describe the post or campaign you need below.</p></div>}
-          {chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onAnswer={answerQuestions} onCombine={combine} onSave={saveComparison} canSave={!providerBlocked && !readOnly} />)}
+          {chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onAnswer={answerQuestions} onCombine={combine} onSave={saveComparison} canSave={!compareBlocked && !readOnly} />)}
           <div ref={bottom} />
         </div></div>
         {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4"><div className="max-w-4xl mx-auto">
-          <form onSubmit={(event) => { event.preventDefault(); if (compareInput.trim() && !providerBlocked && !comparing) compare(compareInput.trim()) }} className="flex gap-2 items-end">
+          {comparePersona && <div className="mb-2 flex flex-wrap items-center gap-2"><label htmlFor="compare-persona" className="text-xs font-medium text-slate-700">Who are you writing for?</label>
+            <select id="compare-persona" value={comparePersona.id} disabled={comparing} onChange={(event) => setComparePersonaId(event.target.value)} className="max-w-full rounded-lg border bg-slate-50 px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500">
+              {writablePersonas.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
+            <span className="text-[11px] text-slate-500">{comparePersona.id === persona?.id ? 'Saving adds the result to your open chat.' : 'Saving starts a new chat in this persona\'s folder.'}</span></div>}
+          <form onSubmit={(event) => { event.preventDefault(); if (compareInput.trim() && !compareBlocked && !comparing) compare(compareInput.trim()) }} className="flex gap-2 items-end">
             <textarea aria-label="Compare request" rows={2} maxLength={16000} value={compareInput}
               onKeyDown={(event) => {
                 // Enter sends, Shift+Enter adds a line; never submit mid-composition (IME) or on key repeat.
                 if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
                 event.preventDefault()
-                if (!event.repeat && !providerBlocked && !comparing && compareInput.trim()) event.currentTarget.form.requestSubmit()
+                if (!event.repeat && !compareBlocked && !comparing && compareInput.trim()) event.currentTarget.form.requestSubmit()
               }}
               onChange={(event) => setCompareInput(event.target.value)} placeholder="What should Lucie write? e.g. A post about first-time buyer programs" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
-            <button type="submit" disabled={providerBlocked || !compareInput.trim() || comparing} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{comparing ? 'Comparing…' : 'Compare'}</button>
+            <button type="submit" disabled={compareBlocked || !compareInput.trim() || comparing} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{comparing ? 'Comparing…' : 'Compare'}</button>
           </form>
         </div></footer>}
       </> : <>
