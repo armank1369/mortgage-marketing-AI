@@ -5,6 +5,20 @@
 
 const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'accept-encoding', 'x-forwarded-host', 'x-forwarded-proto', 'x-vercel-id', 'x-vercel-forwarded-for', 'x-real-ip'])
 
+export function resolveUpstreamOrigin({ origin, referer, host, trusted }) {
+  const trustedOrigin = (trusted || '').replace(/\/+$/, '')
+  if (!trustedOrigin || !/^https?:\/\//.test(trustedOrigin)) return {}
+  const hostOf = (u) => { try { return new URL(u).host } catch { return null } }
+  // Browsers send Origin on sign-in/sign-up POSTs; GETs may carry neither.
+  if (origin && hostOf(origin) !== host) return { rejected: true }
+  const out = {}
+  if (origin) out.origin = trustedOrigin
+  if (referer && hostOf(referer) === host) {
+    try { const r = new URL(referer); out.referer = `${trustedOrigin}${r.pathname}${r.search}` } catch { /* ignore */ }
+  }
+  return out
+}
+
 export default async function handler(req, res) {
   const base = (process.env.NEON_AUTH_PROXY_TARGET || process.env.VITE_NEON_AUTH_URL || '').replace(/\/+$/, '')
   if (!/^https:\/\//.test(base)) {
@@ -24,6 +38,24 @@ export default async function handler(req, res) {
   for (const [k, v] of Object.entries(req.headers)) {
     if (!HOP_BY_HOP.has(k.toLowerCase()) && typeof v === 'string') headers[k] = v
   }
+
+  // Neon Auth rejects requests whose Origin isn't in its trusted list ("Invalid origin"). Lucie can
+  // be served from several domains (production, teammates' Vercel domains, previews), so instead of
+  // listing every one in Neon, accept only requests that come from this very site (Origin host ==
+  // our own host, which keeps Neon's cross-site request protection) and present the configured
+  // trusted origin upstream. Without NEON_AUTH_TRUSTED_ORIGIN the Origin is passed through unchanged.
+  const originCheck = resolveUpstreamOrigin({
+    origin: req.headers.origin,
+    referer: req.headers.referer,
+    host: req.headers['x-forwarded-host'] || req.headers.host,
+    trusted: process.env.NEON_AUTH_TRUSTED_ORIGIN,
+  })
+  if (originCheck.rejected) {
+    res.status(403).json({ message: 'Invalid origin' })
+    return
+  }
+  if (originCheck.origin) headers.origin = originCheck.origin
+  if (originCheck.referer) headers.referer = originCheck.referer
   const hasBody = !['GET', 'HEAD'].includes(req.method)
   let body
   if (hasBody) {
