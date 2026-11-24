@@ -16,6 +16,9 @@ Stored workspace selection is a preference, not permission.
 | GET /api/insights | JWT + membership | config:write | Selected workspace; read-only KPI snapshot and cached review |
 | POST /api/insights/imports | JWT + membership | config:write | Selected workspace; member re-locked in the write transaction; CSV parsed server-side (2 MB, 5,000 rows) |
 | POST /api/insights/analysis | JWT + membership | config:write | Selected workspace; one paid model call per click, sends computed KPIs only (no chat text) |
+| GET /api/members | JWT + membership | role owner or admin (re-read from the database) | Selected workspace; lists members plus registered accounts that belong to no workspace |
+| PUT /api/members/{id}/role | JWT + membership | owner: any role; admin: member/viewer only | Selected workspace; members locked in the write transaction; cannot change own role or remove the last owner; stale `expected_role` returns 409 |
+| POST /api/members | JWT + membership | owner: any role; admin: member/viewer only | Only accounts with no workspace membership can be claimed; no schema change needed |
 | GET /api/auth/me | JWT | None | Authenticated identity only |
 | GET /api/workspaces | JWT | None | Current recognized memberships; zero returns an empty list |
 | GET /api/brand-profile | JWT + membership | workspace:read | Selected authorized workspace |
