@@ -1,7 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Short commit ID of this build, shown in the sidebar so anyone can tell which version they are
+// running. Vercel sets VERCEL_GIT_COMMIT_SHA during its builds; local builds show "dev".
+const buildId = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || 'dev'
+
 export default defineConfig({
+  define: { __BUILD_ID__: JSON.stringify(buildId) },
   plugins: [react()],
   server: {
     port: 3000,
