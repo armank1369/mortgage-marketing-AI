@@ -18,3 +18,13 @@ export function createAuthNavigate(routerNavigate, hardNavigate) {
     routerNavigate(to, ...rest)
   }
 }
+
+export const SESSION_BLOCKED_MESSAGE =
+  "You signed in, but your browser didn't keep the session. In Safari, turn off “Prevent Cross-Site Tracking” for this site (or try Chrome), then sign in again."
+
+// True when the auth client can read a signed-in user right now.
+export async function hasSession(authClient) {
+  const result = await authClient.getSession()
+  const data = result?.data ?? result
+  return Boolean(data?.session || data?.user)
+}

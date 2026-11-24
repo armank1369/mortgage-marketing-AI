@@ -17,3 +17,11 @@ test('leaving the auth screens does a full page load', () => {
   nav('/auth/forgot-password')
   assert.deepEqual(calls, [['hard', '/'], ['router', '/auth/forgot-password']])
 })
+
+import { hasSession } from './authNavigation.js'
+
+test('hasSession reads the session from the auth client', async () => {
+  assert.equal(await hasSession({ getSession: async () => ({ data: { user: { id: 1 } } }) }), true)
+  assert.equal(await hasSession({ getSession: async () => ({ data: null }) }), false)
+  assert.equal(await hasSession({ getSession: async () => null }), false)
+})
