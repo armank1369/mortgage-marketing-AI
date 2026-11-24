@@ -1,9 +1,12 @@
 import { NeonAuthUIProvider } from '@neondatabase/neon-js/auth/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authClient } from './lib/neon/neon.js'
+import { createAuthNavigate } from './lib/authNavigation.js'
 
 export default function AuthProvider({ children }) {
-  const navigate = useNavigate()
+  const routerNavigate = useNavigate()
+  // Full page load after sign-in so Safari picks up the new session (see authNavigation.js).
+  const navigate = createAuthNavigate(routerNavigate, (to) => window.location.assign(to))
 
   return (
     <NeonAuthUIProvider
