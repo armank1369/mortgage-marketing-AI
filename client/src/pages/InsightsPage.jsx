@@ -70,7 +70,7 @@ function PostingActivity({ activity, data }) {
   return <section className="space-y-3">
     <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Posting activity</h3>
     <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{reason}</p>
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <Stat label="Calendar slots" value={k.posts_scheduled.value} detail={calendar.text} tone={calendar.tone} hint="Slots on the calendar in this period, not confirmed posts" />
       <Stat label="Slots per week" value={k.posts_per_week.value} detail={`${k.posts_per_week.previous} in the previous period`} />
       <Stat label="Longest gap" value={`${k.longest_gap_days.value} days`} detail="Without a calendar slot" />

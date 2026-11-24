@@ -145,3 +145,18 @@ h3 {
   --lucie-accent: #17788c;
   --lucie-selection: #d5eef2;
 }
+
+/* Older iOS Safari (before 15.4) and some embedded browsers ignore dvh units, which collapses
+   the app to zero height. These rules come after Tailwind's utilities and give every dvh
+   height a plain vh fallback; browsers that understand dvh use it (it excludes the mobile
+   browser toolbar, so the composer isn't hidden behind it). */
+.h-dvh { height: 100vh; height: 100dvh; }
+.min-h-dvh { min-height: 100vh; min-height: 100dvh; }
+.max-h-\[85dvh\] { max-height: 85vh; max-height: 85dvh; }
+.max-h-\[90dvh\] { max-height: 90vh; max-height: 90dvh; }
+
+/* Quick-prompt chips scroll sideways on phones instead of stacking into rows that eat the chat
+   area; the buttons must not shrink or wrap their labels. */
+@media (max-width: 639px) {
+  .chip-row > * { flex-shrink: 0; white-space: nowrap; }
+}
