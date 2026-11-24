@@ -1,5 +1,11 @@
 // Helpers for the creative direction sketch prototype (see CreativeDirectionSketch.jsx).
 const FIELDS = ['setting', 'camera', 'lighting', 'energy', 'background', 'clothing']
+// Numbered 1-6 in this order. The same numbers badge the text cards and the matching parts of
+// the filming-setup diagram, so each picture element points back at the description it shows.
+export const DIRECTION_FIELDS = [
+  ['setting', 'Setting'], ['camera', 'Camera'], ['lighting', 'Lighting'],
+  ['energy', 'Energy'], ['background', 'Background'], ['clothing', 'Clothing'],
+]
 const EMPTY = new Set(['', 'N/A', 'NA', 'NONE'])
 
 export function sketchEnabled(env) {
@@ -16,4 +22,9 @@ export function sketchRequestBody(direction, { format, platform } = {}) {
   }
   if (!Object.keys(picked).length) return null
   return { direction: picked, ...(format ? { format } : {}), ...(platform ? { platform } : {}) }
+}
+
+export function filledFields(direction) {
+  const body = sketchRequestBody(direction)
+  return new Set(body ? Object.keys(body.direction) : [])
 }

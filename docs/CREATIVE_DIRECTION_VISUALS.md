@@ -25,6 +25,16 @@ Both parts are hidden unless `VITE_CREATIVE_SKETCH_ENABLED=true` on the client.
    `fal` (one call to fal.ai with `FAL_KEY`, model from `CREATIVE_SKETCH_MODEL`). Paid calls are
    never retried automatically. Requires `ai:generate`.
 
+## How the picture maps to the descriptions
+
+The visuals complement the six text cards instead of replacing them. When the flag is on, each
+card (Setting, Camera, Lighting, Energy, Background, Clothing) gets a number 1 to 6, and the
+same number marks the matching part of the diagram: 1 the room, 2 phone and tripod, 3 ring
+light / key light / window, 4 the presenter, 5 the back wall and shelf, 6 the collar and tie.
+Hovering or focusing a card highlights its marker. Fields the model wrote as "N/A" get no
+number and no marker. The picture sits in a collapsed "See it as a picture" panel, closed by
+default so cards stay compact, and the paid sketch button lives inside that panel.
+
 ## Image model options (prices checked November 2026, confirm before enabling)
 
 | Option | Approx. cost per image | Notes |

@@ -4,6 +4,7 @@ import { stripReviewNotes } from '../lib/publicationCopy.js'
 import platformBadge, { platformGradient } from './platformBadge'
 import { recommendedPostingTimes } from '../utils/postingTimes'
 import CreativeDirectionSketch from './CreativeDirectionSketch'
+import { DIRECTION_FIELDS, sketchEnabled } from '../lib/creativeSketch.js'
 
 export function ScriptLine({ label, time, text }) {
   if (!text) return null
@@ -73,27 +74,36 @@ export function SlideCarousel({ label, slides }) {
 }
 
 export function CreativeDirectionGrid({ direction, format, platform }) {
+  const [active, setActive] = useState(null)
   if (!direction) return null
-  const fields = [
-    ['Setting', direction.setting],
-    ['Camera', direction.camera],
-    ['Lighting', direction.lighting],
-    ['Energy', direction.energy],
-    ['Background', direction.background],
-    ['Clothing', direction.clothing],
-  ]
+  // With the visual guide on (and a video brief to draw), each card gets the same number as
+  // its part of the picture, and hovering/focusing a card highlights that part.
+  const numbered = sketchEnabled(import.meta.env) && (!format || format === 'video')
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-      {fields.map(([label, value]) =>
-        value ? (
-          <div key={label} className="border-l-2 border-slate-200 pl-3">
-            <div className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide mb-1">{label}</div>
+      {DIRECTION_FIELDS.map(([key, label], i) => {
+        const value = direction[key]
+        if (!value) return null
+        return (
+          <div
+            key={key}
+            className={`border-l-2 pl-3 transition-colors ${numbered && active === key ? 'border-orange-500 bg-orange-50/60' : 'border-slate-200'}`}
+            onMouseEnter={numbered ? () => setActive(key) : undefined}
+            onMouseLeave={numbered ? () => setActive(null) : undefined}
+            onFocus={numbered ? () => setActive(key) : undefined}
+            onBlur={numbered ? () => setActive(null) : undefined}
+            tabIndex={numbered ? 0 : undefined}
+          >
+            <div className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+              {numbered && <span className="inline-flex w-4 h-4 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] leading-none">{i + 1}</span>}
+              {label}
+            </div>
             <div className="text-sm text-slate-700 leading-relaxed">{value}</div>
           </div>
-        ) : null
-      )}
+        )
+      })}
       <div className="sm:col-span-2">
-        <CreativeDirectionSketch direction={direction} format={format} platform={platform} />
+        <CreativeDirectionSketch direction={direction} format={format} platform={platform} active={active} />
       </div>
     </div>
   )

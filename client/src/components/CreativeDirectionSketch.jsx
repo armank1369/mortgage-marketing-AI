@@ -8,7 +8,7 @@ import FilmingSetupDiagram from './FilmingSetupDiagram'
 // Prototype: one hand-drawn illustration showing every creative direction suggestion in a
 // single frame. On demand only (each image costs money), never generated automatically, and
 // hidden unless VITE_CREATIVE_SKETCH_ENABLED=true. The server decides the provider.
-export default function CreativeDirectionSketch({ direction, format, platform }) {
+export default function CreativeDirectionSketch({ direction, format, platform, active = null }) {
   const scope = useBrowserScope()
   const pendingRef = useRef(null)
   useEffect(() => () => pendingRef.current?.abort(), [scope])
@@ -16,7 +16,9 @@ export default function CreativeDirectionSketch({ direction, format, platform })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPrompt, setShowPrompt] = useState(false)
+  const [open, setOpen] = useState(false)
   const body = sketchRequestBody(direction, { format, platform })
+  const isVideo = !format || format === 'video'
 
   if (!sketchEnabled(import.meta.env) || !body) return null
 
@@ -37,8 +39,18 @@ export default function CreativeDirectionSketch({ direction, format, platform })
   }
 
   return (
-    <div className="mt-4">
-      {(!format || format === 'video') && <FilmingSetupDiagram direction={direction} />}
+    <div className="mt-4 rounded-lg border border-slate-200">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-600 hover:bg-slate-50 rounded-lg"
+      >
+        <span>🎬 {isVideo ? 'See it as a picture' : 'Sketch this idea'} <span className="font-normal text-slate-400">· numbers match the cards above</span></span>
+        <span aria-hidden="true" className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+      {open && <div className="px-3 pb-3">
+      {isVideo && <FilmingSetupDiagram direction={direction} active={active} />}
       <div className="mt-3" />
       {result?.image_url && (
         <figure className="mb-3">
@@ -72,6 +84,7 @@ export default function CreativeDirectionSketch({ direction, format, platform })
         <pre className="mt-2 text-[11px] whitespace-pre-wrap text-slate-500 bg-slate-50 rounded-lg p-3">{result.prompt}</pre>
       )}
       {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+      </div>}
     </div>
   )
 }
