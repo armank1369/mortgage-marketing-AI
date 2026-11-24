@@ -38,7 +38,7 @@ commands that preserve working local files. Replace placeholders before normal u
 | `server/.env` → `OPENAI_API_KEY` | Needed only when a comparison model uses `openai:` |
 | `server/.env` → `COMPARE_PRICES` | Optional JSON price overrides (USD per million tokens) for the comparison cost estimate |
 | `client/.env` → `VITE_NEON_AUTH_URL` | Public Auth endpoint matching the backend's Auth base URL |
-| `client/.env` → `VITE_NEON_AUTH_SAME_ORIGIN` | Optional. `true` sends sign-in through the site's own `/neon-auth` proxy (Vercel function `client/api/neon-auth.js`, which reads `VITE_NEON_AUTH_URL` or `NEON_AUTH_PROXY_TARGET`) so Safari keeps the session cookie. Needs a redeploy. |
+| `client/.env` → `VITE_NEON_AUTH_SAME_ORIGIN` | Optional. Production builds send sign-in through the site's own `/neon-auth` proxy (Vercel function `client/api/neon-auth.js`, which reads `VITE_NEON_AUTH_URL` or `NEON_AUTH_PROXY_TARGET`) so Safari keeps the session cookie. Set `false` to go straight to Neon; local dev always does. |
 | `client/.env` → `VITE_CREATIVE_SKETCH_ENABLED` | Optional prototype. `true` shows the filming-setup diagram and the "Sketch this scene" button under Creative Direction. Off when unset. See `docs/CREATIVE_DIRECTION_VISUALS.md` |
 | `server/.env` → `CREATIVE_SKETCH_PROVIDER` | Optional prototype. `off` (default), `preview` (returns the image prompt, no cost) or `fal` (paid image call) |
 | `server/.env` → `CREATIVE_SKETCH_MODEL` / `FAL_KEY` | Only for `fal`: fal.ai model id (default `fal-ai/flux-2/klein`) and API key |
