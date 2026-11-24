@@ -1,7 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/api/:path*",
+      "source": "/neon-auth/:path*",
+      "destination": "/api/neon-auth?path=:path*"
+    },
+    {
+      "source": "/api/:path((?!neon-auth).*)",
       "destination": "https://mortgage-marketing-ai.onrender.com/api/:path*"
     }
   ]
