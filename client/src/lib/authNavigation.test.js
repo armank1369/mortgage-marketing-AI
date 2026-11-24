@@ -25,3 +25,11 @@ test('hasSession reads the session from the auth client', async () => {
   assert.equal(await hasSession({ getSession: async () => ({ data: null }) }), false)
   assert.equal(await hasSession({ getSession: async () => null }), false)
 })
+
+test('hasSession falls back to a direct server check', async () => {
+  const client = { getSession: async () => ({ data: null }) }
+  const ok = async () => ({ ok: true, json: async () => ({ user: { id: 1 } }) })
+  const none = async () => ({ ok: true, json: async () => null })
+  assert.equal(await hasSession(client, { baseUrl: '/neon-auth', fetchImpl: ok }), true)
+  assert.equal(await hasSession(client, { baseUrl: '/neon-auth', fetchImpl: none }), false)
+})

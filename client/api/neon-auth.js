@@ -3,7 +3,7 @@
 // the session cookie never comes back and sign-in looks like it did nothing. Routing the auth calls
 // through Lucie's own domain makes the cookie first-party. vercel.json rewrites /neon-auth/* here.
 
-const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'accept-encoding', 'x-forwarded-host', 'x-forwarded-for', 'x-forwarded-proto', 'x-vercel-id', 'x-vercel-forwarded-for', 'x-real-ip'])
+const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'accept-encoding', 'x-forwarded-host', 'x-forwarded-proto', 'x-vercel-id', 'x-vercel-forwarded-for', 'x-real-ip'])
 
 export default async function handler(req, res) {
   const base = (process.env.NEON_AUTH_PROXY_TARGET || process.env.VITE_NEON_AUTH_URL || '').replace(/\/+$/, '')
@@ -12,7 +12,10 @@ export default async function handler(req, res) {
     return
   }
   const url = new URL(req.url, 'https://placeholder.invalid')
-  const sub = (url.searchParams.get('path') || '').replace(/^\/+/, '')
+  // Prefer the rewrite's ?path=, else recover it from the original URL (/neon-auth/<path>).
+  let sub = url.searchParams.get('path')
+  if (sub == null) sub = url.pathname.replace(/^\/(?:api\/)?neon-auth\/?/, '')
+  sub = sub.replace(/^\/+/, '')
   url.searchParams.delete('path')
   const qs = url.searchParams.toString()
   const target = `${base}/${sub}${qs ? `?${qs}` : ''}`
@@ -24,9 +27,14 @@ export default async function handler(req, res) {
   const hasBody = !['GET', 'HEAD'].includes(req.method)
   let body
   if (hasBody) {
-    const chunks = []
-    for await (const c of req) chunks.push(c)
-    body = Buffer.concat(chunks)
+    if (req.body !== undefined && req.body !== null) {
+      // Vercel may already have read and parsed the body.
+      body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+    } else {
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      body = Buffer.concat(chunks)
+    }
   }
 
   let upstream
@@ -37,6 +45,10 @@ export default async function handler(req, res) {
     return
   }
 
+  // Diagnostics: cookie NAMES only (never values) so a failed sign-in can be traced from the browser.
+  const cookieNames = (list) => list.map((c) => c.split('=')[0].trim()).join(',') || 'none'
+  const incoming = (req.headers.cookie || '').split(';').filter(Boolean)
+  res.setHeader('x-lucie-cookies-in', incoming.map((c) => c.split('=')[0].trim()).join(',') || 'none')
   res.status(upstream.status)
   upstream.headers.forEach((value, key) => {
     const k = key.toLowerCase()
@@ -48,5 +60,6 @@ export default async function handler(req, res) {
     // Drop any Domain attribute so the cookie belongs to Lucie's own host.
     res.setHeader('Set-Cookie', cookies.map((c) => c.replace(/;\s*domain=[^;]*/i, '')))
   }
+  res.setHeader('x-lucie-cookies-out', cookieNames(cookies))
   res.send(Buffer.from(await upstream.arrayBuffer()))
 }
