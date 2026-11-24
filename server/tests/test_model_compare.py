@@ -573,3 +573,46 @@ def test_failed_questions_check_never_blocks_comparing(beta):
     api.app.extensions["compare_clients"]["anthropic"] = broken
     response = beta.post("/api/compare/questions", headers=beta.headers(), json={"message": "a post", "persona_id": P})
     assert response.status_code == 200 and response.get_json() == {"clarification": None}
+
+
+# ---------------------------------------------------------------- model parity
+
+def test_both_providers_get_the_same_prompt_and_schema():
+    """The only thing allowed to differ between candidates is the provider wire format."""
+    seen = {}
+
+    def capture(provider):
+        def create(candidate, **kwargs):
+            seen[provider] = kwargs
+            return result(POSTS_JSON)
+        return create
+
+    config = model_compare.CompareConfig(
+        True, "", (model_compare.Candidate("anthropic", "a"), model_compare.Candidate("openai", "b")))
+    model_compare.run_comparison("give me a post about first time homebuyers", _generation_context(), config,
+                                 clients={"anthropic": capture("anthropic"), "openai": capture("openai")},
+                                 prices={})
+    a, b = seen["anthropic"], seen["openai"]
+    assert model_compare._text_of(a["system"]) == model_compare._text_of(b["system"])
+    assert a["messages"] == b["messages"] and a["max_tokens"] == b["max_tokens"]
+    assert a.get("output_config") == b.get("output_config")
+    assert "VOICE FIDELITY" in model_compare._text_of(a["system"])
+    request = model_compare.openai_request(b, "b")
+    assert request["messages"][0]["content"] == model_compare._text_of(b["system"])
+
+
+def test_voice_fidelity_applies_to_drafts_and_campaigns_but_not_normal_chat():
+    from services.generation import generate_chat
+    for kwargs, expected in (({"allow_clarification": False}, True), ({}, False),
+                             ({"allow_clarification": False, "force_campaign": True}, True)):
+        calls = []
+
+        def invoke(label, **kw):
+            calls.append(kw)
+            return result(POSTS_JSON)
+
+        try:
+            generate_chat("give me a post", _generation_context(), invoke, model="m", **kwargs)
+        except Exception:
+            pass
+        assert ("VOICE FIDELITY" in model_compare._text_of(calls[-1]["system"])) is expected
