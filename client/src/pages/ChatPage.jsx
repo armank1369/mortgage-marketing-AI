@@ -1,3 +1,4 @@
+import BuildStamp from '../components/BuildStamp.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useBrowserScope } from '../context/BrowserScope.js'
@@ -331,6 +332,7 @@ export default function ChatPage() {
       </nav>}
       <div className="px-4 py-3 short:py-2 border-t border-slate-100"><Link to="/settings" className="text-xs text-slate-500 hover:text-slate-900">Settings</Link></div>
       <p className="p-4 short:px-4 short:py-2 border-t border-slate-100 text-[11px] text-slate-400">{brand?.licensed_person_name || 'Identity not configured'} · NMLS #{nmls}</p>
+      <BuildStamp />
     </aside>
     <main className="keep-light flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50">
       <div className="md:hidden shrink-0 bg-lucent-navy text-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
