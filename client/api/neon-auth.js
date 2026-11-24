@@ -3,7 +3,7 @@
 // the session cookie never comes back and sign-in looks like it did nothing. Routing the auth calls
 // through Lucie's own domain makes the cookie first-party. vercel.json rewrites /neon-auth/* here.
 
-const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'accept-encoding', 'x-forwarded-host', 'x-forwarded-for', 'x-forwarded-proto', 'x-vercel-id', 'x-vercel-forwarded-for', 'x-real-ip'])
+const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'accept-encoding', 'x-forwarded-host', 'x-forwarded-proto', 'x-vercel-id', 'x-vercel-forwarded-for', 'x-real-ip'])
 
 export default async function handler(req, res) {
   const base = (process.env.NEON_AUTH_PROXY_TARGET || process.env.VITE_NEON_AUTH_URL || '').replace(/\/+$/, '')
@@ -45,6 +45,10 @@ export default async function handler(req, res) {
     return
   }
 
+  // Diagnostics: cookie NAMES only (never values) so a failed sign-in can be traced from the browser.
+  const cookieNames = (list) => list.map((c) => c.split('=')[0].trim()).join(',') || 'none'
+  const incoming = (req.headers.cookie || '').split(';').filter(Boolean)
+  res.setHeader('x-lucie-cookies-in', incoming.map((c) => c.split('=')[0].trim()).join(',') || 'none')
   res.status(upstream.status)
   upstream.headers.forEach((value, key) => {
     const k = key.toLowerCase()
@@ -56,5 +60,6 @@ export default async function handler(req, res) {
     // Drop any Domain attribute so the cookie belongs to Lucie's own host.
     res.setHeader('Set-Cookie', cookies.map((c) => c.replace(/;\s*domain=[^;]*/i, '')))
   }
+  res.setHeader('x-lucie-cookies-out', cookieNames(cookies))
   res.send(Buffer.from(await upstream.arrayBuffer()))
 }
