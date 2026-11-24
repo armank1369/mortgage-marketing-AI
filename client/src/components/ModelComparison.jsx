@@ -109,7 +109,7 @@ export default function ModelComparison({ item, nmls, onChoose, onAnswer = () =>
           {!item.combining && merges.at(-1)?.error && <p role="alert" className="text-sm text-amber-800">{candidateError(merges.at(-1).error)} Your earlier work is kept. Try again below.</p>}
           {latest && <div className="rounded-xl border-2 border-violet-300 bg-white p-3 space-y-2">
             <p className="text-xs font-semibold text-violet-800">Combined version · round {latest.round}</p>
-            <PersistedMessage message={candidateMessage({ slot: `R${latest.round}`, response: latest.response }, data.comparison_id)} nmls={nmls} readOnly statusLabel="Not saved to this chat" />
+            <PersistedMessage message={candidateMessage({ slot: `R${latest.round}`, response: latest.response }, data.comparison_id)} nmls={nmls} readOnly statusLabel="Not saved yet" />
           </div>}
           {latest && !item.combining && (item.roundsLeft ?? 1) > 0 && <div className="space-y-2">
             <LucieSays>How's this? If anything still feels off, tell me what to adjust and I'll rework it. When you're happy, use Copy above.</LucieSays>
@@ -120,7 +120,7 @@ export default function ModelComparison({ item, nmls, onChoose, onAnswer = () =>
             </form>
           </div>}
           {latest && !item.combining && <div className="space-y-1">
-            <button type="button" className={primary} disabled={busy || !canSave} onClick={() => onSave(item, 'combined')}>{item.saving ? 'Saving…' : 'Save to this chat'}</button>
+            <button type="button" className={primary} disabled={busy || !canSave} onClick={() => onSave(item, 'combined')}>{item.saving ? 'Saving…' : 'Save as new Compare chat'}</button>
             <p className="text-xs text-slate-500">Adds your request and this combined version to the conversation, so it is in your history and Lucie can build on it. You can keep adjusting first.</p>
           </div>}
           {latest && item.roundsLeft === 0 && <p className="text-xs text-slate-500">That's the last adjustment for this comparison. Start a new one to keep going.</p>}
@@ -128,7 +128,7 @@ export default function ModelComparison({ item, nmls, onChoose, onAnswer = () =>
         </Step>}
 
         {picked && ['A', 'B'].includes(reveal.choice) && <div className="space-y-1">
-          <button type="button" className={primary} disabled={busy || !canSave} onClick={() => onSave(item, reveal.choice)}>{item.saving ? 'Saving…' : `Save Version ${reveal.choice} to this chat`}</button>
+          <button type="button" className={primary} disabled={busy || !canSave} onClick={() => onSave(item, reveal.choice)}>{item.saving ? 'Saving…' : `Save Version ${reveal.choice} as new Compare chat`}</button>
           <p className="text-xs text-slate-500">Adds your request and this version to the conversation so it is in your history.</p>
         </div>}
         {item.saveError && <p role="alert" className="text-xs text-red-700">{item.saveError}</p>}

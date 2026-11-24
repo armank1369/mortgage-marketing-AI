@@ -27,9 +27,11 @@ model is better at hooks, tone, calls to action and so on.
 7. **Step 3, adjust until it's right.** Quick chips (*Make it shorter*, *Sound more casual*,
    *Stronger call to action*, …) or a typed instruction rework the latest combined version,
    one call each, up to 8 rounds per comparison. Earlier rounds stay viewable. Copy when happy.
-8. **Save to this chat.** Under the combined version (or after picking a draft) *Save to this
-   chat* adds the original request and the chosen version to the conversation as an ordinary
-   exchange: it appears in history, the chat list preview, and later Lucie replies can build on it;
+8. **Save as new Compare chat.** Under the combined version (or after picking a draft) *Save as
+   new Compare chat* always starts a brand-new chat in the chosen persona's folder (never the open
+   chat). It carries a teal *Compare* tag in the sidebar and header, derived from the saved
+   comparison link, so no database change is needed. The chat holds the original request and the
+   chosen version as an ordinary exchange: it appears in history, the chat list preview, and later Lucie replies can build on it;
    Regenerate and Make it shorter work on it. A *How this was made* section under the saved reply
    reopens both drafts, what was liked, every round and the cost. Saving makes no AI call, creates
    the chat if it is still unsent, and is safe to retry (the same save is never added twice).
@@ -40,7 +42,7 @@ Scope and limits of this beta:
 
 - Comparison prompts are **single-turn**: earlier messages in the chat are not sent to the
   models. The comparison itself is always stored in `public.model_comparison`; it only enters the
-  chat history when the user clicks *Save to this chat*. An unsaved comparison disappears from
+  chat history when the user clicks *Save as new Compare chat*. An unsaved comparison disappears from
   the screen on refresh (the record stays in the database).
 - Images and video scripts are not compared; only the chat reply.
 - Viewers can read the summary but cannot run comparisons (`ai:generate` is required).
