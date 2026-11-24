@@ -274,7 +274,7 @@ export default function ChatPage() {
   if (nav !== 'calendar' && nav !== 'insights' && nav !== 'users' && showingSetup) return <div className="h-dvh overflow-y-auto"><PreferenceSetup startNew={startNewPersona} onComplete={(row) => { setStartNewPersona(false); startPersonaChat(row) }} onCancel={() => { setSetup(false); setSetupDismissed(true); setStartNewPersona(false) }} /></div>
   return <div className="flex h-dvh bg-slate-50 text-slate-800 overflow-hidden">
     {mobileMenu && <button className="fixed inset-0 z-30 bg-slate-900/50 md:hidden" aria-label="Close menu" onClick={() => setMobileMenu(false)} />}
-    <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 md:static md:flex shrink-0 flex-col bg-lucent-navy shadow-xl md:shadow-none app-sidebar`}>
+    <aside className={`${mobileMenu ? 'flex' : 'hidden'} fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] md:w-64 lg:w-72 md:max-w-none md:static md:flex shrink-0 flex-col bg-lucent-navy shadow-xl md:shadow-none app-sidebar`}>
       <div aria-hidden="true" className="h-1 shrink-0 bg-gradient-to-r from-lucent-accent via-blue-300 to-lucent-cream" />
       <div className="p-5 border-b border-slate-100">
         <div className="flex items-center gap-2.5"><img src={lucieAvatar} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-blue-300/60" />
@@ -332,8 +332,8 @@ export default function ChatPage() {
       <div className="px-4 py-3 border-t border-slate-100"><Link to="/settings" className="text-xs text-slate-500 hover:text-slate-900">Settings</Link></div>
       <p className="p-4 border-t border-slate-100 text-[11px] text-slate-400">{brand?.licensed_person_name || 'Identity not configured'} · NMLS #{nmls}</p>
     </aside>
-    <main className="keep-light flex min-w-0 flex-1 flex-col bg-slate-50">
-      <div className="md:hidden bg-lucent-navy text-white px-4 py-3 border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
+    <main className="keep-light flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50">
+      <div className="md:hidden shrink-0 bg-lucent-navy text-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b-2 border-lucent-accent"><button aria-label="Open menu" onClick={() => setMobileMenu(true)}><span className="flex items-center">☰ <img src={lucieAvatar} alt="" className="ml-3 h-7 w-7 rounded-full object-cover" /><span className="ml-2.5 font-semibold">Lucie</span></span></button></div>
       {nav === 'calendar' ? <CalendarPage /> : nav === 'insights' && canSeeInsights(role, environment) ? <InsightsPage /> : nav === 'users' && canSeeUsers(role) ? <UsersPage /> : nav === 'compare' && compareEnabled && !local ? <>
         <header className="bg-white border-b px-4 sm:px-6 py-3">
           <div className="flex items-center gap-2"><h2 className="font-semibold text-sm">Compare and combine</h2><span className="rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Beta</span></div>
@@ -345,7 +345,7 @@ export default function ChatPage() {
           {chatComparisons.map((item) => <ModelComparison key={item.id} item={item} nmls={nmls} onChoose={choose} onAnswer={answerQuestions} onCombine={combine} onSave={saveComparison} canSave={!compareBlocked && !readOnly} />)}
           <div ref={bottom} />
         </div></div>
-        {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4"><div className="max-w-4xl mx-auto">
+        {!readOnly && <footer className="shrink-0 bg-white border-t px-4 sm:px-6 py-3 sm:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"><div className="max-w-4xl mx-auto">
           {comparePersona && <div className="mb-2 flex flex-wrap items-center gap-2"><label htmlFor="compare-persona" className="text-xs font-medium text-slate-700">Who are you writing for?</label>
             <select id="compare-persona" value={comparePersona.id} disabled={comparing} onChange={(event) => setComparePersonaId(event.target.value)} className="max-w-full rounded-lg border bg-slate-50 px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500">
               {writablePersonas.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
@@ -393,13 +393,13 @@ export default function ChatPage() {
             <div ref={bottom} />
           </div>
         </div>
-        {!readOnly && <footer className="bg-white border-t px-4 sm:px-6 py-4">
+        {!readOnly && <footer className="shrink-0 bg-white border-t px-4 sm:px-6 py-3 sm:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="max-w-4xl mx-auto">
             {showLongChat && <div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <p className="min-w-0 flex-1"><span className="font-semibold">This chat is getting long.</span> Lucie only remembers the most recent part of a conversation, so answers may drift or repeat. For best results, start a new chat{openFolder?.available ? ` in the ${openFolder.name} folder` : ''}.</p>
               <div className="flex gap-2"><button type="button" className={`${button} border-amber-300 bg-white`} disabled={pending} onClick={() => newChatInFolder()}>Start new chat</button><button type="button" className={button} onClick={() => setDismissedLongChat((previous) => new Set(previous).add(state.active.id))}>Keep going</button></div>
             </div>}
-            <div className="flex flex-wrap gap-2 mb-3">{PROMPT_CATEGORIES.map((category) => <button key={category.category} className={button} onClick={() => setPromptCategory(promptCategory === category.category ? null : category.category)}>{category.emoji} {category.category}</button>)}</div>
+            <div className="chip-row mb-3 flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">{PROMPT_CATEGORIES.map((category) => <button key={category.category} className={button} onClick={() => setPromptCategory(promptCategory === category.category ? null : category.category)}>{category.emoji} {category.category}</button>)}</div>
             {promptCategory && <div className="flex flex-wrap gap-2 mb-3">{promptSuggestions(PROMPT_CATEGORIES.find((row) => row.category === promptCategory).prompts, promptOffsets[promptCategory] || 0).map((prompt) => <button key={prompt} disabled={providerBlocked} className={button} onClick={() => send(prompt)}>{prompt}</button>)}<button type="button" className={button} onClick={() => setPromptOffsets({ ...promptOffsets, [promptCategory]: (promptOffsets[promptCategory] || 0) + 3 })}>↻ More</button></div>}
             <form onSubmit={(event) => { event.preventDefault(); send() }} className="flex gap-2 items-end">
               <textarea aria-label="Message" rows={2} maxLength={16000} value={input}
@@ -408,10 +408,10 @@ export default function ChatPage() {
                   event.preventDefault()
                   if (!event.repeat && !providerBlocked && input.trim()) event.currentTarget.form.requestSubmit()
                 }}
-                onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
+                onChange={(event) => setInputs((previous) => ({ ...previous, [inputKey]: event.target.value }))} placeholder="Type a message…" className="flex-1 min-w-0 max-h-48 resize-y border rounded-xl px-4 py-2 text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" />
               <button type="submit" disabled={providerBlocked || !input.trim()} className={`${button} !border-lucent-navy !bg-lucent-navy !text-white px-5 hover:!bg-lucent-navy-light`}>{state.submitting ? 'Saving / generating…' : 'Send'}</button>
             </form>
-            <p className="mt-2 text-[10px] text-slate-400">Results appear as saved after the server commits them. Calendar saves are shared with this workspace.</p>
+            <p className="mt-2 hidden text-[10px] text-slate-400 sm:block">Results appear as saved after the server commits them. Calendar saves are shared with this workspace.</p>
           </div>
         </footer>}
       </>}
