@@ -145,13 +145,13 @@ test('the combined version and a picked draft can be saved into the chat', () =>
   const merge = { round: 1, kind: 'combine', response: { type: 'text', response: `Combined answer.\n\n${footer}`, compliance_flags: [] } }
   const combined = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both, merges: [merge], roundsLeft: 7,
     reveal: { choice: 'merged', estimated_cost_usd: 0.01, candidates: [] } })
-  assert.match(combined, />Save to this chat</)
+  assert.match(combined, />Save as new Compare chat</)
   assert.match(combined, /in your history and Lucie can build on it/)
   const picked = renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both,
     reveal: { choice: 'B', estimated_cost_usd: 0.01, candidates: [{ slot: 'A', model: 'm1', usage: {} }, { slot: 'B', model: 'm2', usage: {} }] } })
-  assert.match(picked, />Save Version B to this chat</)
-  assert.doesNotMatch(renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both }), /to this chat/)
-  assert.match(renderItem({ id: '1', prompt: 'x', status: 'done', data: both, merges: [merge], saveError: 'Could not save to this chat. Please try again.' }), /Could not save to this chat/)
+  assert.match(picked, />Save Version B as new Compare chat</)
+  assert.doesNotMatch(renderItem({ id: '1', prompt: 'Write a post', status: 'done', data: both }), /as new Compare chat/)
+  assert.match(renderItem({ id: '1', prompt: 'x', status: 'done', data: both, merges: [merge], saveError: 'Could not save the Compare chat. Please try again.' }), /Could not save the Compare chat/)
 })
 
 test('saving is an ordinary send carrying the comparison link', () => {

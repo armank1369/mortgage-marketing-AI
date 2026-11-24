@@ -16,6 +16,8 @@ SELECT s.id, p.name AS persona_name, p.id AS active_persona_id,
     WHERE m.session_id=s.id AND m.role='user'
       AND (m.kind<>'operation' OR m.structured_data->'input'->>'action'='send')
     ORDER BY m.created_at,m.id LIMIT 1),'') AS preview,
+  EXISTS(SELECT 1 FROM public.chat_message m WHERE m.session_id=s.id
+         AND m.role='assistant' AND m.structured_data->'comparison'->>'id' IS NOT NULL) AS is_compare,
   ARRAY(SELECT DISTINCT m.structured_data->>'type' FROM public.chat_message m
     WHERE m.session_id=s.id AND m.role='assistant'
       AND m.structured_data->>'schema_version'='1'
@@ -45,7 +47,7 @@ def enrich_sessions(cur, sessions):
     for session in sessions:
         row = data.get(str(session['id']), {})
         session.update(persona_name=row.get('persona_name'), preview=row.get('preview', ''),
-                       content_types=row.get('content_types') or [], persona_state=persona_state(session, row))
+                       content_types=row.get('content_types') or [], is_compare=bool(row.get('is_compare')), persona_state=persona_state(session, row))
     return sessions
 
 

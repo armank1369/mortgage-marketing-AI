@@ -216,13 +216,13 @@ export default function ChatPage() {
     updateComparison(key, item.id, { saving: true, saveError: '' })
     // An ordinary send whose result was already generated: it creates the chat if needed and is
     // idempotent, saved durably like any other message. No AI call is made.
-    // A result written for a different persona than the open chat goes into a new chat in that persona's folder.
-    const other = item.personaId && item.personaId !== persona?.id
-    if (other) { controller.newChat(item.personaId); controller.patch({ title: item.personaName }); openFolderIds(item.personaId) }
-    action({ ...saveRequest(item, source), ...(other ? { persona_id: item.personaId } : {}) }).then((result) => {
+    // A Compare result is always saved to a brand-new chat in the persona's folder, never added to the open chat.
+    const personaId = item.personaId || persona?.id
+    controller.newChat(personaId); controller.patch({ title: item.personaName || persona?.name || 'Compare' }); openFolderIds(personaId)
+    action({ ...saveRequest(item, source), persona_id: personaId }).then((result) => {
       if (result?.request_message_id) { setComparisons((previous) => ({ ...previous, [key]: (previous[key] || []).filter((row) => row.id !== item.id) })); setNav('chat') }
-      else updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' })
-    }).catch(() => updateComparison(key, item.id, { saving: false, saveError: 'Could not save to this chat. Please try again.' }))
+      else updateComparison(key, item.id, { saving: false, saveError: 'Could not save the Compare chat. Please try again.' })
+    }).catch(() => updateComparison(key, item.id, { saving: false, saveError: 'Could not save the Compare chat. Please try again.' }))
   }
   const send = (text = input) => {
     if (!text.trim() || providerBlocked || !state.active) return
@@ -307,7 +307,7 @@ export default function ChatPage() {
               {chats && newestFirst(chats.sessions).map((chat) => <div key={chat.id} className="group relative">
                 <button type="button" onClick={() => select(chat)} aria-current={active?.id === chat.id ? 'true' : undefined} className={`block w-full rounded-lg py-1.5 pl-2 text-left ${folder.available && canWrite ? 'pr-9' : 'pr-2'} ${active?.id === chat.id ? 'bg-slate-100' : 'hover:bg-slate-100'}`}>
                   <span className="block truncate text-[13px] font-medium">{chat.title || 'Conversation'}</span>
-                  <span className="block text-[10px] text-slate-400">{formatChatTime(chat.updated_at)}</span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-slate-400">{chat.is_compare && <span className="shrink-0 rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Compare</span>}{formatChatTime(chat.updated_at)}</span>
                 </button>
                 {folder.available && canWrite && <button type="button" aria-label={`Archive chat: ${chat.title || 'Conversation'}`} title="Archive chat" onClick={() => setTrashChat({ id: chat.id, title: chat.title || 'Conversation' })} className="chat-trash absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-500/15 hover:text-red-400 focus-visible:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100">
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
@@ -322,7 +322,7 @@ export default function ChatPage() {
         {local && <p className="text-xs text-slate-500 px-2">Read-only history from this account and browser. Nothing is uploaded.</p>}
         {!list.length && <p className="p-3 text-xs text-slate-400">{local ? 'No local history in this account and workspace.' : 'No archived conversations.'}</p>}
         {list.map((chat) => <button key={chat.id} onClick={() => select(chat)} className={`w-full rounded-xl p-3 text-left border ${active?.id === chat.id ? 'bg-slate-100 border-transparent' : 'border-transparent hover:bg-slate-100'}`}>
-          <span className="block truncate text-sm font-medium">{chat.title || 'Conversation'}</span>
+          <span className="flex items-center gap-1.5"><span className="block min-w-0 truncate text-sm font-medium">{chat.title || 'Conversation'}</span>{chat.is_compare && <span className="shrink-0 rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Compare</span>}</span>
           <span className="block text-[10px] text-slate-400 mt-1">Last edited: {new Date(chat.updated_at || chat.updatedAt || chat.createdAt || Date.now()).toLocaleString()}</span>
           <span className="flex flex-wrap gap-1 mt-2"><span className="max-w-full truncate rounded border border-slate-300 px-1.5 py-0.5 text-[9px] text-slate-600">{chat.persona_name || chat.persona?.name || 'Persona unavailable'}</span></span>
           <span className="block truncate text-[10px] text-slate-500 mt-1.5">{chat.preview || chat.summary || ''}</span>
@@ -349,7 +349,7 @@ export default function ChatPage() {
           {comparePersona && <div className="mb-2 flex flex-wrap items-center gap-2"><label htmlFor="compare-persona" className="text-xs font-medium text-slate-700">Who are you writing for?</label>
             <select id="compare-persona" value={comparePersona.id} disabled={comparing} onChange={(event) => setComparePersonaId(event.target.value)} className="max-w-full rounded-lg border bg-slate-50 px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500">
               {writablePersonas.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select>
-            <span className="text-[11px] text-slate-500">{comparePersona.id === persona?.id ? 'Saving adds the result to your open chat.' : 'Saving starts a new chat in this persona\'s folder.'}</span></div>}
+            <span className="text-[11px] text-slate-500">Saving starts a new Compare chat in this persona's folder.</span></div>}
           <form onSubmit={(event) => { event.preventDefault(); if (compareInput.trim() && !compareBlocked && !comparing) compare(compareInput.trim()) }} className="flex gap-2 items-end">
             <textarea aria-label="Compare request" rows={2} maxLength={16000} value={compareInput}
               onKeyDown={(event) => {
@@ -364,7 +364,7 @@ export default function ChatPage() {
         </div></footer>}
       </> : <>
         <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
+          <div className="min-w-0"><div className="flex items-center gap-2"><h2 className="font-semibold text-sm truncate">{active?.title || 'Conversations'}</h2>{!local && (state.active?.is_compare || state.messages.some((m) => m.comparison?.id)) && <span className="shrink-0 rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-violet-800">Compare</span>}</div><p className="mt-1 text-xs font-medium text-blue-900">Persona: {local ? localChat?.persona?.name || 'Historical persona' : persona?.name || state.active?.persona_name || (personaPending ? 'Loading…' : 'Unavailable')}</p><p className="text-[10px] text-slate-500">{local ? 'Local history · Read only' : state.active?.unsaved ? 'Unsent conversation' : state.active?.archived_at ? 'Archived conversation' : 'Shared workspace conversation'}</p></div>
           <div className="flex gap-2">{active && !active.unsaved && <button className={button} disabled={exporting || state.loading} onClick={exportChat}>{exporting ? 'Preparing export…' : 'Export chat'}</button>}{!local && state.active && <button className={button} aria-label="Voice settings for this chat" disabled={!persona || state.loading} onClick={() => setVoiceOpen(true)}>Voice{voiceCustom ? ` · ${voiceCustom} custom` : ''}</button>}<button className={button} disabled={!active} onClick={() => setSummaryOpen(true)}>Brand Summary</button></div>
           {!local && state.active && <div className="flex gap-2">
             <button className={button} disabled={readOnly || pending || state.loading || state.metadataSaving || state.active.unsaved} onClick={() => setTitleEdit(state.active.title)}>Rename</button>
