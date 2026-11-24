@@ -10,6 +10,7 @@ if (!authUrl) {
 // Opt-in: send auth calls through this site's own /neon-auth proxy so Safari treats the session
 // cookie as first-party (see client/api/neon-auth.js).
 const sameOrigin = String(import.meta.env.VITE_NEON_AUTH_SAME_ORIGIN || '').toLowerCase() === 'true'
+export const usingSameOriginAuth = sameOrigin && typeof window !== 'undefined'
 const baseUrl = sameOrigin && typeof window !== 'undefined' ? `${window.location.origin}/neon-auth` : authUrl
 
 export const authClient = createAuthClient(baseUrl, {

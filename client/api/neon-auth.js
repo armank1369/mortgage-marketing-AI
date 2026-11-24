@@ -12,7 +12,10 @@ export default async function handler(req, res) {
     return
   }
   const url = new URL(req.url, 'https://placeholder.invalid')
-  const sub = (url.searchParams.get('path') || '').replace(/^\/+/, '')
+  // Prefer the rewrite's ?path=, else recover it from the original URL (/neon-auth/<path>).
+  let sub = url.searchParams.get('path')
+  if (sub == null) sub = url.pathname.replace(/^\/(?:api\/)?neon-auth\/?/, '')
+  sub = sub.replace(/^\/+/, '')
   url.searchParams.delete('path')
   const qs = url.searchParams.toString()
   const target = `${base}/${sub}${qs ? `?${qs}` : ''}`
@@ -24,9 +27,14 @@ export default async function handler(req, res) {
   const hasBody = !['GET', 'HEAD'].includes(req.method)
   let body
   if (hasBody) {
-    const chunks = []
-    for await (const c of req) chunks.push(c)
-    body = Buffer.concat(chunks)
+    if (req.body !== undefined && req.body !== null) {
+      // Vercel may already have read and parsed the body.
+      body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+    } else {
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      body = Buffer.concat(chunks)
+    }
   }
 
   let upstream

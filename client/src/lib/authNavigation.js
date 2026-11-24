@@ -22,6 +22,11 @@ export function createAuthNavigate(routerNavigate, hardNavigate) {
 export const SESSION_BLOCKED_MESSAGE =
   "You signed in, but your browser didn't keep the session. In Safari, turn off “Prevent Cross-Site Tracking” for this site (or try Chrome), then sign in again."
 
+// Short technical suffix so a screenshot of the banner tells us which sign-in path was used.
+export function sessionBlockedDetail(sameOrigin) {
+  return `(Sign-in path: ${sameOrigin ? 'this site' : 'cross-site'})`
+}
+
 // True when the auth client can read a signed-in user right now.
 export async function hasSession(authClient) {
   const result = await authClient.getSession()

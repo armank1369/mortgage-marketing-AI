@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { NeonAuthUIProvider } from '@neondatabase/neon-js/auth/react'
 import { Link, useNavigate } from 'react-router-dom'
-import { authClient } from './lib/neon/neon.js'
-import { createAuthNavigate, hasSession, SESSION_BLOCKED_MESSAGE } from './lib/authNavigation.js'
+import { authClient, usingSameOriginAuth } from './lib/neon/neon.js'
+import { createAuthNavigate, hasSession, sessionBlockedDetail, SESSION_BLOCKED_MESSAGE } from './lib/authNavigation.js'
 
 export default function AuthProvider({ children }) {
   const routerNavigate = useNavigate()
@@ -30,7 +30,8 @@ export default function AuthProvider({ children }) {
     >
       {blocked && (
         <div role="alert" className="fixed inset-x-0 top-0 z-50 bg-lucent-red px-4 py-3 text-center text-sm text-white">
-          {SESSION_BLOCKED_MESSAGE}
+          {SESSION_BLOCKED_MESSAGE}{' '}
+          <span className="opacity-80">{sessionBlockedDetail(usingSameOriginAuth)}</span>
         </div>
       )}
       {children}
