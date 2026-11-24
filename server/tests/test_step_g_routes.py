@@ -26,6 +26,7 @@ ROUTES = [
     ("POST", "/api/social-image"), ("POST", "/api/video-brief"),
     ("GET", "/api/personas"), ("POST", "/api/personas"), ("PUT", "/api/personas/" + S),
     ("GET", "/api/insights"), ("POST", "/api/insights/imports"), ("POST", "/api/insights/analysis"),
+    ("GET", "/api/members"), ("POST", "/api/members"),
 ]
 
 
@@ -77,6 +78,7 @@ def test_route_inventory():
                  ("POST", "/api/compare/<comparison_id>/choice"), ("GET", "/api/compare/summary"),
                  ("POST", "/api/compare/<comparison_id>/combine"),
                  ("GET", "/api/compare/<comparison_id>"), ("POST", "/api/compare/questions")}
+    expected |= {("PUT", "/api/members/<member_id>/role")}
     assert actual == expected
 
 
