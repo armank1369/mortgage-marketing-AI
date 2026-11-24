@@ -29,7 +29,7 @@ model is better at hooks, tone, calls to action and so on.
    one call each, up to 8 rounds per comparison. Earlier rounds stay viewable. Copy when happy.
 8. **Save as new Compare chat.** Under the combined version (or after picking a draft) *Save as
    new Compare chat* always starts a brand-new chat in the chosen persona's folder (never the open
-   chat). It carries a violet *Compare* tag in the sidebar and header, derived from the saved
+   chat). It carries a teal *Compare* tag in the sidebar and header, derived from the saved
    comparison link, so no database change is needed. The chat holds the original request and the
    chosen version as an ordinary exchange: it appears in history, the chat list preview, and later Lucie replies can build on it;
    Regenerate and Make it shorter work on it. A *How this was made* section under the saved reply
