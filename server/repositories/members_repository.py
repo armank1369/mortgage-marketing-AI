@@ -32,7 +32,6 @@ def _lock_actor(cur, workspace_id, actor_member_id):
 
 def list_people(workspace_id, actor_member_id):
     with get_db_transaction() as cur:
-        cur.execute("SET TRANSACTION READ ONLY")
         actor = _lock_actor(cur, workspace_id, actor_member_id)
         accounts = _accounts_available(cur)
         join = ("LEFT JOIN neon_auth.\"user\" u ON u.id::text = wm.auth_user_id" if accounts else "")
