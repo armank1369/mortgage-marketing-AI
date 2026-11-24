@@ -157,6 +157,6 @@ h3 {
 
 /* Quick-prompt chips scroll sideways on phones instead of stacking into rows that eat the chat
    area; the buttons must not shrink or wrap their labels. */
-@media (max-width: 639px) {
+@media (max-width: 639px), (max-height: 900px) {
   .chip-row > * { flex-shrink: 0; white-space: nowrap; }
 }

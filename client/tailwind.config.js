@@ -31,6 +31,9 @@ export default {
   ],
   theme: {
     extend: {
+      // Height-based breakpoints: laptops, and browser windows with a toolbar and bookmarks bar,
+      // leave only 650-900px, so fixed-height chrome (sidebar header, footers) tightens there.
+      screens: { short: { raw: '(max-height: 900px)' }, shorter: { raw: '(max-height: 700px)' } },
       colors: {
         // The app was built with Tailwind's stock blue/sky/indigo for links, highlights, active
         // states and focus rings. Pointing them at Lucent's teal recolors all of them at once,
