@@ -113,10 +113,11 @@ export default function ClarificationResponse({ data, submitted, onSubmit, saved
   return (
     <div className="w-full max-w-3xl">
       <Section
+        key={submitted ? 'submitted' : 'open'}
         icon="❓"
         title="A few quick questions"
-        subtitle={`${questions.length} question${questions.length === 1 ? '' : 's'}`}
-        defaultOpen
+        subtitle={submitted ? '✓ Answers submitted' : `${questions.length} question${questions.length === 1 ? '' : 's'}`}
+        defaultOpen={!submitted}
       >
         <div>
           {questions.map((q, i) => (

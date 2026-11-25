@@ -25,11 +25,13 @@ export function projectConversation(rows) {
     if (row.role === 'user' && row.structured_data?.input?.action === 'clarify') {
       const source = byId.get(row.source_message_id || row.structured_data.input.source_message_id)
       if (source) { source.submitted = true; source.answers = row.structured_data.input.answers }
-      row.text = 'Clarification answers:\n' + row.structured_data.input.answers.map((answer) => {
-        const question = source?.clarification?.questions?.[answer.question_index]?.question || `Question ${answer.question_index + 1}`
-        return `${question}: ${[...answer.selected, answer.custom].filter(Boolean).join(', ') || 'No preference'}`
-      }).join('\n')
+      // The answers are already shown on the (collapsed) question card and the server still sends them to
+      // the model from the saved row, so the duplicate "Clarification answers" bubble is hidden.
+      if (source) hidden.add(row.id)
     }
+    // Regenerate / shorten are button commands, not something the user typed; the revision they produce
+    // already shows up as a new version of the reply, so the command row is not shown as a user bubble.
+    if (row.role === 'user' && ['regenerate', 'shorten'].includes(row.structured_data?.input?.action)) hidden.add(row.id)
     if (row.kind === 'revision' && byId.has(row.source_message_id)) hidden.add(row.source_message_id)
   }
   function ancestors(row, seen = new Set()) {
