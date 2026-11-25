@@ -6,6 +6,7 @@ model call: nothing here runs automatically.
 """
 import hashlib
 import json
+import re
 
 from services.generation import InvalidGenerationOutputError, _raw
 
@@ -15,13 +16,60 @@ ANALYSIS_PROMPT = (
     "Rules: use only numbers that appear in the data, and quote them exactly; never estimate, "
     "extrapolate or invent figures, benchmarks or industry averages. If something cannot be judged "
     "from the data (for example performance when no exports were imported), say what data is missing "
-    "instead of guessing. Prefer 'activity' (posts that actually went out, from imported platform exports) over kpis.posts_scheduled, "
-    "which counts calendar slots that may never have been posted. 'activity' is null when nothing has been imported: "
-    "then say actual posting cannot be verified. Calendar-based fields describe plans, not what happened. "
+    "instead of guessing. Prefer the posting activity (posts that actually went out, from imported platform exports) over the "
+    "number of scheduled calendar slots, which may never have been posted. Posting activity is null when nothing has been imported: "
+    "then say actual posting cannot be verified. Calendar-based figures describe plans, not what happened. "
     "Be specific and practical: name the platform, persona, weekday or campaign involved. "
     "Recommend marketing actions only; never suggest rates, pricing, guarantees or borrower outcomes. "
+    "Write in plain, friendly English for a busy mortgage broker who has never seen this data's structure. "
+    "The data is labelled with technical field names. Never repeat them: no snake_case words, no dots or "
+    "code-style terms, no JSON wording, no words like 'flag', 'field', 'null', 'key' or 'payload'. Describe "
+    "each idea in everyday words instead (for example 'the longest stretch without a post was 9 days', "
+    "'engagement rate', 'drafts Lucie wrote', 'posts that made it onto the calendar'). "
+    "Notes about missing data must also be plain sentences about what to import or set up, never field names. "
     "Plain sentences, no markdown, no emoji. Keep each item to one or two sentences."
 )
+
+FRIENDLY = {
+    "longest_gap_days": "longest stretch without a post",
+    "days_since_last_post": "days since the last post",
+    "draft_to_calendar_pct": "share of drafts that reached the calendar",
+    "drafts_generated": "drafts Lucie wrote",
+    "engagement_rate": "engagement rate",
+    "next_empty": "next open day on the calendar",
+    "empty_days": "open days on the calendar",
+    "by_persona": "by persona",
+    "by_platform": "by platform",
+    "by_weekday": "by weekday",
+    "bottom_posts": "weakest posts",
+    "top_posts": "strongest posts",
+    "lucie_vs_other": "Lucie's posts compared with other posts",
+    "from_lucie": "posts from Lucie",
+    "matched_to_calendar": "posts matched to the calendar",
+    "posts_scheduled": "scheduled posts",
+    "posts_per_week": "posts per week",
+    "posts_measured": "posts with results",
+    "compliance_flagged": "posts with a compliance flag",
+    "avg_reach": "average reach",
+    "current_saved": "saved posts",
+    "last_import": "latest import",
+    "stale_days": "days since the last import",
+    "no_imports": "no results imported yet",
+    "export_too_old": "the imported file is out of date",
+    "not_installed": "not set up yet",
+    "data_through": "data through",
+}
+_SNAKE = re.compile(r"\b[a-z]+(?:_[a-z0-9]+)+\b")
+_DOTTED = re.compile(r"\b(?:kpis|activity|performance|mix|flags|period|campaigns)\.([a-z_]+)\b")
+_FLAG_WORD = re.compile(r"\b([a-z]+(?:_[a-z0-9]+)+)\s+(?:flag|field|key|value)\b")
+
+
+def plain_language(text):
+    """Last line of defence: swap any backend field name that slips into prose for everyday words."""
+    text = _DOTTED.sub(lambda m: m.group(1), text)
+    text = _FLAG_WORD.sub(lambda m: m.group(1), text)
+    text = _SNAKE.sub(lambda m: FRIENDLY.get(m.group(0), m.group(0).replace("_", " ")), text)
+    return text
 
 ANALYSIS_SCHEMA = {
     "type": "object",
@@ -57,7 +105,7 @@ def _brief(kpis):
 
 
 def _clean(value, limit=400):
-    return " ".join(str(value).split())[:limit]
+    return plain_language(" ".join(str(value).split()))[:limit]
 
 
 def analyze(kpis, invoke, *, model, business_name=None):

@@ -209,3 +209,11 @@ def test_activity_absent_without_imports_and_old_export_is_flagged():
     old["imported_at"] = datetime(2026, 8, 2, tzinfo=timezone.utc)
     result = insights.compute([], GENERATED, [], today=TODAY, days=30, metrics=[old])
     assert result["activity"] == {"available": False, "reason": "export_too_old", "data_through": "2026-08-02"}
+
+
+def test_analysis_text_has_no_backend_field_names():
+    raw = ("The activity.longest_gap_days flag shows 12 days; draft_to_calendar_pct is low and "
+           "next_empty is soon (by_persona, lucie_vs_other).")
+    cleaned = insights_analysis._clean(raw, 600)
+    assert "_" not in cleaned and "." not in cleaned.replace("days;", "").rstrip(".")
+    assert "longest stretch without a post" in cleaned
