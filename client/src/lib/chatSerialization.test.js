@@ -46,7 +46,8 @@ test('text revisions and submitted clarification selections survive reload', () 
   const projected = projectConversation([clarification, answer])
   assert.equal(projected[0].submitted, true)
   assert.deepEqual(projected[0].answers, [fixtures.cases[2].synthetic_user_answer])
-  assert.match(projected[1].text, /Which platform\?: Instagram, Use a calm educational tone/)
+  // The "Clarification answers" bubble is hidden; the answers live on the collapsed card.
+  assert.equal(projected.length, 1)
 })
 
 test('legacy text and future envelopes render safely; overlapping pages order by timestamp and id', () => {

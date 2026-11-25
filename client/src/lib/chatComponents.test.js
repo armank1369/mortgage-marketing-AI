@@ -43,9 +43,9 @@ test('linked clarification selections are restored and cannot be resubmitted on 
   const answer = { id: 'answer', role: 'user', source_message_id: source.id, structured_data: { input: { action: 'clarify', answers: [fixtures.cases[2].synthetic_user_answer] } } }
   const html = render(projectConversation([source, answer])[0])
   assert.match(html, /Answers submitted/)
-  assert.match(html, /●.*Instagram/s)
-  assert.match(html, /disabled=""/)
+  // Submitted cards start collapsed, so neither the answers nor the Continue button are in the markup.
   assert.doesNotMatch(html, />Continue</)
+  assert.doesNotMatch(html, /Which platform/)
 })
 
 test('history/revisions disable paid controls and show previous versions without losing disclosures', () => {
