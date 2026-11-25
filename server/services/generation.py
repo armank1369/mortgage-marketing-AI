@@ -114,7 +114,7 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
                                         "(for example Instagram, single image) and write the finished post now "
                                         "in the posts JSON format."}]})
         raw = _raw(retry)
-        if policy._parse_clarification(raw) or '"questions"' in raw:
+        if policy._parse_clarification(raw) or policy.looks_like_questions_payload(raw) or '"questions"' in raw:
             raise InvalidGenerationOutputError()
     if is_campaign:
         try:
@@ -138,7 +138,9 @@ def generate_chat(message, context, invoke, *, model, history=(), recent_ideas=(
     # copying our internal history layout ("Saved clarification:", bare question/options lines) is a
     # failed attempt at a structured reply. Fail through the existing invalid_provider_output path instead
     # of saving it as a successful AI Response. No retry: that would be an unapproved second paid call.
-    if looks_like_leaked_history(raw):
+    if looks_like_leaked_history(raw) or policy.looks_like_questions_payload(raw):
+        # A questions payload we could not turn into a card (or that a caller cannot show) must never be
+        # saved as the answer; fail the attempt so the user sees the normal retry state, not raw JSON.
         raise InvalidGenerationOutputError()
     try:
         empty = json.loads(raw)

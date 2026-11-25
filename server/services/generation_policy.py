@@ -323,7 +323,8 @@ NON_CAMPAIGN_FORMAT_PROMPT = (
     'three things: 1. ... 2. ... 3. ..."); that plain-text phrasing is a formatting failure, not a valid '
     'alternative, because the app renders shape (1) as clickable answer options and prose questions break that '
     'entirely. If you have decided a request needs clarifying questions, committing to this exact JSON is '
-    'mandatory, not optional. Ask at most 4 questions, each with 2-6 concrete, relevant options. Set "type" to '
+    'mandatory, not optional. The reply must start with { and end with the matching } — wrap the questions array in '
+    'the {"questions": [...]} object, never output a bare array, and close every bracket. Ask at most 4 questions, each with 2-6 concrete, relevant options. Set "type" to '
     '"multiple" (checkboxes, check all that apply) by default, except set it to "single" (radio buttons, exactly '
     'one choice) for any question where more than one answer would be contradictory for this request — this '
     'always includes the platform question (a single post/caption/idea goes out on exactly one platform) and the '
@@ -915,14 +916,79 @@ def _extract_json_object(text, key_hint):
     return None
 
 
+_QUESTIONS_REPAIR_LIMIT = 20000
+_CLOSERS = {'{': '}', '[': ']'}
+_QUESTIONS_LEAK_PATTERN = re.compile(
+    r'^\s*[\[{]\s*"?questions"?\s*:|"question"\s*:\s*".*"options"\s*:\s*\[', re.S)
+
+
+def _normalize_questions_payload(data):
+    # Accept the documented {"questions": [...]} envelope and a bare list of question objects.
+    if isinstance(data, list) and data and all(isinstance(item, dict) and 'question' in item for item in data):
+        return {'questions': data}
+    if isinstance(data, dict) and isinstance(data.get('questions'), list) and data['questions']:
+        return data
+    return None
+
+
+def _extract_questions_payload(text):
+    # The model is asked for a bare JSON object, but in practice it sometimes drops the final closing
+    # brace, wraps the JSON in prose, answers with a bare array, or the app appends the compliance
+    # signature after it. A strict parse then fails and the raw JSON used to be shown as the reply.
+    # Walk each possible start, string-aware, and try closing the open brackets at every point where a
+    # bracket closes; the longest candidate that parses to a valid payload wins.
+    try:
+        direct = _normalize_questions_payload(json.loads(text))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        direct = None
+    if direct:
+        return direct
+    if '"question' not in text or len(text) > _QUESTIONS_REPAIR_LIMIT:
+        return None
+    for start in [i for i, ch in enumerate(text) if ch in '{[']:
+        if '"question' not in text[start:]:
+            break
+        stack, in_string, escaped, best = [], False, False, None
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == '\\':
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch in _CLOSERS:
+                stack.append(ch)
+            elif ch in '}]':
+                if not stack or _CLOSERS[stack[-1]] != ch:
+                    break
+                stack.pop()
+                candidate = text[start:i + 1] + ''.join(_CLOSERS[c] for c in reversed(stack))
+                try:
+                    payload = _normalize_questions_payload(json.loads(candidate))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if payload:
+                    best = payload
+        if best:
+            return best
+    return None
+
+
+def looks_like_questions_payload(text):
+    """True when text is (or starts as) a clarification-questions JSON payload, however mangled."""
+    return bool(text) and bool(_QUESTIONS_LEAK_PATTERN.search(text))
+
+
 def _parse_clarification(raw_response, force_multiple=False):
     if not raw_response:
         return None
     text = raw_response.strip()
-    try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        data = _extract_json_object(text, '"questions"')
+    data = _extract_questions_payload(text)
     if isinstance(data, dict) and isinstance(data.get('questions'), list) and data['questions']:
         cleaned_questions = []
         for question in data['questions']:
