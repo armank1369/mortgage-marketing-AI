@@ -29,6 +29,9 @@ export function projectConversation(rows) {
       // the model from the saved row, so the duplicate "Clarification answers" bubble is hidden.
       if (source) hidden.add(row.id)
     }
+    // Regenerate / shorten are button commands, not something the user typed; the revision they produce
+    // already shows up as a new version of the reply, so the command row is not shown as a user bubble.
+    if (row.role === 'user' && ['regenerate', 'shorten'].includes(row.structured_data?.input?.action)) hidden.add(row.id)
     if (row.kind === 'revision' && byId.has(row.source_message_id)) hidden.add(row.source_message_id)
   }
   function ancestors(row, seen = new Set()) {

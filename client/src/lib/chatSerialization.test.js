@@ -84,3 +84,10 @@ test('failed attempt cards hide once the chat has moved past them', () => {
   assert.deepEqual(shown, ['b', 'c', 'd'])
   assert.deepEqual(visibleOperations(ops, [{ id: 'm1' }, { id: 'm2' }, { id: 'reply' }]).map((op) => op.operation_key), ['c', 'd'])
 })
+
+test('regenerate and shorten command rows are not shown as user bubbles', () => {
+  const reply = rows[0]
+  const command = (id, action) => ({ id, role: 'user', content: action, source_message_id: reply.id, structured_data: { input: { action } } })
+  const typed = { id: 'typed', role: 'user', content: 'hello', structured_data: { input: { action: 'send' } } }
+  assert.deepEqual(projectConversation([reply, command('r', 'regenerate'), command('s', 'shorten'), typed]).map((r) => r.id), [reply.id, 'typed'])
+})
